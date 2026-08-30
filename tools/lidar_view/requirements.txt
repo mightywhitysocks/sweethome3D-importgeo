@@ -1,0 +1,4 @@
+laspy[lazrs]
+plotly
+numpy
+requests
