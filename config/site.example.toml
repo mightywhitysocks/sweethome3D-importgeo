@@ -1,0 +1,35 @@
+# -------------------------------------------------------------------------------
+# Gabarit de configuration du site.
+#
+#   1. copiez ce fichier :   config/site.example.toml  ->  config/site.local.toml
+#   2. renseignez votre parcelle ci-dessous
+#   3. lancez :               .\run.ps1
+#
+# site.local.toml est git-ignored : vos donnees ne partent JAMAIS sur GitHub.
+# (ou passez une autre config :   .\run.ps1 -Site chemin\vers\mon-site.toml)
+# -------------------------------------------------------------------------------
+
+[parcelle]
+# Code INSEE de la commune (5 caracteres) — https://www.insee.fr/fr/recherche
+insee           = "00000"
+# Section cadastrale (1 a 2 caracteres, ex. "AB", "ZC", "0C")
+section         = "AA"
+# Parcelles a charger : definissent l'emprise du plan.
+# Mettez au moins la votre ; ajoutez les voisines contigues si utile.
+parcels         = ["0001"]
+# LA parcelle "propriete" : limite verte + batis a modeliser finement.
+# Doit figurer dans `parcels`.
+property_parcel = "0001"
+
+[emprise]
+# Marge autour des parcelles pour le fond de plan et le terrain (metres).
+margin_m = 10.0
+
+[labels]
+# Purement cosmetique (titres) — aucun effet sur les donnees telechargees.
+site_name = "Mon terrain"
+
+[tools]
+# Chemin absolu du .jar de Sweet Home 3D (classpath du helper Java de build_home).
+# Laisser "" = auto-detection dans les emplacements d'installation habituels.
+sweethome3d_jar = ""
