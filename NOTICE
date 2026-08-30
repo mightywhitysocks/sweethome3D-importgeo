@@ -13,18 +13,18 @@ assets/tree.obj, assets/tree.mtl
 assets/home_template.xml
   Squelette au format de sauvegarde de Sweet Home 3D (projet eTeks, GPL).
   Il s'agit d'un fichier de donnees decrivant une scene vide (environnement,
-  compas neutre, cameras, 5 niveaux) — aucun code de Sweet Home 3D n'est
+  compas neutre, cameras, 5 niveaux). Aucun code de Sweet Home 3D n'est
   redistribue ici.
 
 java/Conv.java
   Utilise les classes publiques com.eteks.sweethome3d.io.* fournies par
   l'installation locale de Sweet Home 3D (non redistribuee). Sweet Home 3D
-  est un logiciel libre sous GPL — https://www.sweethome3d.com/
+  est un logiciel libre sous GPL (https://www.sweethome3d.com/).
 
 Donnees
 -------
 
 Les fichiers produits dans data/ derivent des services publics de l'IGN
 (Geoplateforme : PCI Express, BD ORTHO, LIDAR HD, BD TOPO), diffuses sous
-Licence Ouverte / Etalab 2.0 — https://geoservices.ign.fr/
+Licence Ouverte / Etalab 2.0 (https://geoservices.ign.fr/).
 data/ n'est pas versionne.

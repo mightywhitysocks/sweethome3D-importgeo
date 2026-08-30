@@ -7,7 +7,7 @@
 # (le plus simple : .\run.ps1 depuis la racine du depot)
 #
 # build_home.py a besoin en plus d'un JDK (java + javac sur le PATH), p.ex. Oracle
-# JDK 21 — pour compiler/executer java/Conv.java contre SweetHome3D.jar.
+# JDK 21, pour compiler/executer java/Conv.java contre SweetHome3D.jar.
 #
 # ATTENTION : NE PAS installer matplotlib dans cet env -> crash DLL Windows
 # (exit -1066598273). pyvista fonctionne sans (on ne touche jamais
@@ -34,5 +34,5 @@ dependencies:
   - pip
   - pip:
       - javaobj-py3==0.6.1  # relire <backgroundImage> d'un .sh3d serialise Java
-# NON utilises (lecture LAZ brute) — reserves pour un futur passage LiDAR direct :
+# NON utilises (lecture LAZ brute), reserves pour un futur passage LiDAR direct :
 #   laspy, pdal

@@ -1,5 +1,5 @@
 """
-courbes.py — courbes de niveau depuis data/mnt.tif (LIDAR HD), via gdal_contour.
+courbes.py : courbes de niveau depuis data/mnt.tif (LIDAR HD), via gdal_contour.
 Sortie : data/courbes.geojson (equidistance 1 m) + data/courbes.png.
 """
 from __future__ import annotations

@@ -1,13 +1,13 @@
-# Parcelle → Sweet Home 3D
+# Parcelle -> Sweet Home 3D
 
 Génère un **plan 3D géoréférencé d'une parcelle cadastrale française** pour
 [Sweet Home 3D](https://www.sweethome3d.com/), à partir des données publiques
 **IGN Géoplateforme** :
 
-- **PCI Express** (cadastre) — limites et numéros de parcelles ;
-- **Ortho HR** — photo aérienne 20 cm/px, drapée sur le terrain ;
-- **LIDAR HD** — MNT (relief) et MNH (hauteur de végétation) ;
-- **BD TOPO** — emprises et hauteurs des bâtiments.
+- **PCI Express** (cadastre) : limites et numéros de parcelles ;
+- **Ortho HR** : photo aérienne 20 cm/px, drapée sur le terrain ;
+- **LIDAR HD** : MNT (relief) et MNH (hauteur de végétation) ;
+- **BD TOPO** : emprises et hauteurs des bâtiments.
 
 Résultat : `Plan 3D.sh3d`, double-cliquable, avec 5 calques (Cadastre / Terrain /
 Bâti voisinage / Bâti propriété *à modéliser* / Végétation).
@@ -19,7 +19,7 @@ La parcelle cible **n'est pas codée dans le dépôt** : elle se règle dans
 
 - **Windows** + PowerShell
 - **Anaconda ou Miniconda**
-- Un **JDK** (`java` et `javac` sur le `PATH`) — p.ex. Oracle JDK 21
+- Un **JDK** (`java` et `javac` sur le `PATH`), p.ex. Oracle JDK 21
 - **Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`)
 
 ## Démarrage
@@ -57,10 +57,11 @@ Sans `run.ps1` : `conda activate sitegeo` puis `python src\<script>.py`.
 │   ├── site.example.toml  gabarit de config
 │   └── site.local.toml  VOTRE parcelle (git-ignored, créé au 1er lancement)
 ├── src/                 le pipeline Python
-├── java/Conv.java       helper Sweet Home 3D (assemble le .sh3d)
+├── java/                Conv.java (assemble le .sh3d) + RenderPhoto.java (rendu photo)
 ├── assets/              gabarits stables (home_template.xml, tree.obj/.mtl)
 ├── docs/PIPELINE.md     détail de la génération du .sh3d + limitations
-└── data/               toutes les sorties (git-ignored)
+├── data/                toutes les sorties (git-ignored)
+└── README.md  CLAUDE.md  LICENSE  NOTICE
 ```
 
 | Script | Rôle |
@@ -68,19 +69,19 @@ Sans `run.ps1` : `conda activate sitegeo` puis `python src\<script>.py`.
 | `src/sitegeo.py` | module commun : chemins, config, accès IGN, `terrain_z_at`, primitives PyVista, écriture OBJ/MTL |
 | `src/phase1_cadastre.py` | fond ortho + cadastre + parcelles ; **définit le repère plan** (`data/meta.json`) |
 | `src/terrain.py` | terrain 3D solide (PyVista) + ortho drapée + grille d'ancrage |
-| `src/bati.py` | BD TOPO → bâtiments voisinage (prisme + toit) ; emprises 2D de la propriété |
+| `src/bati.py` | BD TOPO -> bâtiments voisinage (prisme + toit) ; emprises 2D de la propriété |
 | `src/vegetation.py` | arbres (maxima MNH) + haies taillées éventuelles |
 | `src/courbes.py` | courbes de niveau 1 m (`gdal_contour`) |
 | `src/build_home.py` | assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`) |
 | `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d`) |
-| `src/preview.py` | aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`) — `python src/preview.py [larg haut [low\|high]]` |
+| `src/preview.py` | aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`), via `python src/preview.py [larg haut [low\|high]]` |
 
-Ordre : `phase1_cadastre → terrain → bati → vegetation → courbes → build_home`.
+Ordre : `phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home`.
 
 ## Repère plan Sweet Home 3D
 
 Origine = coin **nord-ouest** de la bounding box (parcelles + marge). Axes
-**X = est, Y = sud**, unité **centimètre**. Altitude `z = altitude_NGF − z_min`.
+**X = est, Y = sud**, unité **centimètre**. Altitude `z = altitude_NGF - z_min`.
 Les coordonnées Lambert-93 de l'origine sont calculées en Phase 1 et écrites dans
 `data/meta.json` (git-ignored), réutilisées telles quelles par toutes les étapes.
 

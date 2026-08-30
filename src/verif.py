@@ -1,5 +1,5 @@
 """
-verif.py — controle complet du pipeline (lecture seule).
+verif.py : controle complet du pipeline (lecture seule).
 
   1. Parcelles : API Carto (live) vs sh3d_payload.json (contenance, aire, 1er sommet)
   2. Topologie : pas de recouvrement, emprise dans la bbox du fond
@@ -9,7 +9,7 @@ verif.py — controle complet du pipeline (lecture seule).
   6. Calage <backgroundImage> : echelle < 0,05 % et origine < 5 cm
   7. (option --overlay) data/verif/verif_overlay.png : parcelles sur l'ortho
   8. (option --render) data/verif/render_photo.png : rendu photo headless (SunFlow),
-     smoke-test visuel du .sh3d — voir _render_photo() et java/RenderPhoto.java.
+     smoke-test visuel du .sh3d ; voir _render_photo() et java/RenderPhoto.java.
      Optionnel : ignore si les jars de rendu ([tools].render_libs_dir) sont absents,
      n'affecte pas le code retour de verif.py.
 
@@ -135,7 +135,7 @@ def main() -> None:
     check(f"marge meta == {cg.MARGE_M} m", cg.META.marge_m == cg.MARGE_M)
 
     if not SH3D.exists():
-        print("\n(.sh3d absent — etapes 5/6 sautees)")
+        print("\n(.sh3d absent, etapes 5/6 sautees)")
     else:
         print("\n=== 5. .sh3d ===")
         with zipfile.ZipFile(SH3D) as z:

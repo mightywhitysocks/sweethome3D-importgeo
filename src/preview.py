@@ -1,5 +1,5 @@
 """
-preview.py — apercus photo depuis les batiments de la propriete (post-build).
+preview.py : apercus photo depuis les batiments de la propriete (post-build).
 
 Rend `Plan 3D.sh3d` depuis plusieurs points de vue via le moteur SunFlow de Sweet
 Home 3D (comme "Creer photo") : un apercu par batiment de la propriete (camera au
@@ -56,7 +56,7 @@ def main() -> None:
 
     views = _viewpoints()
     if not views:
-        raise SystemExit("aucun batiment 'propriete' dans data/bati.json — lancer bati.py.")
+        raise SystemExit("aucun batiment 'propriete' dans data/bati.json ; lancer bati.py.")
 
     done = []
     for label, cam in views:
