@@ -56,13 +56,18 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 **Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques —
 Cadastre / Terrain / Bâti voisinage / Bâti propriété (à modéliser) / Végétation.
 
-## Étape 3 (optionnelle) — rendu photo headless (`verif.py --render`)
+## Étape 3 (optionnelle) — rendu photo headless (`verif.py --render`, `preview.py`)
 
 `java/RenderPhoto.java` (`com.eteks.sweethome3d.utilities.RenderPhoto`) rend
 `Plan 3D.sh3d` en PNG hors-ligne via le moteur SunFlow de Sweet Home 3D
 (`com.eteks.sweethome3d.j3d.PhotoRenderer`, qualité 3/4 — même brique que
 « Créer photo » dans l'appli). Sortie : `data/verif/render_photo.png`. Sert de
 smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
+   `RenderPhoto` accepte un point de vue optionnel `x y z yaw pitch` (repere plan,
+   cm / rad) et `-Drender.quality=low|high`. `python src/preview.py` s'en sert
+   pour un apercu depuis chaque batiment de la propriete + une vue d'ensemble
+   aerienne (`data/verif/preview_*.png`). `sitegeo.render_photo()` factorise
+   compilation + lancement, partage par `verif.py --render` et `preview.py`.
 
 - Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
   suggère la doc communautaire du même nom) : c'est un petit helper source,
