@@ -155,6 +155,81 @@ def find_sweethome3d_jar(*, required: bool = True) -> Path | None:
     return None
 
 
+RENDER_JAR_STEMS = ("sunflow", "j3dcore", "j3dutils", "vecmath", "batik-svgpathparser")
+
+
+def find_render_jars() -> dict | None:
+    """Jars additionnels du rendu photo headless : [tools].render_libs_dir, sinon
+    le lib/ du SweetHome3D.jar detecte (recherche RECURSIVE : le build Microsoft
+    Store range Java3D dans lib/java3d-*/). {stem: Path} complet, ou None si
+    dossier absent ou jars incomplets."""
+    d = Path(RENDER_LIBS_DIR) if RENDER_LIBS_DIR else None
+    if d is None:
+        jar = find_sweethome3d_jar(required=False)
+        d = jar.parent if jar else None
+    if d is None or not d.is_dir():
+        return None
+    jars: dict = {}
+    for stem in RENDER_JAR_STEMS:
+        hits = sorted(d.rglob(f"{stem}*.jar"))
+        if hits:
+            jars[stem] = hits[-1]
+    return jars if len(jars) == len(RENDER_JAR_STEMS) else None
+
+
+def render_photo(out_png, *, camera=None, size=(1024, 768), quality=None,
+                 sh3d=None, log=print):
+    """
+    Rendu photo headless d'un .sh3d via java/RenderPhoto.java (moteur SunFlow de
+    Sweet Home 3D). `camera` = (x, y, z, yaw, pitch[, fov]) repere plan (cm / rad)
+    ou None (camera enregistree). `quality` = "low" | "high" | None (celle du .sh3d).
+    Renvoie le Path du PNG, ou None si indisponible (jars / JDK absents, echec) ;
+    `log` recoit une ligne d'explication en cas d'echec.
+    """
+    sh3d = Path(sh3d) if sh3d else HOME_SH3D
+    out_png = Path(out_png)
+    if not sh3d.exists():
+        log("  (.sh3d absent -> rendu ignore)")
+        return None
+    jar = find_sweethome3d_jar(required=False)
+    jars = find_render_jars()
+    if jar is None:
+        log("  SweetHome3D.jar introuvable -> rendu ignore.")
+        return None
+    if jars is None:
+        log("  jars de rendu introuvables/incomplets ([tools].render_libs_dir) -> ignore.")
+        return None
+    jconv = DATA / "_jconv"
+    jconv.mkdir(parents=True, exist_ok=True)
+    cls = jconv / "com" / "eteks" / "sweethome3d" / "utilities" / "RenderPhoto.class"
+    src = JAVA / "RenderPhoto.java"
+    if not cls.exists() or cls.stat().st_mtime < src.stat().st_mtime:
+        r = subprocess.run(
+            ["javac", "-cp", f"{jar}{os.pathsep}{jars['sunflow']}", "-d", str(jconv),
+             str(src)], capture_output=True, text=True)
+        if not cls.exists():
+            log("  javac RenderPhoto a echoue ->", (r.stderr or r.stdout).strip()[:400])
+            return None
+    cp = os.pathsep.join(str(p) for p in
+                         (jconv, jar, jars["sunflow"], jars["j3dcore"],
+                          jars["vecmath"], jars["j3dutils"], jars["batik-svgpathparser"]))
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["java", "-Dj3d.rend=noop"]
+    if quality:
+        cmd.append(f"-Drender.quality={quality}")
+    cmd += ["-cp", cp, "com.eteks.sweethome3d.utilities.RenderPhoto",
+            str(sh3d), str(out_png), str(size[0]), str(size[1])]
+    if camera is not None:
+        cmd += [f"{v:.5f}" for v in camera]
+    if shutil.which("xvfb-run"):        # Linux : Java3D exige un display meme en noop
+        cmd = ["xvfb-run", "-a", "-s", "-screen 0 1280x1024x24"] + cmd
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0 or not out_png.exists():
+        log("  rendu echoue ->", (r.stdout or r.stderr).strip()[:400])
+        return None
+    return out_png
+
+
 # GDAL trouve ses ressources meme sous conda (sinon warnings gdalvrt.xsd / proj)
 ENV_ROOT = Path(os.environ.get("CONDA_PREFIX") or sys.prefix)
 _ENV_ROOT = ENV_ROOT          # compat
