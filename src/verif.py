@@ -234,7 +234,7 @@ def _render_photo() -> None:
 
     jars = {}
     for stem in _RENDER_JARS:
-        hits = sorted(libs_dir.glob(f"{stem}*.jar"))
+        hits = sorted(libs_dir.rglob(f"{stem}*.jar"))
         if hits:
             jars[stem] = hits[-1]
     missing = [s for s in _RENDER_JARS if s not in jars]
