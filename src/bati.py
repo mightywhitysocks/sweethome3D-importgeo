@@ -1,5 +1,5 @@
 """
-bati.py — Phase 2 : batiments BD TOPO.
+bati.py : Phase 2, batiments BD TOPO.
 
 WFS BDTOPO_V3:batiment -> Lambert-93 -> classe (par aire majoritaire) :
   - "propriete"  : la majorite de l'emprise est sur la parcelle propriete
@@ -9,7 +9,7 @@ Sorties dans data/ :
   bati.json                    tous les batiments (id, classe, hauteur, alt_*, mur, toit, rings_cm)
   bati_voisinage.obj / .mtl    prisme mur + toit pyramidal par batiment voisinage (PyVista),
                                1 OBJ multi-materiaux (mur / tuile / ardoise / fibro)
-  bati_propriete_ref.json      emprises au sol 2D + etiquettes (commandes MCP) — modelisation
+  bati_propriete_ref.json      emprises au sol 2D + etiquettes (commandes MCP) ; modelisation
                                fine ulterieure via le plugin GenerateRoof
 """
 from __future__ import annotations

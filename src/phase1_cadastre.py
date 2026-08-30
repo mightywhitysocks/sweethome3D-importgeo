@@ -1,8 +1,8 @@
 """
-phase1_cadastre.py — Phase 1 : fond de plan cadastral cale.
+phase1_cadastre.py : Phase 1, fond de plan cadastral cale.
 
 DEFINIT le repere plan SH3D (origine = coin NO de la bbox parcelles + marge ;
-X=est, Y=sud, cm) et l'ecrit dans data/meta.json — reutilise ensuite par tout le
+X=est, Y=sud, cm) et l'ecrit dans data/meta.json, reutilise ensuite par tout le
 pipeline via sitegeo.META. La parcelle vient de config/site.local.toml.
 
 Produit dans data/ :
@@ -97,7 +97,7 @@ def main() -> None:
 
     L_defaut = 0.8 * width_m
     cg.DOCS.mkdir(parents=True, exist_ok=True)
-    (cg.DOCS / "notice_calage.md").write_text(f"""# Poser le fond de plan dans Sweet Home 3D — valeurs a TAPER (ne rien cliquer)
+    (cg.DOCS / "notice_calage.md").write_text(f"""# Poser le fond de plan dans Sweet Home 3D : valeurs a TAPER (ne rien cliquer)
 
 Image : `data/fond_cadastre_ortho.png`  ({w_px} x {h_px} px)
 Emprise reelle : **{width_m:.2f} m** x **{height_m:.2f} m**.
@@ -105,9 +105,9 @@ Emprise reelle : **{width_m:.2f} m** x **{height_m:.2f} m**.
 ## Menu : Plan -> Importer une image de fond
 
 1. **Choisir l'image** : `{GEO / 'fond_cadastre_ortho.png'}`
-2. **Echelle** — NE PAS deplacer la ligne bleue. « Longueur de la ligne dessinee (m) » :
+2. **Echelle** : NE PAS deplacer la ligne bleue. « Longueur de la ligne dessinee (m) » :
    > **{L_defaut:.2f}**   (= 0,8 x {width_m:.2f} ; echelle {width_m * 100 / w_px:.5f} cm/px)
-3. **Origine** — NE PAS cliquer. X = 0 , Y = 0.
+3. **Origine** : NE PAS cliquer. X = 0 , Y = 0.
 4. Continuer / Terminer.
 
 ## Ensuite

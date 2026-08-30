@@ -1,14 +1,14 @@
-# Génération de `Plan 3D.sh3d` — plan d'exécution et limitations
+# `Plan 3D.sh3d` : plan d'exécution et limitations
 
 ## Pourquoi ce n'est pas trivial
 
 Le format `.sh3d` est un ZIP qui **doit** contenir une entrée `Home` :
 l'objet Java `com.eteks.sweethome3d.model.Home` **sérialisé**. Un `.sh3d` qui ne
 contiendrait qu'un `Home.xml` est refusé au chargement. Python ne sait pas
-produire cette sérialisation Java → on passe par les propres classes de
+produire cette sérialisation Java -> on passe par les propres classes de
 Sweet Home 3D.
 
-## Étape 1 — Python (`src/build_home.py`)
+## Étape 1 : Python (`src/build_home.py`)
 
 Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 
@@ -16,13 +16,13 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
    `<environment>`, `<compass>`, caméras, les **5 `<level>`** avec des UUID
    stables) et garde tout jusqu'à `</home>`.
 2. Remplace la `<backgroundImage>` du niveau *Cadastre* : image `bg`, échelle
-   calée sur `sh3d_payload.json` (0,8 × largeur, origine 0,0).
+   calée sur `sh3d_payload.json` (0,8 x largeur, origine 0,0).
 3. Réoriente le `<compass>` : longitude / latitude (radians) du **centroïde**
-   de la bbox WGS84 du site — l'orientation solaire est correcte sans qu'aucune
+   de la bbox WGS84 du site ; l'orientation solaire est correcte sans qu'aucune
    coordonnée ne soit stockée dans le dépôt.
 4. Positionne la caméra de visite 3D (observateur) sur le centroïde de la parcelle
    propriété, à hauteur d'œil (`+170 cm`) au-dessus du **sol le plus haut sous les
-   bâtiments de la propriété** (`bati_propriete_ref.json[sol_bati_max_cm]`) — Sweet
+   bâtiments de la propriété** (`bati_propriete_ref.json[sol_bati_max_cm]`). Sweet
    Home 3D ne fait pas suivre le relief à la caméra. Repli sans bâti propriété :
    `z_max_terrain + 60 cm`.
 5. Génère les `<pieceOfFurniture>` : terrain (`data/terrain.obj`), bâti voisinage
@@ -35,7 +35,7 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
    OBJ avec son `.mtl` et sa texture) + une icône. Écrit aussi
    `data/home_source.xml` pour debug / diff.
 
-## Étape 2 — Java (`java/Conv.java`)
+## Étape 2 : Java (`java/Conv.java`)
 
 1. `_prepare_java()` : copie `SweetHome3D.jar` dans `data/_jconv/` (une fois) et
    compile `Conv.java` (`javac`, en cache par mtime). Le `.jar` est auto-détecté
@@ -43,50 +43,50 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 2. `java -cp "<jar>;data/_jconv" com.eteks.sweethome3d.io.Conv _home_raw.zip "Plan 3D.sh3d"` :
    - `new HomeContentContext(zipFileUrl, null, true)` (URL fichier simple) ;
    - `HomeXMLHandler` + `handler.setContentContext(ctx)` (méthode package-private
-     — d'où `Conv` compilé dans le package `com.eteks.sweethome3d.io` sur le
+     ; d'où `Conv` compilé dans le package `com.eteks.sweethome3d.io` sur le
      classpath) ;
-   - SAX-parse `Home.xml` du ZIP → `handler.getHome()` → objet `Home` avec les
+   - SAX-parse `Home.xml` du ZIP -> `handler.getHome()` -> objet `Home` avec les
      bons niveaux ;
-   - `new HomeFileRecorder(9, false).writeHome(home, out)` → `.sh3d` avec `Home`
+   - `new HomeFileRecorder(9, false).writeHome(home, out)` -> `.sh3d` avec `Home`
      sérialisé + `ContentDigests` + entrées modèles numérotées ;
    - relit sa propre sortie (`readHome`) et imprime la répartition par niveau.
 3. `build_home.py` sauvegarde l'ancien `.sh3d` en `.sh3d.bak` et supprime
    `_home_raw.zip`.
 
-**Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques —
+**Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques :
 Cadastre / Terrain / Bâti voisinage / Bâti propriété (à modéliser) / Végétation.
 
-## Étape 3 (optionnelle) — rendu photo headless (`verif.py --render`, `preview.py`)
+## Étape 3 (optionnelle) : rendu photo headless (`verif.py --render`, `preview.py`)
 
 `java/RenderPhoto.java` (`com.eteks.sweethome3d.utilities.RenderPhoto`) rend
 `Plan 3D.sh3d` en PNG hors-ligne via le moteur SunFlow de Sweet Home 3D
-(`com.eteks.sweethome3d.j3d.PhotoRenderer`, qualité 3/4 — même brique que
+(`com.eteks.sweethome3d.j3d.PhotoRenderer`, qualité 3/4, même brique que
 « Créer photo » dans l'appli). Sortie : `data/verif/render_photo.png`. Sert de
 smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
-   `RenderPhoto` accepte un point de vue optionnel `x y z yaw pitch` (repere plan,
-   cm / rad) et `-Drender.quality=low|high`. `python src/preview.py` s'en sert
-   pour un apercu depuis chaque batiment de la propriete + une vue d'ensemble
-   aerienne (`data/verif/preview_*.png`). `sitegeo.render_photo()` factorise
-   compilation + lancement, partage par `verif.py --render` et `preview.py`.
+`RenderPhoto` accepte un point de vue optionnel `x y z yaw pitch` (repère plan,
+cm / rad) et `-Drender.quality=low|high`. `python src/preview.py` s'en sert pour
+un aperçu depuis chaque bâtiment de la propriété plus une vue d'ensemble aérienne
+(`data/verif/preview_*.png`). `sitegeo.render_photo()` factorise compilation et
+lancement, partagé par `verif.py --render` et `preview.py`.
 
 - Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
   suggère la doc communautaire du même nom) : c'est un petit helper source,
   adapté de `com.eteks.sweethome3d.utilities.ConsolePhotoGenerator`
   (Emmanuel Puybaret / eTeks, GPLv2), compilé comme `Conv.java`.
 - Jars additionnels au-delà de `SweetHome3D.jar` : `sunflow-*.jar`,
-  `j3dcore.jar`, `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar` —
+  `j3dcore.jar`, `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar`,
   dans le `lib/` de Sweet Home 3D (recherche **récursive** : le build Microsoft
   Store range Java3D dans `lib/java3d-*/`). Réglable via `[tools].render_libs_dir`
-  (sinon le `lib/` du `.jar` détecté — lui-même trouvé via `Get-AppxPackage` pour
-  une install Store). Absents/incomplets → étape ignorée proprement, n'affecte
+  (sinon le `lib/` du `.jar` détecté, lui-même trouvé via `Get-AppxPackage` pour
+  une install Store). Absents/incomplets -> étape ignorée proprement, n'affecte
   pas le code retour de `verif.py`.
 - **Sous Linux, `xvfb-run` est nécessaire** même avec `-Dj3d.rend=noop`
   (pipeline GPU désactivé) : Java3D interroge quand même un
   `GraphicsEnvironment` au démarrage et lève `HeadlessException` sans display
   réel ou virtuel. `verif.py` l'utilise automatiquement si trouvé sur le
-  `PATH` ; sous Windows ce n'est pas nécessaire (pas requis, pas utilisé).
+  `PATH` ; sous Windows ce n'est pas nécessaire.
 - Distinct du **plugin MCP Sweet Home 3D** (pilote une instance GUI déjà
-  ouverte — affichage des calques pas fiable, cf. limitation #2 ci-dessous) et
+  ouverte, affichage des calques pas fiable, cf. limitation #2 ci-dessous) et
   du rendu interactif soigné (GUI + plugin `AdvancedSettingsPhotoRendering` +
   GPU, qui restera toujours de meilleure qualité) : ceci est un rendu rapide,
   réglages par défaut, pour vérification automatisée seulement.
@@ -108,7 +108,7 @@ smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
    aux angles rasants (filtrage de texture du moteur).
 5. **Maillage terrain sous-échantillonné à 2 m** (~43 k faces). `terrain_z_at`
    interpole cette grille pour que les objets affleurent la surface *visible* ;
-   résidu de calage ~±cm.
+   résidu de calage de l'ordre du cm.
 6. **Toits pyramidaux simples** (apex au centroïde, pas de faîtage). Les
    bâtiments en L reçoivent un point central. Réglable via `ROOF_RISE_MAX` et
    les facteurs 0,22 / 0,45 de `bati.py`.
@@ -117,8 +117,8 @@ smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
    **ligne d'arbres** dense à la place.
 8. **`matplotlib` interdit** dans l'env (crash DLL) ; **`pv.Plane()` casse**
    (même cause).
-9. **Bâtiments de la propriété** = emprises au sol 2D (« à modéliser ») —
+9. **Bâtiments de la propriété** = emprises au sol 2D (« à modéliser ») ;
    modélisation fine ultérieure (topo + LIDAR + photos + plugin GenerateRoof).
-10. **Murs clairs sur-exposés** en lumière rasante (éclairage Sweet Home 3D — le
+10. **Murs clairs sur-exposés** en lumière rasante (éclairage Sweet Home 3D, le
     matériau est correctement mat).
 11. **Windows uniquement** (`run.ps1`, chemins d'installation Sweet Home 3D).
