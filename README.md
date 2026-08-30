@@ -30,19 +30,25 @@ La parcelle cible **n'est pas codée dans le dépôt** : elle se règle dans
 
 # 2. éditez config/site.local.toml : code INSEE, section, numéros de parcelles
 
-# 3. lance le pipeline complet
+# 3. lance le pipeline complet (menu interactif : Entree = toutes les etapes)
 .\run.ps1
 
 # 4. double-cliquez Plan 3D.sh3d
 ```
 
+Sans argument, `run.ps1` propose un menu (étapes à lancer, et choix du site si
+plusieurs `config\*.toml` existent). En cas d'échec d'une étape, il propose de
+réessayer / sauter / arrêter.
+
 Autres usages :
 
 ```powershell
-.\run.ps1 verif                 # contrôle seul (parcelles live, calage, topologie)
-.\run.ps1 terrain bati          # certaines étapes seulement
-.\run.ps1 -Site autre-site.toml # utiliser une autre config
+.\run.ps1 verif                 # contrôle seul (parcelles live, calage, topologie), sans menu
+.\run.ps1 terrain bati          # certaines étapes seulement, sans menu
+.\run.ps1 -Site autre-site.toml # utiliser une autre config sans passer par le menu
 .\run.ps1 -Fresh                # recréer l'env conda
+.\run.ps1 -NonInteractive       # jamais de prompt (toutes les étapes, site.local.toml,
+                                 # arrêt immédiat si une étape échoue) - pour un script/hook
 ```
 
 Sans `run.ps1` : `conda activate sitegeo` puis `python src\<script>.py`.
