@@ -30,11 +30,11 @@ margin_m = 10.0
 site_name = "Mon terrain"
 
 [tools]
-# Chemin absolu du .jar de Sweet Home 3D (classpath du helper Java de build_home).
-# Laisser "" = auto-detection dans les emplacements d'installation habituels.
+# Chemin absolu du .jar de Sweet Home 3D (classpath des helpers Java).
+# Laisser "" = auto-detection : installeur classique ET Microsoft Store (MSIX).
 sweethome3d_jar = ""
-# Dossier contenant les jars additionnels pour "verif.py --render" (rendu photo
-# headless, optionnel) : sunflow, j3dcore, j3dutils, vecmath, batik-svgpathparser.
-# Laisser "" = dossier du .jar ci-dessus (c'est le meme lib/ dans une install
-# standard). Si absent/incomplet, l'etape est simplement ignoree.
+# Dossier des jars additionnels pour "verif.py --render" (rendu photo headless,
+# optionnel) : sunflow, j3dcore, j3dutils, vecmath, batik-svgpathparser.
+# Laisser "" = le lib/ du .jar ci-dessus (recherche recursive : gere le
+# sous-dossier java3d-* du build MSIX). Absent/incomplet -> etape ignoree.
 render_libs_dir = ""

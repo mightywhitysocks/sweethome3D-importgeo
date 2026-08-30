@@ -67,9 +67,11 @@ smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
   (Emmanuel Puybaret / eTeks, GPLv2), compilé comme `Conv.java`.
 - Jars additionnels au-delà de `SweetHome3D.jar` : `sunflow-*.jar`,
   `j3dcore.jar`, `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar` —
-  normalement dans le même `lib/` que `SweetHome3D.jar`. Réglable via
-  `[tools].render_libs_dir` (sinon déduit automatiquement). Absents/incomplets
-  → étape ignorée proprement, n'affecte pas le code retour de `verif.py`.
+  dans le `lib/` de Sweet Home 3D (recherche **récursive** : le build Microsoft
+  Store range Java3D dans `lib/java3d-*/`). Réglable via `[tools].render_libs_dir`
+  (sinon le `lib/` du `.jar` détecté — lui-même trouvé via `Get-AppxPackage` pour
+  une install Store). Absents/incomplets → étape ignorée proprement, n'affecte
+  pas le code retour de `verif.py`.
 - **Sous Linux, `xvfb-run` est nécessaire** même avec `-Dj3d.rend=noop`
   (pipeline GPU désactivé) : Java3D interroge quand même un
   `GraphicsEnvironment` au démarrage et lève `HeadlessException` sans display

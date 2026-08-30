@@ -72,7 +72,7 @@ Sans `run.ps1` : `conda activate sitegeo` puis `python src\<script>.py`.
 | `src/vegetation.py` | arbres (maxima MNH) + haies taillées éventuelles |
 | `src/courbes.py` | courbes de niveau 1 m (`gdal_contour`) |
 | `src/build_home.py` | assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`) |
-| `src/verif.py` | contrôle lecture seule (`--overlay` : image de vérif) |
+| `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d`) |
 
 Ordre : `phase1_cadastre → terrain → bati → vegetation → courbes → build_home`.
 

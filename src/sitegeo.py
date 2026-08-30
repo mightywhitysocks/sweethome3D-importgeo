@@ -27,6 +27,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -94,19 +95,44 @@ LAYERS = {
     "CADASTRE":  "CADASTRALPARCELS.PARCELLAIRE_EXPRESS",
 }   # MNS dispo si besoin : IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93
 
-# emplacements Windows habituels de SweetHome3D.jar (WindowsApps / installeur classique)
+# emplacements de SweetHome3D.jar pour l'installeur classique. L'install Microsoft
+# Store (MSIX) est trouvee via _msix_sh3d_jars() : C:\Program Files\WindowsApps
+# n'est pas listable (ACL), on y accede par Get-AppxPackage.
 JAR_GLOBS = (
-    r"C:\Program Files\WindowsApps\eTeks.SweetHome3D*\**\SweetHome3D.jar",
     r"C:\Program Files\Sweet Home 3D\lib\SweetHome3D.jar",
     r"C:\Program Files (x86)\Sweet Home 3D\lib\SweetHome3D.jar",
 )
 
 
+def _msix_sh3d_jars() -> list[Path]:
+    """SweetHome3D.jar d'une install Microsoft Store : InstallLocation via
+    Get-AppxPackage (WindowsApps n'est pas enumerable) puis chemins connus."""
+    if os.name != "nt":
+        return []
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-AppxPackage *SweetHome3D*).InstallLocation"],
+            capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    out: list[Path] = []
+    for line in r.stdout.splitlines():
+        loc = line.strip()
+        if not loc:
+            continue
+        for rel in ("lib/SweetHome3D.jar", "Sweet Home 3D/lib/SweetHome3D.jar"):
+            p = Path(loc) / rel
+            if p.exists():
+                out.append(p)
+    return out
+
+
 def find_sweethome3d_jar(*, required: bool = True) -> Path | None:
     """
-    Localise SweetHome3D.jar : [tools].sweethome3d_jar sinon les emplacements
-    d'installation Windows habituels. `required=False` -> None si introuvable
-    (au lieu de lever) ; utilise par les etapes optionnelles (rendu photo).
+    Localise SweetHome3D.jar : [tools].sweethome3d_jar, sinon l'installeur
+    classique, sinon l'install Microsoft Store. `required=False` -> None si
+    introuvable (au lieu de lever) ; utilise par les etapes optionnelles (rendu).
     """
     if SH3D_JAR_CFG:
         p = Path(SH3D_JAR_CFG)
@@ -119,6 +145,9 @@ def find_sweethome3d_jar(*, required: bool = True) -> Path | None:
         hits = sorted(glob.glob(pat, recursive=True))
         if hits:
             return Path(hits[-1])
+    msix = _msix_sh3d_jars()
+    if msix:
+        return msix[-1]
     if required:
         raise SystemExit(
             "SweetHome3D.jar introuvable — renseignez [tools].sweethome3d_jar dans "
