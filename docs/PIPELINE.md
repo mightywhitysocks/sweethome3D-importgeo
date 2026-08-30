@@ -53,6 +53,34 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 **Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques —
 Cadastre / Terrain / Bâti voisinage / Bâti propriété (à modéliser) / Végétation.
 
+## Étape 3 (optionnelle) — rendu photo headless (`verif.py --render`)
+
+`java/RenderPhoto.java` (`com.eteks.sweethome3d.utilities.RenderPhoto`) rend
+`Plan 3D.sh3d` en PNG hors-ligne via le moteur SunFlow de Sweet Home 3D
+(`com.eteks.sweethome3d.j3d.PhotoRenderer`, qualité 3/4 — même brique que
+« Créer photo » dans l'appli). Sortie : `data/verif/render_photo.png`. Sert de
+smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
+
+- Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
+  suggère la doc communautaire du même nom) : c'est un petit helper source,
+  adapté de `com.eteks.sweethome3d.utilities.ConsolePhotoGenerator`
+  (Emmanuel Puybaret / eTeks, GPLv2), compilé comme `Conv.java`.
+- Jars additionnels au-delà de `SweetHome3D.jar` : `sunflow-*.jar`,
+  `j3dcore.jar`, `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar` —
+  normalement dans le même `lib/` que `SweetHome3D.jar`. Réglable via
+  `[tools].render_libs_dir` (sinon déduit automatiquement). Absents/incomplets
+  → étape ignorée proprement, n'affecte pas le code retour de `verif.py`.
+- **Sous Linux, `xvfb-run` est nécessaire** même avec `-Dj3d.rend=noop`
+  (pipeline GPU désactivé) : Java3D interroge quand même un
+  `GraphicsEnvironment` au démarrage et lève `HeadlessException` sans display
+  réel ou virtuel. `verif.py` l'utilise automatiquement si trouvé sur le
+  `PATH` ; sous Windows ce n'est pas nécessaire (pas requis, pas utilisé).
+- Distinct du **plugin MCP Sweet Home 3D** (pilote une instance GUI déjà
+  ouverte — affichage des calques pas fiable, cf. limitation #2 ci-dessous) et
+  du rendu interactif soigné (GUI + plugin `AdvancedSettingsPhotoRendering` +
+  GPU, qui restera toujours de meilleure qualité) : ceci est un rendu rapide,
+  réglages par défaut, pour vérification automatisée seulement.
+
 ## Limitations connues
 
 1. **JVM obligatoire** pour produire le `.sh3d` (`java` + `javac`). La JRE

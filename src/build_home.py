@@ -24,7 +24,6 @@ auto-detecte ou [tools].sweethome3d_jar dans site.local.toml).
 """
 from __future__ import annotations
 
-import glob
 import io
 import json
 import math
@@ -43,28 +42,6 @@ import sitegeo as cg
 GEO = cg.GEO
 SH3D = cg.HOME_SH3D
 JCONV = cg.DATA / "_jconv"                   # cache : jar copie + Conv.class
-
-# --- localisation de SweetHome3D.jar (classpath du helper Java) ---
-_JAR_GLOBS = [
-    r"C:\Program Files\WindowsApps\eTeks.SweetHome3D*\**\SweetHome3D.jar",
-    r"C:\Program Files\Sweet Home 3D\lib\SweetHome3D.jar",
-    r"C:\Program Files (x86)\Sweet Home 3D\lib\SweetHome3D.jar",
-]
-
-
-def _find_sh3d_jar() -> Path:
-    if cg.SH3D_JAR_CFG:
-        p = Path(cg.SH3D_JAR_CFG)
-        if not p.exists():
-            raise SystemExit(f"[tools].sweethome3d_jar introuvable : {p}")
-        return p
-    for pat in _JAR_GLOBS:
-        hits = sorted(glob.glob(pat, recursive=True))
-        if hits:
-            return Path(hits[-1])
-    raise SystemExit(
-        "SweetHome3D.jar introuvable — renseignez [tools].sweethome3d_jar dans "
-        "config/site.local.toml (chemin absolu du .jar de Sweet Home 3D).")
 
 LEVELS = {                       # noms -> ids (repris du gabarit, stables)
     "Cadastre": "level-444fad18-a6ed-490b-9cda-2016da873fcc",
@@ -241,7 +218,7 @@ def _prepare_java() -> Path:
     JCONV.mkdir(parents=True, exist_ok=True)
     jar = JCONV / "SweetHome3D.jar"
     if not jar.exists():
-        shutil.copy2(_find_sh3d_jar(), jar)
+        shutil.copy2(cg.find_sweethome3d_jar(), jar)
     cls = JCONV / "com" / "eteks" / "sweethome3d" / "io" / "Conv.class"
     src = cg.JAVA / "Conv.java"
     if not cls.exists() or cls.stat().st_mtime < src.stat().st_mtime:
