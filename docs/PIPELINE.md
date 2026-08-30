@@ -20,8 +20,11 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 3. Réoriente le `<compass>` : longitude / latitude (radians) du **centroïde**
    de la bbox WGS84 du site — l'orientation solaire est correcte sans qu'aucune
    coordonnée ne soit stockée dans le dépôt.
-4. Monte la caméra observateur de marche à `z_max + 60 cm` (elle ne plonge plus
-   sous le terrain — Sweet Home 3D ne fait pas suivre le relief à la caméra).
+4. Positionne la caméra de visite 3D (observateur) sur le centroïde de la parcelle
+   propriété, à hauteur d'œil (`+170 cm`) au-dessus du **sol le plus haut sous les
+   bâtiments de la propriété** (`bati_propriete_ref.json[sol_bati_max_cm]`) — Sweet
+   Home 3D ne fait pas suivre le relief à la caméra. Repli sans bâti propriété :
+   `z_max_terrain + 60 cm`.
 5. Génère les `<pieceOfFurniture>` : terrain (`data/terrain.obj`), bâti voisinage
    (`data/bati_voisinage.obj`), haies si présentes, et ~1 arbre par entrée de
    `data/vegetation_arbres.json` (tous `model='tree/tree.obj'`, redimensionnés).
@@ -92,9 +95,10 @@ smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
    produit, lui, est correct (prouvé par la relecture `Conv` + l'ouverture
    native). Ne pas vérifier les calques via MCP.
 3. **Caméra de visite** : Sweet Home 3D déplace la caméra observateur à altitude
-   fixe sur son sol plat (`z = 0`), sans collision avec le terrain importé.
-   Contournement : caméra montée à `z_max + 60 cm` ; elle « flotte » dans les
-   zones basses. Ajuster avec Pg.Préc / Pg.Suiv en vue 3D.
+   fixe, sans collision avec le terrain importé. Contournement : caméra posée sur
+   la parcelle propriété, à hauteur d'œil au-dessus du sol le plus haut de ses
+   bâtiments (cf. étape 4). Elle « flotte » là où le terrain descend sous ce
+   niveau ; ajuster avec Pg.Préc / Pg.Suiv en vue 3D.
 4. **Ortho plafonnée à 20 cm/px** (résolution HR native IGN). Aspect un peu flou
    aux angles rasants (filtrage de texture du moteur).
 5. **Maillage terrain sous-échantillonné à 2 m** (~43 k faces). `terrain_z_at`

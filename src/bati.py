@@ -125,6 +125,11 @@ def main() -> None:
 
 def _propriete_ref(props) -> None:
     cmds = []
+    # sol le plus haut sous les emprises des batiments de la propriete (repere plan,
+    # cm) -> hauteur de reference de la camera de visite 3D (cf. build_home.py).
+    sol_max = max((cg.terrain_z_at(x, y)
+                   for b in props for ring in b["rings_cm"] for x, y in ring),
+                  default=0.0)
     for b in props:
         for ring in b["rings_cm"]:
             cmds.append({"action": "create_room_polygon", "params": {
@@ -144,7 +149,8 @@ def _propriete_ref(props) -> None:
             "text": txt, "x": round(cx, 1), "y": round(cy, 1),
             "fontSize": 45, "color": "#6D5F4B"}})
     (GEO / "bati_propriete_ref.json").write_text(
-        json.dumps({"commands": cmds}), encoding="utf-8")
+        json.dumps({"sol_bati_max_cm": round(sol_max, 1), "commands": cmds}),
+        encoding="utf-8")
     print(f"bati_propriete_ref.json : {len(cmds)} cmds ({len(props)} batiments propriete)")
 
 
