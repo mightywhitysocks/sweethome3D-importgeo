@@ -1,5 +1,5 @@
 """
-vegetation.py — Phase 2 : arbres + haies depuis le MNH LIDAR HD.
+vegetation.py : Phase 2, arbres + haies depuis le MNH LIDAR HD.
 
   A. arbres  : maxima locaux du MNH (scipy.maximum_filter), h >= H_ARBRE, espaces
      d'au moins MIN_DIST, dans (parcelles + 8 m), hors emprises bati.

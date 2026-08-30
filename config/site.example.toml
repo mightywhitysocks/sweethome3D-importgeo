@@ -10,7 +10,7 @@
 # -------------------------------------------------------------------------------
 
 [parcelle]
-# Code INSEE de la commune (5 caracteres) — https://www.insee.fr/fr/recherche
+# Code INSEE de la commune (5 caracteres), voir https://www.insee.fr/fr/recherche
 insee           = "00000"
 # Section cadastrale (1 a 2 caracteres, ex. "AB", "ZC", "0C")
 section         = "AA"
@@ -26,7 +26,7 @@ property_parcel = "0001"
 margin_m = 10.0
 
 [labels]
-# Purement cosmetique (titres) — aucun effet sur les donnees telechargees.
+# Purement cosmetique (titres) ; aucun effet sur les donnees telechargees.
 site_name = "Mon terrain"
 
 [tools]

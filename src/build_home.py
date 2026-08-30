@@ -1,5 +1,5 @@
 """
-build_home.py — assemble le fichier SH3D complet HORS-LIGNE : `Plan 3D.sh3d`.
+build_home.py : assemble le fichier SH3D complet HORS-LIGNE (`Plan 3D.sh3d`).
 
 Plus aucune choregraphie MCP / redemarrage.
 
@@ -96,7 +96,7 @@ def _background_image_tag(fond_png: Path, width_m: float) -> str:
 
 
 def _compass_tag(_m) -> str:
-    """<compass> avec long/lat (radians) du centroide du site — pas stocke au depot."""
+    """<compass> avec long/lat (radians) du centroide du site (pas stocke au depot)."""
     lon0, lat0, lon1, lat1 = cg.META.bbox_wgs84
     lon = math.radians((lon0 + lon1) / 2.0)
     lat = math.radians((lat0 + lat1) / 2.0)
@@ -229,7 +229,7 @@ def main() -> None:
         raise SystemExit("echec de la conversion Java (voir ci-dessus)")
 
     print(f"\n>>> {SH3D.name}  ({SH3D.stat().st_size // 1024} Ko , {len(pieces)} pieces, "
-          f"{len(rooms)} pieces-plan) — double-clique pour ouvrir.")
+          f"{len(rooms)} pieces-plan). Double-clique pour ouvrir.")
     print(f"    (ancien : {SH3D.with_suffix('.sh3d.bak').name} ; source XML : data/home_source.xml)")
 
 

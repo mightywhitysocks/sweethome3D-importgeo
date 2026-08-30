@@ -1,5 +1,5 @@
 """
-sitegeo.py — module commun du pipeline IGN -> Sweet Home 3D.
+sitegeo.py : module commun du pipeline IGN -> Sweet Home 3D.
 
 Genere un plan 3D georeference d'une parcelle cadastrale francaise a partir des
 donnees publiques IGN Geoplateforme. Concentre tout ce qui etait recopie dans
@@ -66,7 +66,7 @@ def _load_site() -> dict:
             pass
         raise SystemExit(
             f"Config absente : {p}\n"
-            f"  '{dst}' vient d'etre cree depuis le gabarit — renseignez votre "
+            f"  '{dst}' vient d'etre cree depuis le gabarit ; renseignez votre "
             f"parcelle (insee / section / parcels) puis relancez.")
     return tomllib.loads(p.read_text(encoding="utf-8"))
 
@@ -150,7 +150,7 @@ def find_sweethome3d_jar(*, required: bool = True) -> Path | None:
         return msix[-1]
     if required:
         raise SystemExit(
-            "SweetHome3D.jar introuvable — renseignez [tools].sweethome3d_jar dans "
+            "SweetHome3D.jar introuvable ; renseignez [tools].sweethome3d_jar dans "
             "config/site.local.toml (chemin absolu du .jar de Sweet Home 3D).")
     return None
 
@@ -260,7 +260,7 @@ class _Meta:
         f = DATA / "terrain_stats.json"
         if f.exists():
             return float(json.loads(f.read_text(encoding="utf-8"))["z_min_ngf"])
-        raise FileNotFoundError("terrain_stats.json absent — lancer terrain.py d'abord")
+        raise FileNotFoundError("terrain_stats.json absent ; lancer terrain.py d'abord")
 
 
 class _MetaLazy:
@@ -361,7 +361,7 @@ def wms_getmap(layers, bbox_l93, res_m: float = 0.5,
     """
     WMS 1.3.0 GetMap, EPSG:2154, sur `bbox_l93` = (e0, n0, e1, n1).
     `layers` : une cle de LAYERS, un nom brut, ou une liste (composite).
-    `res_m` = taille de pixel visee (m) — ou `size=(w, h)` explicite.
+    `res_m` = taille de pixel visee (m), ou `size=(w, h)` explicite.
     """
     from owslib.wms import WebMapService
 
@@ -475,7 +475,7 @@ def roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox) -> tuple[int, int, in
 
 
 # --------------------------------------------------------------------------- #
-# Ecriture OBJ (+ .mtl) — sérialisation seulement ; la géométrie/les normales
+# Ecriture OBJ (+ .mtl) : sérialisation seulement ; la géométrie/les normales
 # viennent de PyVista.  UV analytiques : u = (x - x0)/W , v = (y - y0)/H (dans le
 # repere plan cm), pour draper l'ortho.
 # --------------------------------------------------------------------------- #
@@ -585,7 +585,7 @@ def solidify(surf, depth_cm: float = 800.0):
     """
     Surface -> volume ferme : extrusion verticale vers le bas + capot, nettoyage,
     normales reorientees vers l'exterieur.  Le fond est « ondulé » sous la scene
-    (invisible) — pas besoin de pv.Plane.
+    (invisible), pas besoin de pv.Plane.
     """
     solid = surf.extrude((0.0, 0.0, -abs(depth_cm)), capping=True).clean()
     return solid.compute_normals(auto_orient_normals=True, consistent_normals=True,

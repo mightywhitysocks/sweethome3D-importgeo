@@ -1,5 +1,5 @@
 """
-terrain.py — Phase 2 : terrain 3D solide depuis le MNT LIDAR HD.
+terrain.py : Phase 2, terrain 3D solide depuis le MNT LIDAR HD.
 
 Un SEUL objet terrain sur toute l'emprise (la limite de propriete est deja
 tracee par les pieces cadastre). Geometrie 100 % PyVista (`extrude` + `capping`
@@ -15,7 +15,7 @@ Sorties dans data/ :
   terrain.obj / .mtl  volume ferme + UV ortho
   terrain_drape.jpg   ortho HR drapee (20 cm/px natif IGN)
   terrain_place.json  bbox de l'OBJ (x/y/width/depth/height/elevation)
-  terrain_preview.png apercu ombrage (PIL — matplotlib interdit)
+  terrain_preview.png apercu ombrage (PIL, matplotlib interdit)
 """
 from __future__ import annotations
 
