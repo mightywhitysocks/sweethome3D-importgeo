@@ -77,6 +77,21 @@ def _piece(level, name, model, size, x, y, elev, w, d, h, *, catalog=None,
     return f"  <pieceOfFurniture {' '.join(a)}{extra}/>"
 
 
+def _furniture_group(level, name, children: list[str]) -> str:
+    """Regroupe des <pieceOfFurniture> deja generees en un <furnitureGroup>.
+
+    x/y/width/depth/height du groupe sont calcules par SH3D (HomeFurnitureGroup)
+    a partir de la boite englobante des enfants ; le level porte par les enfants
+    est ignore par HomeXMLHandler, seul celui du groupe compte.
+    """
+    if not children:
+        return ""
+    inner = "\n".join(children)
+    return (f"  <furnitureGroup id='{_uid('furnitureGroup')}' "
+            f"level='{LEVELS[level]}' name='{_esc(name)}'>\n{inner}\n"
+            f"  </furnitureGroup>")
+
+
 def _room(level, name, ring_cm, *, floor_color, floor_visible=True) -> str:
     pts = "\n".join(f"    <point x='{x:.1f}' y='{y:.1f}'/>" for x, y in ring_cm)
     fv = "" if floor_visible else " floorVisible='false'"
@@ -160,9 +175,10 @@ def main() -> None:
                          bp["x"], bp["y"], bp["elevation"], bp["width"], bp["depth"],
                          bp["height"], creator="IGN BD TOPO", extra=" deformable='false'"))
 
+    veg_pieces = []
     if (GEO / "haies.obj").exists():
         hp = json.loads((GEO / "haies_place.json").read_text(encoding="utf-8"))
-        pieces.append(_piece("Vegetation", "Haies (MNH LIDAR HD)", "h/haies.obj",
+        veg_pieces.append(_piece("Vegetation", "Haies (MNH LIDAR HD)", "h/haies.obj",
                              (GEO / "haies.obj").stat().st_size, hp["x"], hp["y"],
                              hp["elevation"], hp["width"], hp["depth"], hp["height"],
                              creator="IGN LIDAR HD", extra=" deformable='false'"))
@@ -171,11 +187,13 @@ def main() -> None:
     tsz = len(tree_obj)
     for pl, rz in zip(veg["place"]["commands"], veg["resize"]):
         p = pl["params"]
-        pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
+        veg_pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
                              p["x"], p["y"], p["elevation"],
                              rz["width"], rz["depth"], rz["height"],
                              catalog="OlaKristianHoff#tree", creator="Ola-Kristian Hoff",
                              extra=" movable='false' license='Free Art / CC-BY'"))
+
+    pieces.append(_furniture_group("Vegetation", "Végétation", veg_pieces))
 
     # ---- rooms ----
     rooms = []

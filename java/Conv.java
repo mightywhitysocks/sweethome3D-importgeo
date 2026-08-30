@@ -38,11 +38,10 @@ public class Conv {
     }
     Home home = handler.getHome();
     java.util.Map<String, Integer> byLevel = new java.util.TreeMap<>();
-    for (HomePieceOfFurniture p : home.getFurniture())
-      byLevel.merge(p.getLevel() == null ? "<null>" : p.getLevel().getName(), 1, Integer::sum);
+    countByLevel(home.getFurniture(), byLevel);
     System.out.println("parsed: " + home.getLevels().size() + " niveaux, "
-        + home.getFurniture().size() + " meubles " + byLevel + ", "
-        + home.getRooms().size() + " pieces-plan");
+        + byLevel.values().stream().mapToInt(Integer::intValue).sum() + " meubles "
+        + byLevel + ", " + home.getRooms().size() + " pieces-plan");
 
     new HomeFileRecorder(9, false).writeHome(home, out);
     System.out.println("ecrit : " + out + "  (" + new File(out).length() + " o)");
@@ -50,8 +49,27 @@ public class Conv {
     // controle : relire le .sh3d ecrit et verifier la repartition par niveau
     Home rr = new HomeFileRecorder(9, false).readHome(out);
     java.util.Map<String, Integer> chk = new java.util.TreeMap<>();
-    for (HomePieceOfFurniture p : rr.getFurniture())
-      chk.merge(p.getLevel() == null ? "<null>" : p.getLevel().getName(), 1, Integer::sum);
+    countByLevel(rr.getFurniture(), chk);
     System.out.println("relu : " + rr.getLevels().size() + " niveaux, meubles " + chk);
+  }
+
+  private static void countByLevel(java.util.List<HomePieceOfFurniture> furniture,
+                                    java.util.Map<String, Integer> byLevel) {
+    countByLevel(furniture, byLevel, null);
+  }
+
+  /** Compte les meubles terminaux par niveau, en descendant dans les HomeFurnitureGroup :
+   * seul le groupe porte un level (les enfants n'en ont pas), qu'on propage donc a eux. */
+  private static void countByLevel(java.util.List<HomePieceOfFurniture> furniture,
+                                    java.util.Map<String, Integer> byLevel,
+                                    String inheritedLevel) {
+    for (HomePieceOfFurniture p : furniture) {
+      String levelName = p.getLevel() == null ? inheritedLevel : p.getLevel().getName();
+      if (p instanceof HomeFurnitureGroup) {
+        countByLevel(((HomeFurnitureGroup) p).getFurniture(), byLevel, levelName);
+      } else {
+        byLevel.merge(levelName == null ? "<null>" : levelName, 1, Integer::sum);
+      }
+    }
   }
 }
