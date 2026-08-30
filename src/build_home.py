@@ -42,6 +42,7 @@ import sitegeo as cg
 GEO = cg.GEO
 SH3D = cg.HOME_SH3D
 JCONV = cg.DATA / "_jconv"                   # cache : jar copie + Conv.class
+WALK_EYE_CM = 170.0                          # hauteur d'oeil de la camera de visite 3D
 
 LEVELS = {                       # noms -> ids (repris du gabarit, stables)
     "Cadastre": "level-444fad18-a6ed-490b-9cda-2016da873fcc",
@@ -103,6 +104,18 @@ def _compass_tag(_m) -> str:
             f"longitude='{lon:.7f}' latitude='{lat:.7f}' timeZone='Europe/Paris'/>")
 
 
+def _set_walk_camera(head: str, x, y, z: float) -> str:
+    """Repositionne la camera observateur (visite 3D) : x/y optionnels, z impose."""
+    def repl(m):
+        tag = m.group(0)
+        if x is not None:
+            tag = re.sub(r"\bx='[-\d.]+'", f"x='{x:.1f}'", tag)
+            tag = re.sub(r"\by='[-\d.]+'", f"y='{y:.1f}'", tag)
+        return re.sub(r"\bz='[-\d.]+'", f"z='{z:.1f}'", tag)
+    return re.sub(r"<observerCamera attribute='observerCamera'[^>]*/>", repl,
+                  head, count=1)
+
+
 def main() -> None:
     payload = json.loads((GEO / "sh3d_payload.json").read_text(encoding="utf-8"))
     fond_png = GEO / "fond_cadastre_ortho.png"
@@ -120,9 +133,17 @@ def main() -> None:
                   _background_image_tag(fond_png, payload["fond"]["width_m"]), head)
     # compas : oriente le soleil sur le centroide reel du site (gabarit = neutre)
     head = re.sub(r"[ \t]*<compass\b[^>]*/>", _compass_tag(None), head, count=1)
-    # camera de marche : au-dessus du point haut du terrain
-    head = re.sub(r"(<observerCamera attribute='observerCamera'[^>]*?\bz=')[\d.]+",
-                  rf"\g<1>{z_max_cm + 60:.1f}", head, count=1)
+    # camera de visite 3D : hauteur d'oeil au-dessus du sol LE PLUS HAUT sous les
+    # batiments de la propriete, posee sur la parcelle propriete. Repli (pas de bati
+    # propriete) : au-dessus du point haut du terrain.
+    ref = json.loads((GEO / "bati_propriete_ref.json").read_text(encoding="utf-8"))
+    prop = next((p for p in payload["parcels"] if p["is_property"]), None)
+    if ref.get("sol_bati_max_cm") and prop:
+        wx, wy = prop["centroid_cm"]
+        wz = ref["sol_bati_max_cm"] + WALK_EYE_CM
+    else:
+        wx, wy, wz = None, None, z_max_cm + 60
+    head = _set_walk_camera(head, wx, wy, wz)
 
     # ---- pieces ----
     pieces = []
@@ -164,7 +185,6 @@ def main() -> None:
         for ring in pc["rings_cm"]:
             rooms.append(_room("Cadastre", f"{cg.SECTION} {pc['numero']} {tag}", ring,
                                floor_color=col))
-    ref = json.loads((GEO / "bati_propriete_ref.json").read_text(encoding="utf-8"))
     for cmd in ref["commands"]:
         if cmd["action"] != "create_room_polygon":
             continue
