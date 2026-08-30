@@ -1,0 +1,23 @@
+# --- livrable & donnees : jamais versionnes ---
+/Plan 3D.sh3d
+Plan 3D.sh3d.bak
+*.sh3d.bak
+/data/
+/docs/notice_calage.md
+
+# --- config locale (donnees de la parcelle) ---
+/config/site.local.toml
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# --- OS / editeurs / Claude ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+.claude/

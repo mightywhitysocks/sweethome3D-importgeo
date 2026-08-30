@@ -1,0 +1,38 @@
+# Environnement conda du pipeline IGN -> Sweet Home 3D.
+#   conda env create -f config/environment.yml
+#   conda activate sitegeo
+#
+# Appeler l'interpreteur directement (PAS `conda run`, qui casse les scripts
+# multi-lignes) :  <conda>\envs\sitegeo\python.exe src\terrain.py
+# (le plus simple : .\run.ps1 depuis la racine du depot)
+#
+# build_home.py a besoin en plus d'un JDK (java + javac sur le PATH), p.ex. Oracle
+# JDK 21 — pour compiler/executer java/Conv.java contre SweetHome3D.jar.
+#
+# ATTENTION : NE PAS installer matplotlib dans cet env -> crash DLL Windows
+# (exit -1066598273). pyvista fonctionne sans (on ne touche jamais
+# pyvista.plotting / Plotter ; les apercus sont faits en PIL).  De meme, la
+# fonction pyvista `pv.Plane()` casse (meme cause) -> le pipeline ne l'utilise pas
+# (extrusion verticale + capping a la place).
+name: sitegeo
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy=2.5.*
+  - pyvista=0.48.*          # geometrie 3D : surface MNT -> volume ferme, normales
+  - geopandas=1.1.*         # vecteurs IGN (API Carto parcelles, WFS BD TOPO)
+  - owslib=0.36.*           # WMS GetMap (data.geopf.fr, image/geotiff float32)
+  - rasterio=1.5.*
+  - shapely=2.1.*
+  - scipy=1.18.*            # maximum_filter (cimes), distance_transform (NaN)
+  - scikit-image=0.26.*     # skeletonize (spine des haies)
+  - networkx=3.6.*          # plus long chemin dans le squelette
+  - pyproj=3.7.*
+  - libgdal=3.13.*          # gdal_contour.exe (courbes de niveau)
+  - pillow=12.*             # apercus (remplace matplotlib)
+  - pip
+  - pip:
+      - javaobj-py3==0.6.1  # relire <backgroundImage> d'un .sh3d serialise Java
+# NON utilises (lecture LAZ brute) — reserves pour un futur passage LiDAR direct :
+#   laspy, pdal

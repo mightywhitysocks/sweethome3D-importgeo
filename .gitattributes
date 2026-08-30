@@ -1,0 +1,7 @@
+# Normalise les fins de ligne : LF dans le depot partout, sauf les scripts
+# PowerShell (CRLF pour Windows PowerShell 5.1).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.sh3d binary

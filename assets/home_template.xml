@@ -1,0 +1,26 @@
+<?xml version='1.0'?>
+<home version='7400' name='Plan 3D.sh3d' camera='topCamera' selectedLevel='level-444fad18-a6ed-490b-9cda-2016da873fcc' wallHeight='243.84' furnitureSortedProperty='X' furnitureDescendingSorted='true'>
+  <property name='com.eteks.sweethome3d.SweetHome3D.ColumnWidths' value='15,15,15,15,15,15,15,15,15'/>
+  <furnitureVisibleProperty name='NAME'/>
+  <furnitureVisibleProperty name='WIDTH'/>
+  <furnitureVisibleProperty name='DEPTH'/>
+  <furnitureVisibleProperty name='HEIGHT'/>
+  <furnitureVisibleProperty name='X'/>
+  <furnitureVisibleProperty name='Y'/>
+  <furnitureVisibleProperty name='ELEVATION'/>
+  <furnitureVisibleProperty name='LEVEL'/>
+  <furnitureVisibleProperty name='VISIBLE'/>
+  <environment groundColor='008A9A5B' backgroundImageVisibleOnGround3D='true' skyColor='00B9D4E8' lightColor='00D0D0D0' allLevelsVisible='true' ceillingLightColor='00D0D0D0' photoWidth='400' photoHeight='400' photoAspectRatio='SQUARE_RATIO' photoQuality='3' videoWidth='320' videoAspectRatio='RATIO_4_3' videoQuality='0' videoFrameRate='25'/>
+  <compass x='-100.0' y='50.0' diameter='100.0' northDirection='0.0' longitude='0.0' latitude='0.0' timeZone='Europe/Paris'/>
+  <observerCamera attribute='observerCamera' lens='PINHOLE' x='4200.0' y='15500.0' z='1100.0' yaw='-3.0987618' pitch='0.13476795' fieldOfView='1.0995575' time='1788004800000' fixedSize='true'/>
+  <camera attribute='topCamera' lens='PINHOLE' x='10264.689' y='16275.863' z='13445.662' yaw='2.9039094' pitch='0.94499934' fieldOfView='1.0995575' time='1788004800000'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-homeObserverCamera' name='Vue generale' lens='PINHOLE' x='-3000.0' y='22000.0' z='8500.0' yaw='-2.4173427' pitch='0.44840246' fieldOfView='1.0995575' time='1788004800000' fixedSize='true'/>
+  <camera attribute='storedCamera' id='camera-homeTopCamera' name='Vue dessus' lens='PINHOLE' x='9578.701' y='13366.08' z='8279.865' yaw='2.9039094' pitch='0.94499934' fieldOfView='1.0995575' time='1788004800000'/>
+  <level id='level-444fad18-a6ed-490b-9cda-2016da873fcc' name='Cadastre' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='0'>
+    <backgroundImage image='bg' scaleDistance='13074.001' scaleDistanceXStart='81.700005' scaleDistanceYStart='378.0' scaleDistanceXEnd='735.3' scaleDistanceYEnd='378.0'/>
+  </level>
+  <level id='level-b1c25b31-ec4d-4776-b2da-dace8e120ffe' name='Terrain' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='1'/>
+  <level id='level-94f420d7-1fb8-4666-85cc-91384f586dff' name='Bati voisinage' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='2'/>
+  <level id='level-19f6a101-847c-4426-94b8-b0722d1015db' name='Bati propriete (a modeliser)' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='3'/>
+  <level id='level-d7571dd8-f841-4ace-9baa-2b5b5df57394' name='Vegetation' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='4'/>
+</home>
