@@ -28,7 +28,11 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 5. Génère les `<pieceOfFurniture>` : terrain (`data/terrain.obj`), bâti voisinage
    (`data/bati_voisinage.obj`), haies si présentes, et ~1 arbre par entrée de
    `data/vegetation_arbres.json` (tous `model='tree/tree.obj'`, redimensionnés).
-   Position / élévation depuis les `*_place.json` et la végétation JSON.
+   Position / élévation depuis les `*_place.json` et la végétation JSON. Haies +
+   arbres sont rassemblés dans un seul `<furnitureGroup>` (niveau *Végétation*) :
+   `x`/`y`/`width`/`depth`/`height` du groupe sont calculés par SH3D
+   (`HomeFurnitureGroup`) depuis la boîte englobante des enfants, pas besoin de
+   les fournir.
 6. Génère les `<room>` : les parcelles (niveau Cadastre) et les emprises au sol
    des bâtiments de la propriété (niveau *Bâti propriété (à modéliser)*).
 7. Écrit le ZIP : `Home.xml` + `bg` + dossiers modèles (`t/ b/ h/ tree/`, chaque
