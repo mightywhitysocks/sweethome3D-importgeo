@@ -19,14 +19,10 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import re
-import shutil
-import subprocess
 import sys
 import zipfile
 from math import hypot
-from pathlib import Path
 
 import sitegeo as cg          # noqa: E402  (regle GDAL_DATA/PROJ_LIB en premier)
 
@@ -208,72 +204,14 @@ def _overlay(payload) -> None:
     print("verif_overlay.png", img.size)
 
 
-# --- rendu photo headless (SunFlow), smoke-test visuel optionnel du .sh3d ---
-# Distinct du plugin MCP Sweet Home 3D (pilote une instance GUI deja ouverte,
-# affichage des calques pas fiable) et du rendu interactif soigne (GUI + plugin
-# AdvancedSettingsPhotoRendering + GPU) : ceci est un rendu rapide qualite 3/4,
-# reglages par defaut, juste pour confirmer visuellement que le .sh3d produit
-# est correct (textures, calques, geometrie) sans machine Windows.
-_RENDER_JARS = ("sunflow", "j3dcore", "j3dutils", "vecmath", "batik-svgpathparser")
-
-
 def _render_photo() -> None:
+    """Smoke-test visuel du .sh3d : rendu SunFlow headless (cg.render_photo).
+    Optionnel -- n'affecte pas le code retour. Pour des apercus depuis les
+    batiments de la propriete : `python src/preview.py`."""
     print("\n=== 8. Rendu photo headless (optionnel) ===")
-    if not SH3D.exists():
-        print("  (.sh3d absent — rendu ignore)")
-        return
-
-    libs_dir = (Path(cg.RENDER_LIBS_DIR) if cg.RENDER_LIBS_DIR else None)
-    if libs_dir is None:
-        jar_default = cg.find_sweethome3d_jar(required=False)
-        libs_dir = jar_default.parent if jar_default else None
-    if libs_dir is None or not libs_dir.is_dir():
-        print("  jars de rendu introuvables — renseignez [tools].render_libs_dir "
-              "dans site.local.toml (dossier lib/ de Sweet Home 3D) -> ignore.")
-        return
-
-    jars = {}
-    for stem in _RENDER_JARS:
-        hits = sorted(libs_dir.rglob(f"{stem}*.jar"))
-        if hits:
-            jars[stem] = hits[-1]
-    missing = [s for s in _RENDER_JARS if s not in jars]
-    if missing:
-        print(f"  jars manquants dans {libs_dir} : {missing} -> ignore.")
-        return
-
-    jar = cg.find_sweethome3d_jar(required=False)
-    if jar is None:
-        print("  SweetHome3D.jar introuvable -> ignore.")
-        return
-
-    jconv = cg.DATA / "_jconv"
-    jconv.mkdir(parents=True, exist_ok=True)
-    cls = jconv / "com" / "eteks" / "sweethome3d" / "utilities" / "RenderPhoto.class"
-    src = cg.JAVA / "RenderPhoto.java"
-    if not cls.exists() or cls.stat().st_mtime < src.stat().st_mtime:
-        r = subprocess.run(
-            ["javac", "-cp", f"{jar}{os.pathsep}{jars['sunflow']}", "-d", str(jconv), str(src)],
-            capture_output=True, text=True)
-        if not cls.exists():
-            print("  javac a echoue ->", (r.stderr or r.stdout).strip()[:500])
-            return
-
-    cp = os.pathsep.join(str(p) for p in
-                          [jconv, jar, jars["sunflow"], jars["j3dcore"], jars["vecmath"],
-                           jars["j3dutils"], jars["batik-svgpathparser"]])
-    cg.VERIF.mkdir(parents=True, exist_ok=True)
-    out_png = cg.VERIF / "render_photo.png"
-    cmd = ["java", "-Dj3d.rend=noop", "-cp", cp,
-           "com.eteks.sweethome3d.utilities.RenderPhoto", str(SH3D), str(out_png)]
-    if shutil.which("xvfb-run"):          # Linux : Java3D exige un display meme en noop
-        cmd = ["xvfb-run", "-a", "-s", "-screen 0 1280x1024x24"] + cmd
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    print("  " + (r.stdout.strip() or r.stderr.strip()[:500]).replace("\n", "\n  "))
-    if r.returncode != 0 or not out_png.exists():
-        print("  rendu echoue (voir ci-dessus) -> ignore.")
-        return
-    print(f"  {out_png} ({out_png.stat().st_size // 1024} Ko)")
+    out = cg.render_photo(cg.VERIF / "render_photo.png")
+    if out:
+        print(f"  {out} ({out.stat().st_size // 1024} Ko)")
 
 
 if __name__ == "__main__":
