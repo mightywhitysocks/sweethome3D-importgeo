@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "$CLAUDE_PROJECT_DIR/.claude/statusline.sh"
+  },
+  "permissions": {
+    "allow": [
+      "Agent(gardien-confidentialite)",
+      "Bash(pwsh -File run.ps1 verif:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git grep:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(grep *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(awk *)",
+      "Bash(cut *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(cat *)",
+      "mcp__github__pull_request_read",
+      "mcp__github__get_job_logs"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/antiseche.sh" }] }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__github__create_pull_request|mcp__github__update_pull_request|mcp__github__merge_pull_request",
+        "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/avant-livraison.sh" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/garde-fous.sh" }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/jalon-qualite.sh" }]
+      }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bilan.sh" }] }
+    ],
+    "InstructionsLoaded": [
+      { "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/instructions-chargees.sh" }] }
+    ]
+  }
+}

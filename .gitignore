@@ -14,10 +14,13 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 
-# --- OS / editeurs / Claude ---
+# --- OS / editeurs ---
 .DS_Store
 Thumbs.db
 *.swp
 .idea/
 .vscode/
-.claude/
+
+# --- Claude Code : .claude/ est versionne (harnais partage du depot),
+# seuls les reglages locaux/personnels sont ignores ---
+.claude/settings.local.json

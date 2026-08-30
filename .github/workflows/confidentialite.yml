@@ -1,0 +1,85 @@
+# Backstop CI de la règle n°1 du projet (CLAUDE.md §Confidentialité), en
+# miroir du hook local .claude/hooks/avant-livraison.sh : celui-ci dérive
+# ses motifs de config/site.local.toml et data/meta.json, tous deux
+# git-ignorés et donc absents ici — cette CI ne peut vérifier que ce qui
+# est structurellement observable (le fichier/dossier ignoré ne doit
+# jamais apparaître versionné), plus, si l'utilisateur configure un jour
+# le secret de dépôt SITE_CONFIDENTIAL_TERMS, un grep sur les vraies
+# valeurs (jamais déposées par une session Claude Code elle-même).
+#
+# Pas de CodeQL/Dependabot/release ici : ce dépôt ne publie pas d'artefact
+# versionné (la sortie du pipeline, `Plan 3D.sh3d`, est propre à chaque
+# site et git-ignorée).
+name: Confidentialité et vérifications légères
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # true sur PR ; false sur main, où github.ref est partagé par tous les
+  # push successifs — annuler y tuerait la validation d'un commit plus
+  # ancien au profit d'un plus récent.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  confidentialite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: config/site.local.toml et data/ ne doivent jamais être versionnés
+        run: |
+          set -uo pipefail
+          echec=0
+          if git ls-files --error-unmatch config/site.local.toml >/dev/null 2>&1; then
+            echo "::error file=config/site.local.toml::Ce fichier est git-ignored et ne doit jamais être committé (CLAUDE.md §Confidentialité)."
+            echec=1
+          fi
+          fichiers_data="$(git ls-files -- data)"
+          if [ -n "$fichiers_data" ]; then
+            echo "::error::Des fichiers sous data/ sont versionnés — data/ est git-ignored (géométrie exacte du site) :"
+            echo "$fichiers_data"
+            echec=1
+          fi
+          exit "$echec"
+
+      - name: Motifs confidentiels (si le secret SITE_CONFIDENTIAL_TERMS est configuré)
+        # Le contexte `secrets` n'est pas utilisable dans un `if:` de step
+        # ("Unrecognized named-value: 'secrets'") — la condition doit donc
+        # vivre dans le script, à partir de la variable d'environnement.
+        env:
+          SITE_CONFIDENTIAL_TERMS: ${{ secrets.SITE_CONFIDENTIAL_TERMS }}
+        run: |
+          set -uo pipefail
+          if [ -z "${SITE_CONFIDENTIAL_TERMS:-}" ]; then
+            echo "SITE_CONFIDENTIAL_TERMS non configuré — étape ignorée."
+            exit 0
+          fi
+          if git grep -qiE "$SITE_CONFIDENTIAL_TERMS" -- . ':!data'; then
+            echo "::error::Un motif du secret SITE_CONFIDENTIAL_TERMS a été trouvé dans le dépôt (CLAUDE.md §Confidentialité)."
+            exit 1
+          fi
+          exit 0
+
+  verifs-legeres:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      # Les .java (java/Conv.java, java/RenderPhoto.java) importent les
+      # classes de SweetHome3D.jar, un jar propriétaire non redistribué
+      # dans ce dépôt : un javac échouerait systématiquement sur les
+      # imports sans lui. Plutôt qu'un contrôle fragile, cette limite est
+      # documentée ici et aucune compilation Java n'est tentée en CI.
+      - name: Les .py compilent (py_compile)
+        run: python -m compileall -q src
