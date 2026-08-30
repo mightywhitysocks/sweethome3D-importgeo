@@ -50,11 +50,17 @@ jobs:
           exit "$echec"
 
       - name: Motifs confidentiels (si le secret SITE_CONFIDENTIAL_TERMS est configuré)
-        if: ${{ secrets.SITE_CONFIDENTIAL_TERMS != '' }}
+        # Le contexte `secrets` n'est pas utilisable dans un `if:` de step
+        # ("Unrecognized named-value: 'secrets'") — la condition doit donc
+        # vivre dans le script, à partir de la variable d'environnement.
         env:
           SITE_CONFIDENTIAL_TERMS: ${{ secrets.SITE_CONFIDENTIAL_TERMS }}
         run: |
           set -uo pipefail
+          if [ -z "${SITE_CONFIDENTIAL_TERMS:-}" ]; then
+            echo "SITE_CONFIDENTIAL_TERMS non configuré — étape ignorée."
+            exit 0
+          fi
           if git grep -qiE "$SITE_CONFIDENTIAL_TERMS" -- . ':!data'; then
             echo "::error::Un motif du secret SITE_CONFIDENTIAL_TERMS a été trouvé dans le dépôt (CLAUDE.md §Confidentialité)."
             exit 1
