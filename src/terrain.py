@@ -83,16 +83,27 @@ def main() -> None:
     # --- ortho drapee sur l'emprise exacte du maillage ---
     obb = (float(EE.min()) - abs(T.a) / 2, float(NN.min()) - abs(T.e) / 2,
            float(EE.max()) + abs(T.a) / 2, float(NN.max()) + abs(T.e) / 2)
+    has_texture = False
     try:
         ortho, _ = cg.wms_ortho_rgb(mult=5, bbox_l93=obb, max_px=4096)   # 20 cm/px natif
-        from PIL import Image
-        Image.fromarray(ortho).save(GEO / "terrain_drape.jpg", quality=95, subsampling=0)
+        from PIL import Image, ImageEnhance
+        img = Image.fromarray(ortho)
+        img = ImageEnhance.Contrast(img).enhance(1.10)
+        img = ImageEnhance.Color(img).enhance(1.18)
+        img.save(GEO / "terrain_drape.jpg", quality=95, subsampling=0)
+        has_texture = True
         print(f"terrain_drape.jpg {ortho.shape[1]}x{ortho.shape[0]}")
     except Exception as e:                                        # noqa: BLE001
         print("ortho drapee indisponible ->", e)
 
-    cg.write_mtl(GEO / "terrain.mtl",
-                 {"terrain": {"Kd": COL_HERBE, "map_Kd": "terrain_drape.jpg"}})
+    # Kd blanc quand une texture est appliquee : sinon le chargeur OBJ (mode
+    # MODULATE) multiplie chaque pixel de la texture par Kd, ce qui assombrit
+    # et desature l'ortho (rendu "terne"). COL_HERBE ne sert alors que de
+    # repli quand la texture est indisponible.
+    mat = {"Kd": (1.0, 1.0, 1.0) if has_texture else COL_HERBE}
+    if has_texture:
+        mat["map_Kd"] = "terrain_drape.jpg"
+    cg.write_mtl(GEO / "terrain.mtl", {"terrain": mat})
     cg.write_obj(GEO / "terrain.obj", solid, mtl_name="terrain", mtl_file="terrain.mtl",
                  drape_bbox_cm=drape, group="terrain")
     (GEO / "terrain_place.json").write_text(

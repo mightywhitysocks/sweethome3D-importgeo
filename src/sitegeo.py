@@ -22,6 +22,7 @@ NE PAS installer matplotlib (crash DLL) -> ne jamais toucher pyvista.plotting / 
 """
 from __future__ import annotations
 
+import glob
 import io
 import json
 import os
@@ -77,6 +78,7 @@ PROPERTY_NUMERO = str(SITE["parcelle"]["property_parcel"])
 MARGE_M = float(SITE.get("emprise", {}).get("margin_m", 10.0))
 SITE_NAME = str(SITE.get("labels", {}).get("site_name", "Terrain"))
 SH3D_JAR_CFG = str(SITE.get("tools", {}).get("sweethome3d_jar", "")).strip()
+RENDER_LIBS_DIR = str(SITE.get("tools", {}).get("render_libs_dir", "")).strip()
 
 WMS_URL = "https://data.geopf.fr/wms-r/wms"
 WFS_URL = "https://data.geopf.fr/wfs/ows"
@@ -91,6 +93,38 @@ LAYERS = {
     "ORTHO":     "HR.ORTHOIMAGERY.ORTHOPHOTOS",
     "CADASTRE":  "CADASTRALPARCELS.PARCELLAIRE_EXPRESS",
 }   # MNS dispo si besoin : IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93
+
+# emplacements Windows habituels de SweetHome3D.jar (WindowsApps / installeur classique)
+JAR_GLOBS = (
+    r"C:\Program Files\WindowsApps\eTeks.SweetHome3D*\**\SweetHome3D.jar",
+    r"C:\Program Files\Sweet Home 3D\lib\SweetHome3D.jar",
+    r"C:\Program Files (x86)\Sweet Home 3D\lib\SweetHome3D.jar",
+)
+
+
+def find_sweethome3d_jar(*, required: bool = True) -> Path | None:
+    """
+    Localise SweetHome3D.jar : [tools].sweethome3d_jar sinon les emplacements
+    d'installation Windows habituels. `required=False` -> None si introuvable
+    (au lieu de lever) ; utilise par les etapes optionnelles (rendu photo).
+    """
+    if SH3D_JAR_CFG:
+        p = Path(SH3D_JAR_CFG)
+        if p.exists():
+            return p
+        if required:
+            raise SystemExit(f"[tools].sweethome3d_jar introuvable : {p}")
+        return None
+    for pat in JAR_GLOBS:
+        hits = sorted(glob.glob(pat, recursive=True))
+        if hits:
+            return Path(hits[-1])
+    if required:
+        raise SystemExit(
+            "SweetHome3D.jar introuvable — renseignez [tools].sweethome3d_jar dans "
+            "config/site.local.toml (chemin absolu du .jar de Sweet Home 3D).")
+    return None
+
 
 # GDAL trouve ses ressources meme sous conda (sinon warnings gdalvrt.xsd / proj)
 ENV_ROOT = Path(os.environ.get("CONDA_PREFIX") or sys.prefix)

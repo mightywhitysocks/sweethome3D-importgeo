@@ -35,7 +35,9 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
 ## Arborescence
 
 - `src/` — Python (lancé en scripts ; `import sitegeo as cg`).
-- `java/Conv.java` — helper Sweet Home 3D.
+- `java/Conv.java` — helper Sweet Home 3D (génération `.sh3d`).
+- `java/RenderPhoto.java` — helper rendu photo headless (`verif.py --render`,
+  optionnel).
 - `assets/` — gabarits stables versionnés (`home_template.xml` neutre, `tree.obj/.mtl`).
 - `config/` — `environment.yml` + `site.example.toml` (versionnés) / `site.local.toml` (non).
 - `docs/` — `PIPELINE.md` (détail `.sh3d` + limites). `notice_calage.md` est généré.
@@ -61,6 +63,14 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
   relecture par `Conv` + ouverture native. Ne pas s'y fier pour vérifier les calques.
 - **`bati.py` `_fnum`** filtre les NaN (BD TOPO `altitude_maximale_toit` souvent
   absente sur les parcelles voisines) sinon apex de toit NaN → mesh cassé.
+- **Rendu photo headless (`verif.py --render`)** : `RenderPhoto.java` n'est
+  **pas** dans `SweetHome3D.jar` (adapté du `ConsolePhotoGenerator` communautaire,
+  compilé comme `Conv.java`). Sous Linux, `-Dj3d.rend=noop` seul ne suffit
+  **pas** : Java3D interroge un `GraphicsEnvironment` au démarrage et lève
+  `HeadlessException` sans display — nécessite `xvfb-run` (utilisé
+  automatiquement s'il est trouvé). Jars additionnels (`sunflow`, `j3dcore`,
+  `j3dutils`, `vecmath`, `batik-svgpathparser`) via `[tools].render_libs_dir`
+  (`docs/PIPELINE.md`).
 
 ## git
 
