@@ -76,16 +76,25 @@ n'importe quel navigateur, sans connexion.
 
 ## Limites connues
 
-- **`find_tile.py` n'a pas pu etre teste en conditions reelles** : cette
-  session de developpement tourne dans un environnement distant sans acces
-  reseau vers `data.geopf.fr` (proxy reseau du conteneur). Le script
-  decouvre la couche d'index par nom via `GetCapabilities` plutot que de
-  coder un nom de couche en dur, justement pour rester robuste si le
-  catalogue a change depuis -- mais verifie-le a la premiere execution
-  chez toi. Repli toujours disponible : telechargement manuel depuis la
-  page du jeu de donnees (onglet Telechargement).
+- **`find_tile.py` a ete teste en conditions reelles** (bbox de test sur un
+  lieu public, hors parcelle du projet) : `GetCapabilities` sur
+  `data.geopf.fr` repond bien, et la decouverte dynamique par nom trouve
+  la couche du nuage brut, `IGNF_NUAGES-DE-POINTS-LIDAR-HD:dalle` (parmi
+  d'autres couches candidates -- MNT/MNS/MNH, metadata -- que le filtre
+  `LIDAR`/`DALLE` remonte aussi et qui restent affichees a titre
+  informatif). Ses entites exposent bien un champ `url` : lien direct vers
+  la dalle `.copc.laz`, plus `name` (identifiant de dalle) et
+  `name_download`. `view_point_cloud.py` a charge sans erreur une dalle
+  reelle telechargee via cette URL. Le seul ajustement necessaire suite a
+  ce test : `find_tile.py` interroge plusieurs couches candidates en
+  sequence, et une erreur reseau transitoire sur l'une d'elles ne doit pas
+  faire perdre les reponses deja obtenues des autres -- desormais geree
+  (couche ignoree avec un message, la boucle continue). Repli toujours
+  disponible si le catalogue venait a changer : telechargement manuel
+  depuis la page du jeu de donnees (onglet Telechargement).
 - **`view_point_cloud.py` est teste** (nuage synthetique : sol + toit a
-  deux pans + arbre) et fonctionne correctement (filtrage bbox/classes,
+  deux pans + arbre ; et une dalle LiDAR HD reelle telechargee via
+  `find_tile.py`) et fonctionne correctement (filtrage bbox/classes,
   sous-echantillonnage, export HTML).
 - Aucune coordonnee, commune, section ni numero de parcelle n'est ecrite
   dans ces fichiers : a passer uniquement en argument de ligne de commande,

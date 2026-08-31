@@ -73,7 +73,15 @@ def main() -> None:
     print("couches candidates :", layers)
     any_hit = False
     for layer in layers:
-        data = query_bbox(layer, bbox)
+        try:
+            data = query_bbox(layer, bbox)
+        except requests.RequestException as exc:
+            # Le catalogue expose plusieurs couches candidates (MNT/MNS/MNH,
+            # metadata, dalle du nuage brut...) interrogees en sequence : un
+            # incident reseau transitoire sur l'une d'elles ne doit pas faire
+            # perdre les reponses deja obtenues des autres.
+            print(f"\n{layer} : requete echouee ({exc}), couche ignoree")
+            continue
         feats = data.get("features", [])
         print(f"\n{layer} : {len(feats)} entite(s) sur l'emprise")
         for f in feats:
