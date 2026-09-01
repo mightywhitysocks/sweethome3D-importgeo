@@ -113,6 +113,25 @@ distinction ; le corriger si elle redevient trop générale.
   n'est fiable qu'APRÈS `compute_normals(auto_orient_normals=True,
   consistent_normals=True)` -- `extrude(capping=True)` seul peut laisser des
   faces à l'envers (constaté : volume 2,3x trop grand avant, correct après).
+- **Dépendance externe optionnelle : `roofer`** (moteur 3DBAG/TU Delft,
+  https://github.com/3DBAG/roofer, **licence GPLv3**) -- utilisé uniquement par
+  `src/roofer_compare.py`, un outil de diagnostic ponctuel qui compare
+  `roof_lidar.build_roof` à `roofer` sur le(s) bâtiment(s) propriété. **Jamais
+  intégré à `run.ps1` / `build_home.py`**, ni redistribué dans ce dépôt : appelé
+  en sous-processus CLI (binaire externe, aucun code copié/lié) -- pas de
+  contamination de licence sur le code du dépôt. Installation : script officiel
+  `distribution/install.sh` du dépôt `roofer` (binaire précompilé Linux x86_64,
+  pas de sudo requis, pose `~/.local/bin/roofer`). Entrée attendue : dalle(s)
+  LAZ IGN (déjà ce que télécharge `cg.lidar_points_l93`, dalle brute non
+  filtrée par classe) + empreinte bâtiment en GeoPackage EPSG:2154 ; sortie :
+  CityJSONSequence (`*.city.jsonl`), attributs `rf_roof_planes`,
+  `rf_h_roof_ridge`, `rf_rmse_lod22`, etc. -- `rf_h_roof_ridge` peut être `None`
+  (aucun faîtage détecté), toujours protéger le formatage. Validé mécaniquement
+  (installation + CLI + parsing CityJSON) sur le jeu de test officiel du projet
+  (`wippolder.zip`, 60 bâtiments, ~2 s) dans une session Claude Code distante ;
+  jamais exécuté sur les données réelles du site (nécessite `config/site.local.toml`
+  rempli, absent par construction de ce type de session -- cf. section
+  Environnement).
 
 ## git
 
