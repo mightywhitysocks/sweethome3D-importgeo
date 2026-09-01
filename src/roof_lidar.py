@@ -720,7 +720,35 @@ def _full_footprint(active, polys, footprint_poly, log):
         for pid in active:
             if remainder_pieces[pid]:
                 full_polys[pid] = unary_union([full_polys[pid]] + remainder_pieces[pid])
-            full_polys[pid] = _largest_polygon(full_polys[pid])
+
+    # Recouvrement AVANT la decoupe exclusive ci-dessous : mesure la
+    # fiabilite REELLE de la partition. Un recouvrement massif entre 2 pans
+    # (ex. ~4 m2) signifie qu'ils n'ont aucune relation etablie (aucune
+    # arete de jonction detectee entre eux) -- leur forcer une frontiere
+    # arbitraire produit un contour en dents de scie sans rapport avec le
+    # vrai toit (constate au rendu reel : bien pire qu'un repli pyramidal
+    # honnete). Il faut le mesurer ICI : le passage d'exclusivite plus bas
+    # ecrase PAR CONSTRUCTION tout recouvrement, y compris ceux qui auraient
+    # du faire echouer la reconstruction (cf. `raw_overlap` dans le controle
+    # de fiabilite final).
+    raw_overlap = sum(full_polys[active[i]].intersection(full_polys[active[j]]).area
+                      for i in range(len(active)) for j in range(i + 1, len(active)))
+
+    # Chaque pan doit ensuite rester un sous-ensemble EXCLUSIF du contour,
+    # ne serait-ce que pour le residu geometrique bien plus modeste laisse
+    # par le remplissage du "remainder" ci-dessus (cellule Voronoi etendue a
+    # une enveloppe bufferisee de 5 m, pas au contour exact -- peut deborder
+    # du vrai contour ou empieter legerement sur un pan voisin, de l'ordre
+    # du dixieme de m2, constate invisible sur le papier mais visible au
+    # rendu reel en fin de mur/pan surnumeraire). Passage final deterministe
+    # (ordre de `active`) : retranche a chaque pan ce qu'un pan precedent a
+    # deja revendique. Necessaire pour un maillage propre, mais n'annule pas
+    # le diagnostic `raw_overlap` ci-dessus.
+    assigned_so_far = Polygon()
+    for pid in active:
+        full_polys[pid] = _largest_polygon(
+            full_polys[pid].intersection(footprint_poly).difference(assigned_so_far))
+        assigned_so_far = unary_union([assigned_so_far, full_polys[pid]])
 
     union_all = unary_union(list(full_polys.values()))
     gap = footprint_poly.difference(union_all)
@@ -766,10 +794,11 @@ def _full_footprint(active, polys, footprint_poly, log):
             f"partition Voronoi brute conservee")
 
     final_cover = unary_union(list(full_polys.values())).area
-    if abs(final_cover - footprint_poly.area) > 0.5 or overlap_total > 0.5 or gap > 0.5:
+    if (abs(final_cover - footprint_poly.area) > 0.5 or overlap_total > 0.5 or gap > 0.5
+            or raw_overlap > 0.5):
         log(f"  toit LiDAR : partition non fiable (couverture {final_cover:.1f}/"
             f"{footprint_poly.area:.1f} m2, recouvrement {overlap_total:.2f} m2, "
-            f"trou {gap:.2f} m2) -> repli pyramidal")
+            f"recouvrement brut {raw_overlap:.2f} m2, trou {gap:.2f} m2) -> repli pyramidal")
         return None
     if any(p.geom_type != "Polygon" or p.is_empty for p in full_polys.values()):
         log("  toit LiDAR : au moins un pan vide/fragmente -> repli pyramidal")
@@ -781,6 +810,9 @@ def _full_footprint(active, polys, footprint_poly, log):
 PAN_SOLIDIFY_DEPTH_CM = 60.0   # epaisseur cachee sous chaque pan, cf. cg.solidify (terrain :
                                # 800 cm ; ici juste assez pour rester sous le pan, jamais visible
                                # depuis l'exterieur ni traverser un mur/pan oppose).
+HIDDEN_CAP_MARGIN_CM = 2.0     # abaisse le capot HAUT du mur sous le pan qui le recouvre (meme
+                               # plan par construction -- cf. `_mesh_groups`) pour eviter le
+                               # z-fighting quand un pan couvre 100% du capot d'un seul tenant.
 
 
 def _mesh_groups(active, full_polys, plane_z_at, base_m, plan_origin_l93,
@@ -829,14 +861,32 @@ def _mesh_groups(active, full_polys, plane_z_at, base_m, plan_origin_l93,
         j = (i + 1) % n_ring
         a_, b_, c_, d_ = floor_idx[i], floor_idx[j], wall_top_idx[j], wall_top_idx[i]
         tris += [(a_, b_, c_), (a_, c_, d_)]
-    # capots : plancher (fan) + un capot HAUT non plan qui suit le contour
-    # (couvre le vide sous les pans, invisible sous leur extrusion -- cf.
-    # docstring), pour que le mur soit un solide FERME comme le reste du depot.
-    for i in range(1, n_ring - 1):
-        tris.append((floor_idx[0], floor_idx[i], floor_idx[i + 1]))
-        tris.append((wall_top_idx[0], wall_top_idx[i + 1], wall_top_idx[i]))
-    wall_faces = np.hstack([[3] + list(t) for t in tris])
-    wall_mesh = pv.PolyData(np.array(verts), faces=wall_faces).clean()
+    side_faces = np.hstack([[3] + list(t) for t in tris])
+    side_mesh = pv.PolyData(np.array(verts), faces=side_faces)
+
+    # capots : plancher + un capot HAUT non plan qui suit le contour (couvre
+    # le vide sous les pans, invisible sous leur extrusion -- cf. docstring),
+    # pour que le mur soit un solide FERME comme le reste du depot. Le
+    # contour du batiment (kink, angles rentrants) n'est pas garanti convexe
+    # -- polygone N-gon + `.triangulate()` (meme motif que `cg.polygon_prism`),
+    # jamais un fan depuis le sommet 0 : des qu'un contour est concave, un fan
+    # produit des triangles hors du polygone (constate au rendu reel : gash/
+    # trou triangulaire dans le toit et pan blanc flottant non colore).
+    verts_a = np.array(verts)
+    floor_cap = pv.PolyData(verts_a[floor_idx],
+                            faces=np.hstack([[n_ring] + list(range(n_ring))])).triangulate()
+    # le capot HAUT est cense etre entierement cache sous le pan (meme plan,
+    # cf. `owning_pan`/`plane_z_at` ci-dessus) -- mais un pan et son capot
+    # triangules independamment ne sont PAS coincidents triangle a triangle
+    # meme sur un plan identique, d'ou du z-fighting visible au rendu reel
+    # (liseret blanc scintillant sur un pan a 1 seul plan, ou le capot
+    # recouvre 100% de sa surface). On abaisse le capot d'une marge fixe pour
+    # qu'il passe strictement sous le pan partout, jamais a egalite.
+    top_cap_pts = verts_a[wall_top_idx].copy()
+    top_cap_pts[:, 2] -= HIDDEN_CAP_MARGIN_CM
+    top_cap = pv.PolyData(top_cap_pts,
+                          faces=np.hstack([[n_ring] + list(range(n_ring - 1, -1, -1))])).triangulate()
+    wall_mesh = (side_mesh + floor_cap + top_cap).clean()
     wall_mesh = wall_mesh.compute_normals(auto_orient_normals=True, consistent_normals=True,
                                           non_manifold_traversal=False)
 
@@ -847,8 +897,10 @@ def _mesh_groups(active, full_polys, plane_z_at, base_m, plan_origin_l93,
         if n_ < 3:
             continue
         pts_cm = np.array([[x * 100.0, y * 100.0, plane_z_at(pid, x, y) * 100.0] for x, y in coords])
-        faces = np.hstack([[3, 0, i, i + 1] for i in range(1, n_ - 1)])
-        pan_surf = pv.PolyData(pts_cm, faces=faces).clean()
+        # polygone N-gon + `.triangulate()` (meme motif que `cg.polygon_prism`,
+        # jamais un fan depuis le sommet 0) : un pan issu de la partition
+        # Voronoi + `coverage_simplify` n'est pas garanti convexe.
+        pan_surf = pv.PolyData(pts_cm, faces=np.hstack([[n_] + list(range(n_))])).triangulate()
         pan_mesh = cg.solidify(pan_surf, depth_cm=PAN_SOLIDIFY_DEPTH_CM)
         poly_l93 = Polygon([to_l93(x, y) for x, y in coords])
         rc = cg.roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox_l93)
