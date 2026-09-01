@@ -26,6 +26,10 @@ networkx~=3.6.1
 pyproj~=3.7.2
 pillow~=12.3.0
 pyvista~=0.48.4
+# backend de decompression LAZ -- pip laspy ne l'embarque pas (contrairement
+# au paquet conda-forge), sinon LaspyException "No LazBackend selected" a la
+# lecture d'une dalle .copc.laz
 laspy~=2.7.0
+lazrs~=0.8.2
 requests~=2.34.2
 javaobj-py3==0.6.1
