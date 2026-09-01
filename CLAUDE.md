@@ -38,10 +38,18 @@ validé de bout en bout (`build_home.py` -> `.sh3d` -> rendu SunFlow réel via
   sweethome3d_jar`, `render_libs_dir`, git-ignored).
 - `xvfb-run` disponible et nécessaire (cf. limitation Linux dans
   `docs/PIPELINE.md`).
-- Un venv pip classique (numpy, scipy, shapely, laspy, requests, pyvista,
-  owslib, geopandas, rasterio, scikit-image, networkx, pyproj,
-  `javaobj-py3`) peut remplacer l'env conda pour lancer `src/*.py`
-  directement à des fins de test.
+- Un venv pip classique (`config/requirements-venv.txt`, git-suivi) remplace
+  l'env conda pour lancer `src/*.py` directement, **`verif.py` compris** :
+  `python3 -m venv .venv && .venv/bin/pip install -r
+  config/requirements-venv.txt` puis `.venv/bin/python src/verif.py` --
+  validé de bout en bout (tous les imports passent : `sitegeo`, `rasterio`,
+  `PIL`, `shapely`, `javaobj` ; seul échec observé = `FileNotFoundError` sur
+  `data/*.json` quand le pipeline n'a pas encore tourné dans la session,
+  exactement le même échec non bloquant que sous Windows avant le premier
+  run, cf. `/qualite` > "Lire un échec"). Le `python3` par défaut de ce type
+  de conteneur est 3.11 (pas 3.12 comme le conda `sitegeo`) : les pins de
+  `requirements-venv.txt` sont donc figées aux versions réellement testées
+  sous 3.11, pas un simple report des pins conda de `environment.yml`.
 - Seul point réellement indisponible : `gdal_contour.exe` (`courbes.py`,
   binaire GDAL Windows) — ne bloque pas `build_home.py`, qui ne consomme pas
   sa sortie.

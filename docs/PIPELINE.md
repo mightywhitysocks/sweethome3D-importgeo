@@ -134,4 +134,9 @@ lancement, partagé par `verif.py --render` et `preview.py`.
    trouvé), chargé par `build_home.py` comme le voisinage.
 10. **Murs clairs sur-exposés** en lumière rasante (éclairage Sweet Home 3D, le
     matériau est correctement mat).
-11. **Windows uniquement** (`run.ps1`, chemins d'installation Sweet Home 3D).
+11. **`run.ps1` lui-même est Windows uniquement** (création de l'env conda,
+    détection de chemins d'installation Sweet Home 3D). Les scripts `src/*.py`
+    (dont `verif.py`) et le rendu photo headless n'en dépendent pas : ils
+    tournent aussi dans un venv pip (`config/requirements-venv.txt`) + JDK,
+    y compris en session Claude Code distante (conteneur Linux), cf.
+    `CLAUDE.md` section Environnement.
