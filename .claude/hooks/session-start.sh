@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # SessionStart — volontairement minimal ici, contrairement à un bootstrap
-# lourd d'environnement : ce pipeline cible une machine Windows avec un env
-# conda `sitegeo` et un JDK pour java/Conv.java (voir CLAUDE.md
-# §Environnement) — rien de tout ça ne tourne dans une session Claude Code
-# distante (conteneur Linux éphémère). Le seul rôle de ce hook est d'éviter
-# la confusion : signaler que le pipeline lui-même (`.\run.ps1`) n'est pas
-# exécutable ici, sans empêcher la lecture/l'édition du code.
+# lourd d'environnement. Distinction importante (retrouvée empiriquement
+# une fois avant d'être documentée ici, cf. CLAUDE.md §Environnement) :
+# `.\run.ps1` lui-même (env conda `sitegeo`, détection de chemins Windows)
+# ne tourne pas dans une session distante (conteneur Linux éphémère), MAIS
+# le JDK + SweetHome3D.jar + SunFlow (java/Conv.java, java/RenderPhoto.java,
+# rendu photo headless via xvfb-run) fonctionnent bien ici et ont été
+# validés de bout en bout. Le rôle de ce hook est d'éviter la confusion
+# inverse (croire que RIEN ne tourne ici) sans empêcher la lecture/l'édition
+# du code.
 
 set -uo pipefail
 
@@ -16,7 +19,7 @@ fi
 jq -n '{
     hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: "Session distante : le pipeline (.\\run.ps1, conda sitegeo, JDK) cible une machine Windows locale et ne s'\''exécute pas dans ce conteneur. Lecture/édition du code OK ; `.\\run.ps1` et `verif.py` ne peuvent pas être lancés ici."
+        additionalContext: "Session distante : `.\\run.ps1` lui-meme (creation de l'\''env conda sitegeo, detection de chemins Windows) ne s'\''execute pas ici. MAIS le JDK + SweetHome3D.jar + SunFlow (java/Conv.java, java/RenderPhoto.java, rendu photo headless via xvfb-run) fonctionnent dans ce conteneur (JDK deja present ; SweetHome3D.jar + jars de rendu recuperables depuis l'\''archive Linux officielle) et ont ete valides de bout en bout ici (build_home.py -> .sh3d -> rendu SunFlow reel). Un venv pip (numpy/scipy/shapely/laspy/requests/pyvista/owslib/geopandas/rasterio/scikit-image/networkx/pyproj/javaobj-py3) peut remplacer l'\''env conda pour lancer les scripts src/*.py directement ; seul gdal_contour.exe (courbes.py) reste indisponible (binaire GDAL Windows), sans bloquer build_home.py. Detail complet : CLAUDE.md section Environnement. Lecture/edition du code OK dans tous les cas."
     }
 }'
 exit 0

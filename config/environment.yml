@@ -31,8 +31,9 @@ dependencies:
   - pyproj=3.7.*
   - libgdal=3.13.*          # gdal_contour.exe (courbes de niveau)
   - pillow=12.*             # apercus (remplace matplotlib)
+  - laspy=2.5.*             # lecture nuage LiDAR HD brut (.copc.laz), toit propriete multi-pans
+  - requests=2.32.*         # telechargement direct des dalles LiDAR HD (roof_lidar.py)
   - pip
   - pip:
       - javaobj-py3==0.6.1  # relire <backgroundImage> d'un .sh3d serialise Java
-# NON utilises (lecture LAZ brute), reserves pour un futur passage LiDAR direct :
-#   laspy, pdal
+# NON utilise (lecture LAZ brute deja geree par laspy) : pdal

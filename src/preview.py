@@ -19,10 +19,14 @@ import json
 import math
 import sys
 
+from shapely.geometry import Point, Polygon
+
 import sitegeo as cg
 
 CAM_UP_CM = 250.0        # camera au-dessus du sol (vue "1er etage", moins rasante)
 PITCH = 0.28             # legere plongee -> moins de terrain en lumiere rasante
+STANDOFF_STEP_CM = 300.0
+STANDOFF_MAX_CM = 4000.0  # garde-fou : au-dela, on rend quand meme (mieux qu'une boucle infinie)
 
 
 def _viewpoints():
@@ -33,12 +37,29 @@ def _viewpoints():
     prop = next((p for p in payload["parcels"] if p["is_property"]), None)
     tx, ty = prop["centroid_cm"] if prop else (0.0, 0.0)
 
+    # tous les batiments propriete ont maintenant un vrai mur/toit modelise
+    # (toit LiDAR ou repli pyramidal, cf. bati.py) : une camera doit eviter
+    # TOUTES leurs emprises, pas seulement la sienne -- des batiments proches
+    # (ex. dependances cote a cote) font qu'un simple ecart au rayon de son
+    # propre contour retombe pile dans le voisin (constate en conditions
+    # reelles : rendu noir persistant sur un batiment tant que seule sa
+    # propre emprise etait prise en compte).
+    footprints = [Polygon(b["rings_cm"][0]) for b in props if len(b["rings_cm"]) == 1]
+
     views = []
     for i, b in enumerate(props):
         cx, cy = b["centroid_cm"]
-        z = cg.terrain_z_at(cx, cy) + CAM_UP_CM
         yaw = math.atan2(tx - cx, ty - cy)          # vise le centre de la parcelle
-        views.append((f"bati{i}_{b['id'][-4:]}", (cx, cy, z, yaw, PITCH)))
+        radius = max((math.hypot(x - cx, y - cy) for ring in b["rings_cm"] for x, y in ring),
+                     default=0.0)
+        standoff = radius + 100.0
+        while standoff <= radius + STANDOFF_MAX_CM:
+            px, py = cx + standoff * math.sin(yaw), cy + standoff * math.cos(yaw)
+            if not any(fp.contains(Point(px, py)) for fp in footprints):
+                break
+            standoff += STANDOFF_STEP_CM
+        z = cg.terrain_z_at(px, py) + CAM_UP_CM
+        views.append((f"bati{i}_{b['id'][-4:]}", (px, py, z, yaw, PITCH)))
     if props:
         # vue d'ensemble : aerienne au-dessus du barycentre des batiments de la
         # propriete (l'ortho drapee se lit bien vue de haut, mal a hauteur d'oeil).

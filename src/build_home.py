@@ -48,7 +48,7 @@ LEVELS = {                       # noms -> ids (repris du gabarit, stables)
     "Cadastre": "level-444fad18-a6ed-490b-9cda-2016da873fcc",
     "Terrain": "level-b1c25b31-ec4d-4776-b2da-dace8e120ffe",
     "Bati voisinage": "level-94f420d7-1fb8-4666-85cc-91384f586dff",
-    "Bati propriete (a modeliser)": "level-19f6a101-847c-4426-94b8-b0722d1015db",
+    "Bati propriete": "level-19f6a101-847c-4426-94b8-b0722d1015db",
     "Vegetation": "level-d7571dd8-f841-4ace-9baa-2b5b5df57394",
 }
 
@@ -175,6 +175,14 @@ def main() -> None:
                          bp["x"], bp["y"], bp["elevation"], bp["width"], bp["depth"],
                          bp["height"], creator="IGN BD TOPO", extra=" deformable='false'"))
 
+    has_bati_propriete = (GEO / "bati_propriete.obj").exists()
+    if has_bati_propriete:
+        pp = json.loads((GEO / "bati_propriete_place.json").read_text(encoding="utf-8"))
+        pieces.append(_piece("Bati propriete", "Bati propriete (LIDAR HD multi-pans)",
+                             "p/bati_propriete.obj", (GEO / "bati_propriete.obj").stat().st_size,
+                             pp["x"], pp["y"], pp["elevation"], pp["width"], pp["depth"],
+                             pp["height"], creator="IGN LIDAR HD", extra=" deformable='false'"))
+
     veg_pieces = []
     if (GEO / "haies.obj").exists():
         hp = json.loads((GEO / "haies_place.json").read_text(encoding="utf-8"))
@@ -208,7 +216,7 @@ def main() -> None:
             continue
         pr = cmd["params"]
         ring = [(pt["x"], pt["y"]) for pt in pr["points"]]
-        rooms.append(_room("Bati propriete (a modeliser)", pr["name"], ring,
+        rooms.append(_room("Bati propriete", pr["name"], ring,
                            floor_color="00B0A48F", floor_visible=False))
 
     home_xml = head + "\n".join(pieces) + "\n" + "\n".join(rooms) + "\n</home>\n"
@@ -224,6 +232,9 @@ def main() -> None:
         z.write(GEO / "terrain_drape.jpg", "t/terrain_drape.jpg")
         z.write(GEO / "bati_voisinage.obj", "b/bati_voisinage.obj")
         z.write(GEO / "bati_voisinage.mtl", "b/bati_voisinage.mtl")
+        if has_bati_propriete:
+            z.write(GEO / "bati_propriete.obj", "p/bati_propriete.obj")
+            z.write(GEO / "bati_propriete.mtl", "p/bati_propriete.mtl")
         if (GEO / "haies.obj").exists():
             z.write(GEO / "haies.obj", "h/haies.obj")
             z.write(GEO / "haies.mtl", "h/haies.mtl")

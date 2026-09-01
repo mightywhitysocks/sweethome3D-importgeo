@@ -411,6 +411,61 @@ def wms_ortho_rgb(margin_m: float = 25.0, mult: int = 4, max_px: int = 4000,
     return arr, bbox
 
 
+LIDAR_TILE_INDEX = "IGNF_NUAGES-DE-POINTS-LIDAR-HD:dalle"
+LIDAR_CACHE = DATA / "lidar_cache"
+
+
+def lidar_points_l93(bbox_l93, margin_m: float = 3.0, classification: int = 6):
+    """
+    Points LiDAR HD (nuage brut, pas le MNT) sur `bbox_l93` + marge, filtres a
+    une classe SIA (6 = bati par defaut). Renvoie un ndarray (N, 3) [E, N, Z]
+    L93/NGF, ou un tableau vide si aucune dalle ne couvre la zone.
+
+    Une dalle LiDAR HD fait ~1 km2 : une emprise a cheval sur 2+ dalles est
+    geree (chaque dalle telechargee et concatenee). Dalles mises en cache dans
+    `data/lidar_cache/` (git-ignore, comme le reste de `data/`) -- jamais
+    retelechargees d'un run a l'autre pour la meme dalle.
+    """
+    import geopandas as gpd
+    import laspy
+    import requests
+
+    e0, n0, e1, n1 = bbox_l93
+    pe0, pn0, pe1, pn1 = e0 - margin_m, n0 - margin_m, e1 + margin_m, n1 + margin_m
+    u = (f"{WFS_URL}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature"
+         f"&TYPENAMES={LIDAR_TILE_INDEX}&SRSNAME=urn:ogc:def:crs:EPSG::2154"
+         f"&BBOX={pe0},{pn0},{pe1},{pn1},urn:ogc:def:crs:EPSG::2154"
+         f"&OUTPUTFORMAT=application/json")
+    tiles = gpd.read_file(u)
+    if len(tiles) == 0:
+        return np.empty((0, 3))
+
+    LIDAR_CACHE.mkdir(parents=True, exist_ok=True)
+    chunks = []
+    for _, row in tiles.iterrows():
+        url = row.get("url")
+        if not url:
+            continue
+        dest = LIDAR_CACHE / Path(url).name
+        if not dest.exists():
+            r = requests.get(url, stream=True, timeout=180)
+            r.raise_for_status()
+            tmp = dest.with_suffix(".part")
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    f.write(chunk)
+            tmp.rename(dest)
+        las = laspy.read(dest)
+        x = np.asarray(las.x, dtype=np.float64)
+        y = np.asarray(las.y, dtype=np.float64)
+        z = np.asarray(las.z, dtype=np.float64)
+        c = np.asarray(las.classification, dtype=np.int32)
+        keep = ((x >= pe0) & (x <= pe1) & (y >= pn0) & (y <= pn1) & (c == classification))
+        if keep.any():
+            chunks.append(np.column_stack([x[keep], y[keep], z[keep]]))
+    return np.concatenate(chunks, axis=0) if chunks else np.empty((0, 3))
+
+
 def fill_nan_nearest(A: np.ndarray) -> np.ndarray:
     """Comble les NaN d'un raster par plus proche voisin (scipy)."""
     if not np.isnan(A).any():

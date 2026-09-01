@@ -21,6 +21,6 @@
   </level>
   <level id='level-b1c25b31-ec4d-4776-b2da-dace8e120ffe' name='Terrain' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='1'/>
   <level id='level-94f420d7-1fb8-4666-85cc-91384f586dff' name='Bati voisinage' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='2'/>
-  <level id='level-19f6a101-847c-4426-94b8-b0722d1015db' name='Bati propriete (a modeliser)' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='3'/>
+  <level id='level-19f6a101-847c-4426-94b8-b0722d1015db' name='Bati propriete' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='3'/>
   <level id='level-d7571dd8-f841-4ace-9baa-2b5b5df57394' name='Vegetation' elevation='0.0' floorThickness='12.0' height='30.0' elevationIndex='4'/>
 </home>
