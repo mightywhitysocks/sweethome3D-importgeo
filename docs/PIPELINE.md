@@ -26,7 +26,8 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
    Home 3D ne fait pas suivre le relief à la caméra. Repli sans bâti propriété :
    `z_max_terrain + 60 cm`.
 5. Génère les `<pieceOfFurniture>` : terrain (`data/terrain.obj`), bâti voisinage
-   (`data/bati_voisinage.obj`), haies si présentes, et ~1 arbre par entrée de
+   (`data/bati_voisinage.obj`), bâti propriété si présent (`data/bati_propriete.obj`,
+   cf. limitation #9), haies si présentes, et ~1 arbre par entrée de
    `data/vegetation_arbres.json` (tous `model='tree/tree.obj'`, redimensionnés).
    Position / élévation depuis les `*_place.json` et la végétation JSON. Haies +
    arbres sont rassemblés dans un seul `<furnitureGroup>` (niveau *Végétation*) :
@@ -34,8 +35,10 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
    (`HomeFurnitureGroup`) depuis la boîte englobante des enfants, pas besoin de
    les fournir.
 6. Génère les `<room>` : les parcelles (niveau Cadastre) et les emprises au sol
-   des bâtiments de la propriété (niveau *Bâti propriété (à modéliser)*).
-7. Écrit le ZIP : `Home.xml` + `bg` + dossiers modèles (`t/ b/ h/ tree/`, chaque
+   des bâtiments de la propriété (niveau *Bâti propriété*, plancher invisible :
+   la géométrie 3D vient de `bati_propriete.obj`, cette pièce ne sert qu'aux
+   étiquettes/repères 2D).
+7. Écrit le ZIP : `Home.xml` + `bg` + dossiers modèles (`t/ b/ p/ h/ tree/`, chaque
    OBJ avec son `.mtl` et sa texture) + une icône. Écrit aussi
    `data/home_source.xml` pour debug / diff.
 
@@ -58,7 +61,7 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
    `_home_raw.zip`.
 
 **Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques :
-Cadastre / Terrain / Bâti voisinage / Bâti propriété (à modéliser) / Végétation.
+Cadastre / Terrain / Bâti voisinage / Bâti propriété / Végétation.
 
 ## Étape 3 (optionnelle) : rendu photo headless (`verif.py --render`, `preview.py`)
 
@@ -121,8 +124,19 @@ lancement, partagé par `verif.py --render` et `preview.py`.
    **ligne d'arbres** dense à la place.
 8. **`matplotlib` interdit** dans l'env (crash DLL) ; **`pv.Plane()` casse**
    (même cause).
-9. **Bâtiments de la propriété** = emprises au sol 2D (« à modéliser ») ;
-   modélisation fine ultérieure (topo + LIDAR + photos + plugin GenerateRoof).
+9. **Bâtiments de la propriété** : toit multi-pans reconstruit depuis le nuage
+   LiDAR HD (`src/roof_lidar.py`, RANSAC + croissance de région + jonctions
+   mesurées/analytiques + partition Voronoï + `coverage_simplify`), avec repli
+   automatique sur le même toit pyramidal simple que le voisinage si la
+   reconstruction n'est pas assez fiable (peu de points, aucun plan détecté,
+   partition non close) — jamais de bâtiment propriété sans toit modélisé.
+   Sortie : `data/bati_propriete.obj/.mtl` (absent si aucun bâtiment propriété
+   trouvé), chargé par `build_home.py` comme le voisinage.
 10. **Murs clairs sur-exposés** en lumière rasante (éclairage Sweet Home 3D, le
     matériau est correctement mat).
-11. **Windows uniquement** (`run.ps1`, chemins d'installation Sweet Home 3D).
+11. **`run.ps1` lui-même est Windows uniquement** (création de l'env conda,
+    détection de chemins d'installation Sweet Home 3D). Les scripts `src/*.py`
+    (dont `verif.py`) et le rendu photo headless n'en dépendent pas : ils
+    tournent aussi dans un venv pip (`config/requirements-venv.txt`) + JDK,
+    y compris en session Claude Code distante (conteneur Linux), cf.
+    `CLAUDE.md` section Environnement.

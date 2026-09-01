@@ -23,6 +23,40 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
   `solidify` utilise extrusion + `capping`.
 - Les aperçus se font en PIL.
 
+### Session Claude Code distante (conteneur Linux éphémère)
+
+`.\run.ps1` lui-même (création de l'env conda `sitegeo`, détection de chemins
+d'install Windows) ne s'exécute pas dans ce type de session. **Mais le JDK et
+le rendu photo headless Sweet Home 3D fonctionnent dans ce conteneur** —
+validé de bout en bout (`build_home.py` -> `.sh3d` -> rendu SunFlow réel via
+`RenderPhoto.java`/`xvfb-run`), à ne pas supposer impossible par défaut :
+- JDK (java + javac) déjà présent dans ce type de conteneur.
+- `SweetHome3D.jar` + jars de rendu (`sunflow-*.jar`, `j3dcore.jar`,
+  `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar`) récupérables
+  depuis l'archive Linux officielle SourceForge `SweetHome3D-<version>-linux-x64.tgz`
+  (`lib/`) ; référencer les chemins dans `config/site.local.toml` (`[tools]
+  sweethome3d_jar`, `render_libs_dir`, git-ignored).
+- `xvfb-run` disponible et nécessaire (cf. limitation Linux dans
+  `docs/PIPELINE.md`).
+- Un venv pip classique (`config/requirements-venv.txt`, git-suivi) remplace
+  l'env conda pour lancer `src/*.py` directement, **`verif.py` compris** :
+  `python3 -m venv .venv && .venv/bin/pip install -r
+  config/requirements-venv.txt` puis `.venv/bin/python src/verif.py` --
+  validé de bout en bout (tous les imports passent : `sitegeo`, `rasterio`,
+  `PIL`, `shapely`, `javaobj` ; seul échec observé = `FileNotFoundError` sur
+  `data/*.json` quand le pipeline n'a pas encore tourné dans la session,
+  exactement le même échec non bloquant que sous Windows avant le premier
+  run, cf. `/qualite` > "Lire un échec"). Le `python3` par défaut de ce type
+  de conteneur est 3.11 (pas 3.12 comme le conda `sitegeo`) : les pins de
+  `requirements-venv.txt` sont donc figées aux versions réellement testées
+  sous 3.11, pas un simple report des pins conda de `environment.yml`.
+- Seul point réellement indisponible : `gdal_contour.exe` (`courbes.py`,
+  binaire GDAL Windows) — ne bloque pas `build_home.py`, qui ne consomme pas
+  sa sortie.
+
+Le hook `SessionStart` (`.claude/hooks/session-start.sh`) reflète cette
+distinction ; le corriger si elle redevient trop générale.
+
 ## Lancer
 
 ```
@@ -67,6 +101,18 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
   compilé comme `Conv.java`, moteur SunFlow de Sweet Home 3D. `.jar` et jars de
   rendu auto-détectés (installeur classique + Microsoft Store). Détails, cas Linux
   (`xvfb-run`) et limites : `docs/PIPELINE.md`.
+- **`roof_lidar.py`** (toit multi-pans de la propriété) : `MIN_INLIERS` RANSAC
+  et `MIN_COMPONENT_PTS` (repli coin en L) sont volontairement bas -- un seuil
+  trop haut traite un vrai pan/segment de jonction comme du bruit statistique
+  (constaté : un amas de 3-5 points gagnait par hasard le ratio des valeurs
+  singulières devant un amas réel de 40-80 points). Toujours revalider par
+  cohérence spatiale (composantes connexes), jamais par un seul seuil. `None`
+  en sortie (nuage trop petit, aucun plan, partition non close) -> `bati.py`
+  se replie sur le toit pyramidal, jamais de bâtiment propriété sans toit.
+- **Solide fermé PyVista** : `mesh.volume` (et tout calcul de volume signé)
+  n'est fiable qu'APRÈS `compute_normals(auto_orient_normals=True,
+  consistent_normals=True)` -- `extrude(capping=True)` seul peut laisser des
+  faces à l'envers (constaté : volume 2,3x trop grand avant, correct après).
 
 ## git
 
