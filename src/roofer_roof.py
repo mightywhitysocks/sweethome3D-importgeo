@@ -267,6 +267,16 @@ def _build_roof_impl(roofer_data, cleabs, ring_cm, base_cm, plan_origin_l93,
         if f["type"] == "RoofSurface":
             roof_faces_by_idx.setdefault(f["surface_index"], []).append(f)
 
+    # Un seul materiau pour TOUT le toit du batiment (pas un echantillonnage
+    # independant par pan) : un pan individuel peut etre mal classe (ombre
+    # portee, pan etroit/en biais, bord de toit qui mord sur le mur ou le
+    # sol dans le bbox echantillonne par cg.roof_color_from_ortho) --
+    # constate au rendu reel : plusieurs pans d'un meme toit repartis sur
+    # 2 materiaux differents alors qu'il s'agit visiblement du meme
+    # revetement. Vote pondere par l'AIRE reelle de chaque pan (pas un
+    # simple comptage de pans) : un grand pan mal classe ne doit pas etre
+    # neutralise par plusieurs petits pans bien classes, et inversement.
+    pans = []
     for sidx, pan_faces in roof_faces_by_idx.items():
         role = f"roof_{sidx}"
         pan_mask = mesh.cell_data["role"] == role
@@ -279,9 +289,18 @@ def _build_roof_impl(roofer_data, cleabs, ring_cm, base_cm, plan_origin_l93,
         poly_l93 = unary_union([Polygon([(x, y) for x, y, _z in pf["pts"]]) for pf in pan_faces])
         rc = cg.roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox_l93)
         key = _ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
-        groups.append((f"bati_toit_{sidx}", pan_mesh, key))
+        pans.append((sidx, pan_mesh, poly_l93.area, key))
 
-    if len(groups) <= 1:  # que le mur, aucun pan de toit exploitable
+    if not pans:
         log("  toit roofer : aucun pan de toit exploitable -> repli pyramidal")
         return None
+
+    area_par_materiau: dict[str, float] = {}
+    for _sidx, _mesh, aire, key in pans:
+        area_par_materiau[key] = area_par_materiau.get(key, 0.0) + aire
+    materiau_toit = max(area_par_materiau, key=area_par_materiau.get)
+
+    for sidx, pan_mesh, _aire, _key in pans:
+        groups.append((f"bati_toit_{sidx}", pan_mesh, materiau_toit))
+
     return groups
