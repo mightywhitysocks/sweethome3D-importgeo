@@ -47,12 +47,20 @@ extraire_motifs_confidentiels() {
 # Renvoie 0 (et n'affiche rien) si $1 ne contient aucun motif confidentiel
 # connu localement ; renvoie 1 sinon. Silencieux quand aucun motif n'est
 # disponible (rien à vérifier pour l'instant).
+#
+# Chaque motif est borné par \b (limite de mot) : un motif court comme une
+# section cadastrale à 2 lettres matchait sinon en sous-chaîne dans des mots
+# anglais/français courants (ex. une section fictive "AB" matcherait dans
+# "syllabe") -- constaté en usage réel avec une vraie section, faux positif
+# qui bloquait des commits légitimes sans aucune donnée de site. \b
+# n'affaiblit pas la détection : le motif reste trouvé partout où il
+# apparaît comme token isolé.
 contient_fuite_confidentielle() {
     local contenu="$1"
     local motifs
     motifs="$(extraire_motifs_confidentiels)"
     [[ -z "$motifs" ]] && return 1
     local motif_regex
-    motif_regex="$(paste -sd'|' <<< "$motifs")"
+    motif_regex="$(sed 's/^/\\b/; s/$/\\b/' <<< "$motifs" | paste -sd'|')"
     grep -qiE "$motif_regex" <<< "$contenu"
 }
