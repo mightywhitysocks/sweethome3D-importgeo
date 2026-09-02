@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gdal-bin \
         curl \
         ca-certificates \
+        gzip \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -43,20 +44,42 @@ RUN mkdir -p /opt/roofer \
     && test -x /opt/roofer/bin/roofer
 ENV PATH="/opt/roofer/bin:${PATH}"
 
-# Sweet Home 3D : archive Linux officielle SourceForge, chemin fixe reutilise
-# par generation.yml pour ecrire [tools].sweethome3d_jar. `--strip-components=1`
+# Sweet Home 3D : archive Linux officielle, chemin fixe reutilise par
+# generation.yml pour ecrire [tools].sweethome3d_jar. `--strip-components=1`
 # retire le dossier versionne (SweetHome3D-7.5/) du tgz -- le jar et les jars
 # de rendu vivent ensuite dans lib/ (verifie sur l'archive reelle), PAS a la
-# racine de l'archive. SourceForge peut repondre 403 (Cloudflare) a certains
-# clients/IP sans user-agent de navigateur -- `-A` en best-effort ; si ca
-# s'avere instable en pratique en CI, repli possible : heberger ce tgz en
-# asset d'une release du depot plutot que sur SourceForge. Pas de probleme
-# de permission attendu ici (jar lu via classpath, pas execute directement).
+# racine de l'archive.
+#
+# SourceForge (Cloudflare) bloque de facon persistante les telechargements
+# automatises de ce fichier precis -- confirme sur plusieurs runs CI reels
+# ET depuis une machine de dev separee (pas specifique aux IP GitHub
+# Actions). Chaine de sources essayees dans l'ordre, la premiere qui rend
+# un gzip VALIDE l'emporte (`-f` seul ne suffit pas : SourceForge peut
+# repondre 200 avec une page HTML d'interstitiel a la place du binaire,
+# `gzip -t` le detecte) :
+#   1-4. quelques miroirs SourceForge directs (contournent le frontend
+#        sourceforge.net/download, marchent peut-etre depuis d'autres IP
+#        que celles testees ici) ;
+#   5. repli fiable : copie miroir hebergee en asset de ce depot
+#      (sweethome3d-mirror-7.5, verifiee identique octet pour octet a
+#      l'archive officielle, redistribution GPL non modifiee -- cf.
+#      NOTICE).
 RUN mkdir -p /opt/sweethome3d \
-    && curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
-       -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
-       "https://sourceforge.net/projects/sweethome3d/files/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz/download" \
-       -o /tmp/sh3d.tgz \
+    && ok=0 \
+    && for u in \
+         "https://sourceforge.net/projects/sweethome3d/files/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz/download" \
+         "https://excellmedia.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz" \
+         "https://netactuate.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz" \
+         "https://deac-riga.dl.sourceforge.net/project/sweethome3d/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz" \
+         "https://github.com/mightywhitysocks/sweethome3D-importgeo/releases/download/sweethome3d-mirror-7.5/sh3d.tgz" \
+       ; do \
+         echo "sh3d : essai $u"; \
+         curl -fsSL --max-time 20 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" "$u" -o /tmp/sh3d.tgz 2>/dev/null || { echo "  -> curl echoue"; continue; }; \
+         gzip -t /tmp/sh3d.tgz 2>/dev/null || { echo "  -> pas un gzip valide (page HTML probable)"; continue; }; \
+         echo "  -> OK"; \
+         ok=1; break; \
+       done \
+    && [ "$ok" -eq 1 ] \
     && tar -xzf /tmp/sh3d.tgz -C /opt/sweethome3d --strip-components=1 \
     && rm /tmp/sh3d.tgz \
     && test -f /opt/sweethome3d/lib/SweetHome3D.jar

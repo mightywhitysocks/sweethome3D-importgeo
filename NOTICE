@@ -21,6 +21,13 @@ java/Conv.java
   l'installation locale de Sweet Home 3D (non redistribuee). Sweet Home 3D
   est un logiciel libre sous GPL (https://www.sweethome3d.com/).
 
+Release GitHub "sweethome3d-mirror-7.5" de ce depot
+  Copie miroir, non modifiee, de l'archive Linux x64 officielle
+  SweetHome3D-7.5-linux-x64.tgz (source : SourceForge). Redistribution
+  verbatim d'un logiciel libre sous GPL, explicitement permise par cette
+  licence. Sert de repli dans Dockerfile quand SourceForge (Cloudflare)
+  bloque les telechargements automatises depuis la CI.
+
 Donnees
 -------
 
