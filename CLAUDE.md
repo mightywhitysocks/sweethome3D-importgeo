@@ -88,8 +88,20 @@ distinction ; le corriger si elle redevient trop générale.
 
 ## Lancer
 
+Génération complète (toit multi-pans) : `./run.sh` (Linux/macOS, cf.
+Environnement) ou GitHub Actions (`generation.yml`, cf. README). `.\run.ps1`
+ne sert qu'à ouvrir/rendre `Plan 3D.sh3d` sous Windows, ou à lancer un seul
+script isolément (cf. Environnement) — pas la génération complète.
+
 ```
-.\run.ps1            # complet : phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home
+./run.sh              # complet : phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home
+./run.sh verif        # contrôle lecture seule
+./run.sh terrain bati
+./run.sh --site x.toml
+```
+
+```
+.\run.ps1            # idem, mais toit pyramidal seulement (roofer absent sous Windows)
 .\run.ps1 verif      # contrôle lecture seule
 .\run.ps1 terrain bati
 .\run.ps1 -Site x.toml

@@ -30,7 +30,7 @@ non_interactive=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fresh) fresh=1; shift ;;
-    --site) site="$2"; shift 2 ;;
+    --site) [ $# -ge 2 ] || { echo "--site attend un chemin" >&2; exit 1; }; site="$2"; shift 2 ;;
     --non-interactive) non_interactive=1; shift ;;
     *) steps_args+=("$1"); shift ;;
   esac
@@ -102,9 +102,9 @@ if [ "$fresh" -eq 1 ] && [ -d "$venv_dir" ]; then
 fi
 if [ ! -x "$venv_py" ]; then
   echo ">> creation de .venv depuis config/requirements-venv.txt (long...)"
-  python3 -m venv "$venv_dir"
-  "$venv_py" -m pip install --quiet --upgrade pip
-  "$venv_py" -m pip install -r "$config_dir/requirements-venv.txt"
+  python3 -m venv "$venv_dir" || { echo "echec de la creation de .venv (python3 >= 3.12 requis)." >&2; exit 1; }
+  "$venv_py" -m pip install --quiet --upgrade pip || { echo "echec de la mise a jour de pip." >&2; exit 1; }
+  "$venv_py" -m pip install -r "$config_dir/requirements-venv.txt" || { echo "echec de l'installation de config/requirements-venv.txt." >&2; exit 1; }
 fi
 
 # --- etapes ---

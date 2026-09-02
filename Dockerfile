@@ -37,12 +37,14 @@ ENV PATH="/opt/roofer/bin:${PATH}"
 
 # Sweet Home 3D : archive Linux officielle SourceForge, chemin fixe reutilise
 # par generation.yml pour ecrire [tools].sweethome3d_jar. `--strip-components=1`
-# retire le dossier versionne (SweetHome3D-7.5/) du tgz.
+# retire le dossier versionne (SweetHome3D-7.5/) du tgz -- le jar et les jars
+# de rendu vivent ensuite dans lib/ (verifie sur l'archive reelle), PAS a la
+# racine de l'archive.
 RUN mkdir -p /opt/sweethome3d \
     && curl -fsSL "https://sourceforge.net/projects/sweethome3d/files/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz/download" \
        -o /tmp/sh3d.tgz \
     && tar -xzf /tmp/sh3d.tgz -C /opt/sweethome3d --strip-components=1 \
     && rm /tmp/sh3d.tgz \
-    && test -f /opt/sweethome3d/SweetHome3D.jar
+    && test -f /opt/sweethome3d/lib/SweetHome3D.jar
 
 WORKDIR /workspace

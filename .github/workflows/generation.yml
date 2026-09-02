@@ -20,11 +20,26 @@ permissions:
   packages: read
 
 jobs:
+  # `container:` (job generation ci-dessous) est evalue AVANT toute step de
+  # ce job -- impossible d'y calculer les minuscules dans une step normale.
+  # Job separe uniquement pour ca : `github.repository` peut contenir des
+  # majuscules (ex. "sweethome3D-importgeo"), interdites dans un chemin
+  # GHCR/OCI (push/pull echoueraient sinon avec "must be lowercase").
+  image-name:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.compute.outputs.image }}
+    steps:
+      - name: Minuscules (requis par OCI/GHCR)
+        id: compute
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
   generation:
+    needs: image-name
     runs-on: ubuntu-latest
     timeout-minutes: 60
     container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
+      image: ${{ needs.image-name.outputs.image }}
       # Obligatoire : un package GHCR publie par un run precedent n'est pas
       # garanti pullable par le seul GITHUB_TOKEN implicite d'un job
       # `container:`, meme dans le meme depot (echecs "unauthorized"
@@ -52,8 +67,15 @@ jobs:
               )
           try:
               data = tomllib.loads(raw)
-          except tomllib.TOMLDecodeError as e:
-              raise SystemExit(f"SITE_LOCAL_TOML n'est pas un TOML valide : {e}")
+          except tomllib.TOMLDecodeError:
+              # Pas de details de l'erreur ici : un message tomllib peut
+              # citer un fragment du contenu du secret.
+              raise SystemExit(
+                  "SITE_LOCAL_TOML n'est pas un TOML valide -- validez-le "
+                  "localement (ex. python3 -c \"import tomllib; "
+                  "tomllib.load(open('site.local.toml','rb'))\") avant de "
+                  "mettre a jour le secret."
+              )
           if "tools" in data:
               raise SystemExit(
                   "SITE_LOCAL_TOML contient déjà une section [tools] -- à retirer du "
@@ -62,7 +84,7 @@ jobs:
               )
 
           text = raw if raw.endswith("\n") else raw + "\n"
-          text += '\n[tools]\nsweethome3d_jar = "/opt/sweethome3d/SweetHome3D.jar"\n'
+          text += '\n[tools]\nsweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"\n'
           path = pathlib.Path("config/site.local.toml")
           path.write_text(text, encoding="utf-8")
 

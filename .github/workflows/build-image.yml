@@ -34,9 +34,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build + push ghcr.io/${{ github.repository }}/ci:latest
+      # `github.repository` peut contenir des majuscules (ex.
+      # "sweethome3D-importgeo"), interdites dans un chemin GHCR/OCI --
+      # push echouerait sinon avec "must be lowercase".
+      - name: Minuscules (requis par OCI/GHCR)
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push ${{ steps.image.outputs.name }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}/ci:latest
+          tags: ${{ steps.image.outputs.name }}
