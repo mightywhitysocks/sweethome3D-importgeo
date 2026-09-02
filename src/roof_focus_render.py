@@ -12,7 +12,7 @@ import json
 import math
 import sys
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import LineString, Point, Polygon
 
 import sitegeo as cg
 
@@ -47,6 +47,48 @@ def _max_standoff(cx, cy, dx, dy, bounds):
     return max(t, 0.0)
 
 
+def _clear_position(cx, cy, dx, dy, radius, wanted, target_id, obstacle_polys, bounds):
+    """Position camera (px, py, standoff, dx, dy) le long de (dx, dy), choisie
+    parmi plusieurs angles candidats pour maximiser le degagement reel vis-a-
+    vis des autres batiments -- pas juste eviter d'etre "dedans" un buffer
+    fixe. Constate au rendu reel : un critere tout-ou-rien (buffer autour de
+    chaque batiment) soit laissait un batiment proche dominer le premier plan
+    (buffer trop petit), soit degradait tous les cadrages sans lien avec le
+    probleme (buffer agrandi pour tous). A la place : score chaque angle par
+    sa distance minimale reelle aux batiments (bruts, non bufferises), avec
+    une forte penalite si le segment camera->cible en traverse un, et garde
+    le meilleur -- jamais de rejet total, toujours le meilleur compromis
+    trouve parmi les angles essayes."""
+    others = [poly for oid, poly in obstacle_polys if oid != target_id]
+
+    def score_dir(ddx, ddy):
+        room = _max_standoff(cx, cy, ddx, ddy, bounds)
+        standoff = min(wanted, max(room - EDGE_BUFFER_CM, radius * 1.2))
+        px, py = cx + standoff * ddx, cy + standoff * ddy
+        cam_pt = Point(px, py)
+        min_dist = min((poly.distance(cam_pt) for poly in others), default=float("inf"))
+        seg = LineString([(px, py), (cx, cy)])
+        blocked = any(seg.intersects(poly) for poly in others)
+        score = min_dist - (1.0e7 if blocked else 0.0)
+        return score, px, py, standoff
+
+    # plage volontairement limitee (pas au-dela de 40 deg) : un plus grand
+    # ecart maximisait parfois la distance aux batiments proches mais finit
+    # par regarder au-dela du bati cible, hors du cone de vue reel de la
+    # camera (constate au rendu : bati cible absent du cadre malgre un yaw
+    # recalcule vers son centroide -- l'angle etait trop excentre pour rester
+    # coherent avec un cadrage "de face").
+    base_angle = math.atan2(dy, dx)
+    candidates = []
+    for offset_deg in (0, 20, -20, 40, -40):
+        a = base_angle + math.radians(offset_deg)
+        ddx, ddy = math.cos(a), math.sin(a)
+        score, px, py, standoff = score_dir(ddx, ddy)
+        candidates.append((score, px, py, standoff, ddx, ddy))
+    _, px, py, standoff, dx, dy = max(candidates, key=lambda c: c[0])
+    return px, py, standoff, dx, dy
+
+
 def _viewpoints():
     bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
     props = [b for b in bat if b["classe"] == "propriete"]
@@ -54,7 +96,16 @@ def _viewpoints():
     prop = next((p for p in payload["parcels"] if p["is_property"]), None)
     tx, ty = prop["centroid_cm"] if prop else (0.0, 0.0)
 
-    footprints = [Polygon(b["rings_cm"][0]) for b in props if len(b["rings_cm"]) == 1]
+    # obstacles = TOUS les batiments (voisinage compris, pas seulement
+    # "propriete") -- un recul de camera reduit (cf. radius_eq ci-dessous)
+    # peut la rapprocher d'un batiment voisin, au point de dominer le premier
+    # plan meme sans etre exactement sur la ligne de visee (constate au rendu
+    # reel). Polygones bruts (pas de buffer fixe) : _clear_position score
+    # chaque angle candidat par sa distance REELLE aux batiments, un buffer
+    # fixe s'est avere soit trop petit (bati proche pas detecte), soit trop
+    # grand (degrade les cadrages sans lien avec le probleme).
+    obstacles = [(bd["id"], Polygon(bd["rings_cm"][0]))
+                for bd in bat if len(bd["rings_cm"]) == 1]
     xmin, ymin, xmax, ymax = _bounds()
 
     views = []
@@ -62,6 +113,15 @@ def _viewpoints():
         cx, cy = b["centroid_cm"]
         radius = max((math.hypot(x - cx, y - cy) for ring in b["rings_cm"] for x, y in ring),
                      default=0.0)
+        # rayon "equivalent" base sur l'aire (pas la diagonale au coin le plus
+        # eloigne) pour le calcul du recul : un bati allonge/en L (ex. plan en L)
+        # a un radius jusqu'a 2x plus grand que son etendue apparente reelle --
+        # utiliser radius tel quel eloignerait la camera bien au-dela de ce qui
+        # est necessaire pour cadrer le toit (constate : bati en L rendu minuscule
+        # a l'ecran). radius reste utilise ci-dessous pour la detection de bord/
+        # collision, ou le rayon max est le bon critere.
+        area = sum(Polygon(ring).area for ring in b["rings_cm"])
+        radius_eq = math.sqrt(area / math.pi) if area > 0 else radius
         # direction depuis le centre de parcelle vers le bati, prolongee au
         # dela du bati (cote exterieur) pour que la camera le voie de face ;
         # repliee vers l'interieur si ca sort du maillage terrain (bati pres
@@ -71,20 +131,14 @@ def _viewpoints():
             dx, dy = 0.0, -1.0
         else:
             dx, dy = (cx - tx) / away, (cy - ty) / away
-        wanted = radius * (1.0 + STANDOFF_SCALE) + STANDOFF_MARGIN_CM
+        wanted = radius_eq * (1.0 + STANDOFF_SCALE) + STANDOFF_MARGIN_CM
         room = _max_standoff(cx, cy, dx, dy, (xmin, ymin, xmax, ymax))
         if room < radius * 1.2:
             # bati trop pres du bord dans cette direction : on filme depuis
             # le cote interieur (vers le centre de la parcelle) a la place.
             dx, dy = -dx, -dy
-            room = _max_standoff(cx, cy, dx, dy, (xmin, ymin, xmax, ymax))
-        standoff = min(wanted, max(room - EDGE_BUFFER_CM, radius * 1.2))
-        px, py = cx + standoff * dx, cy + standoff * dy
-        tries = 0
-        while any(fp.contains(Point(px, py)) for fp in footprints) and tries < 60:
-            standoff += STANDOFF_STEP_CM
-            px, py = cx + standoff * dx, cy + standoff * dy
-            tries += 1
+        px, py, standoff, dx, dy = _clear_position(
+            cx, cy, dx, dy, radius, wanted, b["id"], obstacles, (xmin, ymin, xmax, ymax))
         yaw = math.atan2(px - cx, py - cy)   # la camera regarde vers le bati
         apex_cm = (b["hauteur"] or 4.0) * 100.0
         z = cg.terrain_z_at(px, py) + apex_cm + CAM_UP_ROOF_CM

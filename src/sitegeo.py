@@ -328,6 +328,27 @@ def property_polygon_l93():
     return parcels_union_l93((PROPERTY_NUMERO,))
 
 
+NET_CACHE = DATA / "net_cache"
+
+
+def _cached(key: str, compute):
+    """Cache disque (pickle) pour les reponses WFS/WMS IGN Geoplateforme --
+    le service limite le nombre d'acces consecutifs (constate en tests
+    iteratifs : erreurs 'Connection reset by peer' repetees, PAS une panne
+    reseau). Cle -> reponse deja PARSEE (GeoDataFrame, ndarray, tuple...),
+    jamais invalidee automatiquement : `rm -rf data/net_cache` si les
+    donnees source ont change (nouveau site, nouvelle bbox)."""
+    import pickle
+
+    NET_CACHE.mkdir(parents=True, exist_ok=True)
+    p = NET_CACHE / f"{key}.pkl"
+    if p.exists():
+        return pickle.loads(p.read_bytes())
+    result = compute()
+    p.write_bytes(pickle.dumps(result))
+    return result
+
+
 def wfs_l93(typename: str, count: int = 500):
     """GeoDataFrame EPSG:2154 d'une couche WFS sur la bbox du projet."""
     import geopandas as gpd
@@ -337,7 +358,8 @@ def wfs_l93(typename: str, count: int = 500):
          f"&TYPENAMES={typename}&SRSNAME=urn:ogc:def:crs:EPSG::4326"
          f"&BBOX={lat0},{lon0},{lat1},{lon1},urn:ogc:def:crs:EPSG::4326"
          f"&OUTPUTFORMAT=application/json&COUNT={count}")
-    return gpd.read_file(u).to_crs(2154)
+    key = f"wfs_{typename.replace(':', '_')}_{count}_{lat0:.6f}_{lon0:.6f}_{lat1:.6f}_{lon1:.6f}"
+    return _cached(key, lambda: gpd.read_file(u).to_crs(2154))
 
 
 # --------------------------------------------------------------------------- #
@@ -363,19 +385,25 @@ def wms_getmap(layers, bbox_l93, res_m: float = 0.5,
     `layers` : une cle de LAYERS, un nom brut, ou une liste (composite).
     `res_m` = taille de pixel visee (m), ou `size=(w, h)` explicite.
     """
-    from owslib.wms import WebMapService
-
     e0, n0, e1, n1 = bbox_l93
     if size is None:
         w = min(max_px, max(1, int(round((e1 - e0) / res_m))))
         h = min(max_px, max(1, int(round((n1 - n0) / res_m))))
     else:
         w, h = size
-    wms = WebMapService(WMS_URL, version="1.3.0")
-    r = wms.getmap(layers=_resolve_layers(layers), srs="EPSG:2154",
-                   bbox=(e0, n0, e1, n1), size=(w, h), format=fmt,
-                   transparent=False)
-    return r.read()
+    layer_names = _resolve_layers(layers)
+
+    def _fetch():
+        from owslib.wms import WebMapService
+
+        wms = WebMapService(WMS_URL, version="1.3.0")
+        r = wms.getmap(layers=layer_names, srs="EPSG:2154",
+                       bbox=(e0, n0, e1, n1), size=(w, h), format=fmt,
+                       transparent=False)
+        return r.read()
+
+    key = f"wms_{'_'.join(layer_names)}_{e0:.2f}_{n0:.2f}_{e1:.2f}_{n1:.2f}_{w}x{h}_{fmt.replace('/', '_')}"
+    return _cached(key, _fetch)
 
 
 def wms_raster(layer_key: str, margin_m: float = 25.0, res_m: float = 0.5):
@@ -403,16 +431,30 @@ def wms_ortho_rgb(margin_m: float = 25.0, mult: int = 4, max_px: int = 4000,
     e0, n0, e1, n1 = bbox
     w = min(max_px, int((e1 - e0) * mult))
     h = min(max_px, int((n1 - n0) * mult))
-    from owslib.wms import WebMapService
-    wms = WebMapService(WMS_URL, version="1.3.0")
-    r = wms.getmap(layers=[LAYERS["ORTHO"]], srs="EPSG:2154",
-                   bbox=(e0, n0, e1, n1), size=(w, h), format="image/png")
-    arr = np.asarray(Image.open(io.BytesIO(r.read())).convert("RGB"))
+    blob = wms_getmap("ORTHO", bbox, fmt="image/png", max_px=max_px, size=(w, h))
+    arr = np.asarray(Image.open(io.BytesIO(blob)).convert("RGB"))
     return arr, bbox
 
 
 LIDAR_TILE_INDEX = "IGNF_NUAGES-DE-POINTS-LIDAR-HD:dalle"
 LIDAR_CACHE = DATA / "lidar_cache"
+
+
+def lidar_tile_index(bbox_l93, margin_m: float = 3.0):
+    """GeoDataFrame EPSG:2154 des dalles LiDAR HD IGN couvrant bbox_l93+marge
+    (colonne 'url' par dalle). Partagee par `lidar_points_l93` et
+    `roofer_roof.lidar_tile_paths` (meme requete WFS, mise en cache une
+    seule fois -- cf. `_cached`)."""
+    import geopandas as gpd
+
+    e0, n0, e1, n1 = bbox_l93
+    pe0, pn0, pe1, pn1 = e0 - margin_m, n0 - margin_m, e1 + margin_m, n1 + margin_m
+    u = (f"{WFS_URL}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature"
+         f"&TYPENAMES={LIDAR_TILE_INDEX}&SRSNAME=urn:ogc:def:crs:EPSG::2154"
+         f"&BBOX={pe0},{pn0},{pe1},{pn1},urn:ogc:def:crs:EPSG::2154"
+         f"&OUTPUTFORMAT=application/json")
+    key = f"lidartiles_{pe0:.2f}_{pn0:.2f}_{pe1:.2f}_{pn1:.2f}"
+    return _cached(key, lambda: gpd.read_file(u))
 
 
 def lidar_points_l93(bbox_l93, margin_m: float = 3.0, classification: int = 6):
@@ -426,17 +468,12 @@ def lidar_points_l93(bbox_l93, margin_m: float = 3.0, classification: int = 6):
     `data/lidar_cache/` (git-ignore, comme le reste de `data/`) -- jamais
     retelechargees d'un run a l'autre pour la meme dalle.
     """
-    import geopandas as gpd
     import laspy
     import requests
 
     e0, n0, e1, n1 = bbox_l93
     pe0, pn0, pe1, pn1 = e0 - margin_m, n0 - margin_m, e1 + margin_m, n1 + margin_m
-    u = (f"{WFS_URL}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature"
-         f"&TYPENAMES={LIDAR_TILE_INDEX}&SRSNAME=urn:ogc:def:crs:EPSG::2154"
-         f"&BBOX={pe0},{pn0},{pe1},{pn1},urn:ogc:def:crs:EPSG::2154"
-         f"&OUTPUTFORMAT=application/json")
-    tiles = gpd.read_file(u)
+    tiles = lidar_tile_index(bbox_l93, margin_m=margin_m)
     if len(tiles) == 0:
         return np.empty((0, 3))
 
