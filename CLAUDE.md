@@ -29,10 +29,19 @@ pas comme méthode principale de génération.
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
 - **Jamais** `py` (Python système). **Jamais** `conda run` (casse le multi-lignes).
-- **Ne jamais installer `matplotlib`** dans cet env -> crash DLL Windows
-  (exit `-1066598273`). `pyvista` OK tant qu'on ne touche pas
+- **Ne jamais installer `matplotlib`** dans **cet env conda Windows précisément**
+  -> crash DLL Windows (exit `-1066598273`) : un conflit de bibliothèque
+  natives propre à cette combinaison conda-forge/Windows, sans équivalent
+  connu sous Linux/macOS. `pyvista` OK tant qu'on ne touche pas
   `pyvista.plotting` / `Plotter` / `.plot()`. `pv.Plane()` casse (même cause) ->
-  `solidify` utilise extrusion + `capping`.
+  `solidify` utilise extrusion + `capping`. **Règle sans objet côté
+  Linux/macOS/Docker** : `pyvista` y déclare `matplotlib` comme dépendance
+  PyPI inconditionnelle (confirmé sur le manifeste `0.48.4`, pas un extra
+  optionnel) — `pip install pyvista` l'installe donc forcément, visible dans
+  les logs de `Dockerfile`/`run.sh`. Sans risque : jamais importé par le code
+  du dépôt (`pyvista.plotting` non plus, cf. ci-dessus), et le crash est
+  structurellement absent sur ces OS. Ne pas essayer de l'exclure
+  (`--no-deps` sur `pyvista` casserait ses autres dépendances réelles).
 - Les aperçus se font en PIL.
 - **Versions harmonisées** entre `environment.yml` (conda Windows) et
   `requirements-venv.txt` (venv pip Linux/macOS/Docker) : mêmes numéros de
