@@ -41,9 +41,18 @@ jobs:
         id: image
         run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
 
+      # Cache de build GitHub Actions : ne change rien sur un premier build a
+      # froid (rien a reutiliser), mais accelere fortement les rebuilds
+      # suivants (ex. bump de version dans le Dockerfile) en reutilisant les
+      # layers apt/pip deja construits plutot que tout retelecharger.
+      # `mode=max` cache aussi les layers intermediaires (pas seulement la
+      # couche finale), pour maximiser la reutilisation sur les etapes
+      # roofer/Sweet Home 3D qui changent rarement.
       - name: Build + push ${{ steps.image.outputs.name }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           push: true
           tags: ${{ steps.image.outputs.name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
