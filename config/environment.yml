@@ -18,7 +18,7 @@ name: sitegeo
 channels:
   - conda-forge
 dependencies:
-  - python=3.12
+  - python=3.14
   - numpy=2.5.*
   - pyvista=0.48.*          # geometrie 3D : surface MNT -> volume ferme, normales
   - geopandas=1.1.*         # vecteurs IGN (API Carto parcelles, WFS BD TOPO)
@@ -31,8 +31,8 @@ dependencies:
   - pyproj=3.7.*
   - libgdal=3.13.*          # gdal_contour.exe (courbes de niveau)
   - pillow=12.*             # apercus (remplace matplotlib)
-  - laspy=2.5.*             # lecture nuage LiDAR HD brut (.copc.laz), toit propriete multi-pans
-  - requests=2.32.*         # telechargement direct des dalles LiDAR HD (roof_lidar.py)
+  - laspy=2.7.*             # lecture nuage LiDAR HD brut (.copc.laz), toit propriete multi-pans
+  - requests=2.34.*         # telechargement direct des dalles LiDAR HD (sitegeo.lidar_points_l93)
   - pip
   - pip:
       - javaobj-py3==0.6.1  # relire <backgroundImage> d'un .sh3d serialise Java

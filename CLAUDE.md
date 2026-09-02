@@ -14,19 +14,17 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
 
 ## Environnement
 
-**Le pipeline de génération suppose désormais un environnement Linux**
+**Le pipeline de génération suppose désormais un environnement Linux/macOS**
 (`phase1_cadastre.py` -> `terrain.py` -> `bati.py` -> `vegetation.py` ->
 `courbes.py` -> `build_home.py`) : `bati.py` appelle `roofer` (cf. "Points
 durs" > roofer) pour le toit multi-pans des bâtiments propriété, et `roofer`
-n'a pas de build Windows officiel. Ce pipeline tourne dans une session
-Claude Code distante (venv pip, cf. ci-dessous) ou tout environnement Linux
-équivalent (WSL2, Docker). **Windows + conda `sitegeo` sert uniquement à
-ouvrir/rendre `Plan 3D.sh3d` dans l'application Sweet Home 3D native** — pas
-à relancer le pipeline de génération : `bati.py` s'y replierait
-silencieusement sur le toit pyramidal (binaire `roofer` introuvable), sans
-planter. `.\run.ps1` reste documenté ci-dessous pour un lancement partiel
-(un seul script, ex. `terrain.py` seul) ou historique, pas comme méthode
-principale.
+n'a pas de build Windows officiel. **Windows + conda `sitegeo` sert
+uniquement à ouvrir/rendre `Plan 3D.sh3d` dans l'application Sweet Home 3D
+native** — pas à relancer le pipeline de génération : `bati.py` s'y
+replierait silencieusement sur le toit pyramidal (binaire `roofer`
+introuvable), sans planter. `.\run.ps1` reste documenté dans le README pour
+un lancement partiel (un seul script, ex. `terrain.py` seul) ou historique,
+pas comme méthode principale de génération.
 
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
@@ -36,37 +34,54 @@ principale.
   `pyvista.plotting` / `Plotter` / `.plot()`. `pv.Plane()` casse (même cause) ->
   `solidify` utilise extrusion + `capping`.
 - Les aperçus se font en PIL.
+- **Versions harmonisées** entre `environment.yml` (conda Windows) et
+  `requirements-venv.txt` (venv pip Linux/macOS/Docker) : mêmes numéros de
+  version des deux côtés (Python 3.14 compris), cf. en-tête de
+  `requirements-venv.txt`. Seules exceptions structurelles : `lazrs`
+  (backend LAZ requis seulement côté pip, `laspy` conda l'embarque
+  autrement) et GDAL (`libgdal` conda vs `gdal-bin` système, mécanismes de
+  paquet différents par nature).
 
-### Session Claude Code distante (conteneur Linux éphémère)
+### Trois façons de lancer la génération complète (toit multi-pans)
 
-`.\run.ps1` lui-même (création de l'env conda `sitegeo`, détection de chemins
-d'install Windows) ne s'exécute pas dans ce type de session. **Mais le JDK et
-le rendu photo headless Sweet Home 3D fonctionnent dans ce conteneur** —
-validé de bout en bout (`build_home.py` -> `.sh3d` -> rendu SunFlow réel via
-`RenderPhoto.java`/`xvfb-run`), à ne pas supposer impossible par défaut :
-- JDK (java + javac) déjà présent dans ce type de conteneur.
-- `SweetHome3D.jar` + jars de rendu (`sunflow-*.jar`, `j3dcore.jar`,
-  `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar`) récupérables
-  depuis l'archive Linux officielle SourceForge `SweetHome3D-<version>-linux-x64.tgz`
-  (`lib/`) ; référencer les chemins dans `config/site.local.toml` (`[tools]
-  sweethome3d_jar`, `render_libs_dir`, git-ignored).
-- `xvfb-run` disponible et nécessaire (cf. limitation Linux dans
-  `docs/PIPELINE.md`).
-- Un venv pip classique (`config/requirements-venv.txt`, git-suivi) remplace
-  l'env conda pour lancer `src/*.py` directement, **`verif.py` compris** :
-  `python3 -m venv .venv && .venv/bin/pip install -r
-  config/requirements-venv.txt` puis `.venv/bin/python src/verif.py` --
-  validé de bout en bout (tous les imports passent : `sitegeo`, `rasterio`,
-  `PIL`, `shapely`, `javaobj` ; seul échec observé = `FileNotFoundError` sur
-  `data/*.json` quand le pipeline n'a pas encore tourné dans la session,
-  exactement le même échec non bloquant que sous Windows avant le premier
-  run, cf. `/qualite` > "Lire un échec"). Le `python3` par défaut de ce type
-  de conteneur est 3.11 (pas 3.12 comme le conda `sitegeo`) : les pins de
-  `requirements-venv.txt` sont donc figées aux versions réellement testées
-  sous 3.11, pas un simple report des pins conda de `environment.yml`.
-- Seul point réellement indisponible : `gdal_contour.exe` (`courbes.py`,
-  binaire GDAL Windows) — ne bloque pas `build_home.py`, qui ne consomme pas
-  sa sortie.
+1. **`./run.sh`** (nouveau, Linux/macOS local ou distant) : port bash de
+   `run.ps1` (mêmes menus, même boucle réessayer/sauter/arrêter), sur
+   `config/requirements-venv.txt` (`.venv/`, créé automatiquement). C'est
+   maintenant le point d'entrée général pour **tout** environnement
+   Linux/macOS, y compris une session Claude Code distante (conteneur Linux
+   éphémère) — qui n'est qu'un cas particulier de ce mode, plus besoin de
+   procédure séparée pour elle. Dans une session Claude Code (pas de
+   terminal interactif persistant entre les appels), préférer
+   `./run.sh --non-interactive` ou appeler `src/*.py` directement plutôt que
+   le menu interactif.
+2. **`.github/workflows/generation.yml`** (GitHub Actions, `workflow_dispatch`) :
+   génère dans une image Docker dédiée (`Dockerfile`, publiée par
+   `build-image.yml` sur `ghcr.io`), sur un runner éphémère à la demande —
+   aucune machine Linux locale requise. Détail complet (secrets, modèle
+   « un repo privé par utilisateur ») dans le README, section « Génération à
+   la demande ».
+3. **Session Claude Code distante (conteneur Linux éphémère)** : le JDK et
+   le rendu photo headless Sweet Home 3D y fonctionnent — validé de bout en
+   bout (`build_home.py` -> `.sh3d` -> rendu SunFlow réel via
+   `RenderPhoto.java`/`xvfb-run`), à ne pas supposer impossible par défaut :
+   - JDK (java + javac) déjà présent dans ce type de conteneur.
+   - `SweetHome3D.jar` + jars de rendu (`sunflow-*.jar`, `j3dcore.jar`,
+     `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar`)
+     récupérables depuis l'archive Linux officielle SourceForge
+     `SweetHome3D-<version>-linux-x64.tgz` (`lib/`) ; référencer les chemins
+     dans `config/site.local.toml` (`[tools] sweethome3d_jar`,
+     `render_libs_dir`, git-ignored).
+   - `xvfb-run` disponible et nécessaire (cf. limitation Linux dans
+     `docs/PIPELINE.md`).
+   - `./run.sh` (ou un venv pip manuel) y fonctionne pour lancer `src/*.py`
+     directement, **`verif.py` compris** — validé de bout en bout côté
+     imports/exécution avant l'harmonisation des versions ci-dessus (Python
+     3.11 à l'époque, `courbes.py` sauté faute de `gdal_contour`). **Non
+     revalidé depuis** le passage à Python 3.14 harmonisé : si le `python3`
+     par défaut de ce type de conteneur est resté à 3.11, `requirements-venv.txt`
+     (qui exige maintenant Python >=3.12, numpy 2.5.\*) n'installera pas tel
+     quel — prévoir un `python3.12`+ explicite dans ce cas plutôt que
+     supposer que le défaut du conteneur suffit.
 
 Le hook `SessionStart` (`.claude/hooks/session-start.sh`) reflète cette
 distinction ; le corriger si elle redevient trop générale.

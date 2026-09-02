@@ -1,0 +1,103 @@
+# Lance le pipeline de generation complet (phase1_cadastre -> ... ->
+# build_home) dans l'image CI (Dockerfile, publiee par build-image.yml) et
+# publie Plan 3D.sh3d en artefact. A la demande uniquement (jamais sur
+# push/PR : appels reseau IGN/LiDAR HD couteux en temps).
+#
+# A NE DECLENCHER QUE depuis une copie PRIVEE de ce depot (cf. README.md) :
+# sur un depot public, les logs de ce run et l'artefact publie sont visibles
+# par n'importe quel compte GitHub, pas seulement les collaborateurs.
+#
+# Prerequis : le secret de repo SITE_LOCAL_TOML (contenu d'un
+# config/site.local.toml SANS section [tools] -- celle-ci est calculee par
+# ce workflow) et une image CI deja construite (build-image.yml).
+name: Génération
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/${{ github.repository }}/ci:latest
+      # Obligatoire : un package GHCR publie par un run precedent n'est pas
+      # garanti pullable par le seul GITHUB_TOKEN implicite d'un job
+      # `container:`, meme dans le meme depot (echecs "unauthorized"
+      # confirmes sans ce bloc explicite).
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Écrire config/site.local.toml (secret + [tools] calculés par le workflow)
+        env:
+          SITE_LOCAL_TOML: ${{ secrets.SITE_LOCAL_TOML }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          raw = os.environ["SITE_LOCAL_TOML"]
+          if not raw.strip():
+              raise SystemExit(
+                  "Secret SITE_LOCAL_TOML absent ou vide -- a créer dans "
+                  "Settings > Secrets and variables > Actions de cette copie privée."
+              )
+          try:
+              data = tomllib.loads(raw)
+          except tomllib.TOMLDecodeError as e:
+              raise SystemExit(f"SITE_LOCAL_TOML n'est pas un TOML valide : {e}")
+          if "tools" in data:
+              raise SystemExit(
+                  "SITE_LOCAL_TOML contient déjà une section [tools] -- à retirer du "
+                  "secret, elle est ajoutée automatiquement par ce workflow "
+                  "(chemins fixes de l'image CI)."
+              )
+
+          text = raw if raw.endswith("\n") else raw + "\n"
+          text += '\n[tools]\nsweethome3d_jar = "/opt/sweethome3d/SweetHome3D.jar"\n'
+          path = pathlib.Path("config/site.local.toml")
+          path.write_text(text, encoding="utf-8")
+
+          tomllib.loads(path.read_text(encoding="utf-8"))  # re-parse de contrôle
+          print("config/site.local.toml écrit (contenu non affiché).")
+          PY
+
+      - name: phase1_cadastre.py
+        run: python3 src/phase1_cadastre.py
+
+      - name: terrain.py
+        run: python3 src/terrain.py
+
+      - name: bati.py
+        run: python3 src/bati.py
+
+      - name: vegetation.py
+        run: python3 src/vegetation.py
+
+      - name: courbes.py
+        run: python3 src/courbes.py
+
+      - name: build_home.py
+        run: python3 src/build_home.py
+
+      - name: verif.py (contrôle, non bloquant)
+        continue-on-error: true
+        run: python3 src/verif.py
+
+      - name: Publier Plan 3D.sh3d
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "Plan 3D"
+          path: "Plan 3D.sh3d"
+          if-no-files-found: error
+          # Minimise la fenêtre de rétention d'un artefact contenant la
+          # géométrie exacte du site, même sur une copie privée.
+          retention-days: 7

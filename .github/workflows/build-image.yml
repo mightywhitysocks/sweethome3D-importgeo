@@ -1,0 +1,42 @@
+# Construit et publie l'image CI (Dockerfile) sur ghcr.io, consommee par
+# generation.yml. A lancer une fois apres avoir cree sa copie privee du
+# depot (cf. README.md), et a chaque fois que Dockerfile change.
+#
+# N'ecrit ni ne lit aucune donnee de site : uniquement le toolchain (JDK,
+# GDAL, roofer, Sweet Home 3D, paquets Python), aucun secret necessaire ici.
+name: Construire l'image CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['Dockerfile']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Connexion a ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push ghcr.io/${{ github.repository }}/ci:latest
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}/ci:latest
