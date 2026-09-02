@@ -10,17 +10,31 @@ Génère un **plan 3D géoréférencé d'une parcelle cadastrale française** po
 - **BD TOPO** : emprises et hauteurs des bâtiments.
 
 Résultat : `Plan 3D.sh3d`, double-cliquable, avec 5 calques (Cadastre / Terrain /
-Bâti voisinage / Bâti propriété *à modéliser* / Végétation).
+Bâti voisinage / Bâti propriété / Végétation) — toit + mur multi-pans de
+chaque bâtiment reconstruits par `roofer` (LiDAR HD IGN), repli sur un toit
+pyramidal simple si non exploitable.
 
 La parcelle cible **n'est pas codée dans le dépôt** : elle se règle dans
 `config/site.local.toml` (git-ignored).
 
 ## Prérequis
 
-- **Windows** + PowerShell
-- **Anaconda ou Miniconda**
-- Un **JDK** (`java` et `javac` sur le `PATH`), p.ex. Oracle JDK 21
-- **Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`)
+Le pipeline de **génération** (`phase1_cadastre` -> ... -> `build_home`)
+suppose désormais un **environnement Linux** : `bati.py` appelle l'outil
+externe `roofer` (toit multi-pans), qui n'a pas de build Windows officiel
+(cf. CLAUDE.md section Environnement). Sans lui, `bati.py` se replie
+silencieusement sur un toit pyramidal simple pour tous les bâtiments, sans
+planter — donc sans avertissement visible si vous ne le remarquez pas.
+
+- **Windows + PowerShell + Anaconda/Miniconda** : sert à **ouvrir/rendre**
+  `Plan 3D.sh3d` dans l'application Sweet Home 3D native, pas à lancer le
+  pipeline de génération complet.
+- **Linux (ou WSL2/Docker)** + un venv pip (`config/requirements-venv.txt`)
+  + `roofer` installé (script officiel du dépôt `roofer`, licence GPLv3, cf.
+  CLAUDE.md) : pour lancer le pipeline de génération avec toit multi-pans.
+- Un **JDK** (`java` et `javac` sur le `PATH`), p.ex. Oracle JDK 21 — requis
+  dans les deux cas (assemblage/relecture du `.sh3d`, rendu photo headless).
+- **Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`).
 
 ## Démarrage
 

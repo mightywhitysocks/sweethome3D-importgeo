@@ -116,22 +116,28 @@ lancement, partagé par `verif.py --render` et `preview.py`.
 5. **Maillage terrain sous-échantillonné à 2 m** (~43 k faces). `terrain_z_at`
    interpole cette grille pour que les objets affleurent la surface *visible* ;
    résidu de calage de l'ordre du cm.
-6. **Toits pyramidaux simples** (apex au centroïde, pas de faîtage). Les
-   bâtiments en L reçoivent un point central. Réglable via `ROOF_RISE_MAX` et
-   les facteurs 0,22 / 0,45 de `bati.py`.
+6. **Toits pyramidaux simples** (apex au centroïde, pas de faîtage) : repli
+   utilisé par bâtiment quand `roofer` n'est pas disponible/exploitable
+   (cf. limitation #9). Les bâtiments en L reçoivent un point central.
+   Réglable via `ROOF_RISE_MAX` et les facteurs 0,22 / 0,45 de `bati.py`.
 7. **Haies taillées** : détectées seulement si végétation basse (< 4 m) et
    étroite (< 4 m) le long de la limite. Une ceinture boisée est rendue en
    **ligne d'arbres** dense à la place.
 8. **`matplotlib` interdit** dans l'env (crash DLL) ; **`pv.Plane()` casse**
    (même cause).
-9. **Bâtiments de la propriété** : toit multi-pans reconstruit depuis le nuage
-   LiDAR HD (`src/roof_lidar.py`, RANSAC + croissance de région + jonctions
-   mesurées/analytiques + partition Voronoï + `coverage_simplify`), avec repli
-   automatique sur le même toit pyramidal simple que le voisinage si la
-   reconstruction n'est pas assez fiable (peu de points, aucun plan détecté,
-   partition non close) — jamais de bâtiment propriété sans toit modélisé.
-   Sortie : `data/bati_propriete.obj/.mtl` (absent si aucun bâtiment propriété
-   trouvé), chargé par `build_home.py` comme le voisinage.
+9. **Tous les bâtiments** (propriété et voisinage) : toit + mur multi-pans
+   reconstruits par l'outil externe `roofer` (`src/roofer_roof.py`, moteur
+   3DBAG/TU Delft, LoD2.2, GPLv3 — cf. CLAUDE.md "Dépendance externe :
+   roofer"), consommé tel quel (aucune reconstruction géométrique propre),
+   avec repli automatique sur un toit pyramidal simple par bâtiment si
+   `roofer` est absent/échoue ou si un bâtiment n'a pas de géométrie LoD2.2
+   exploitable — jamais de bâtiment sans toit modélisé. Suppose un
+   environnement Linux (pas de build Windows officiel de `roofer`, cf.
+   CLAUDE.md section Environnement). Ancien `src/roof_lidar.py` (RANSAC +
+   croissance de région) conservé dans le dépôt pour référence/comparaison
+   (`src/roofer_compare.py`), plus utilisé par le pipeline. Sorties :
+   `data/bati_propriete.obj/.mtl` et `data/bati_voisinage.obj/.mtl`,
+   chargées par `build_home.py`.
 10. **Murs clairs sur-exposés** en lumière rasante (éclairage Sweet Home 3D, le
     matériau est correctement mat).
 11. **`run.ps1` lui-même est Windows uniquement** (création de l'env conda,
