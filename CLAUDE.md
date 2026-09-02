@@ -215,6 +215,53 @@ distinction ; le corriger si elle redevient trop générale.
   méthodes réussit là où l'autre échoue) -- pas de verdict tranché en faveur
   de l'une ou l'autre à ce stade, juste une confirmation que la comparaison
   est mécaniquement fiable.
+- **Piste identifiée, PAS implémentée : couverture LiDAR/BD TOPO incomplète
+  en entrée de `roofer`.** Diagnostic (comparaison emprise BD TOPO vs union
+  des pans reconstruits, 18 bâtiments) : écarts systémiques, jusqu'à 55 % de
+  l'emprise non couverte sur certains bâtiments. Deux causes racines
+  identifiées, alignées sur l'exemple officiel IGN
+  [`ignfab/roofer-with-ignf-datasets`](https://github.com/ignfab/roofer-with-ignf-datasets)
+  (Docker-first, PDAL) et sur `roofer --help-all` (binaire installé dans
+  cette session, vérifié directement -- source la plus fiable) :
+  - **Classification LiDAR** : les dalles LAZ IGN brutes contiennent des
+    points classés **67 (« Divers -- bâtis »)**, une classe IGN propre,
+    hors nomenclature ASPRS. `roofer` ne regarde que `--bld-class`
+    (défaut **6**) / `--grnd-class` (défaut **2**) -- les points 67 lui
+    sont donc invisibles. `roofer-with-ignf-datasets` documente
+    explicitement un remap PDAL (`filters.assign`) **67 -> 6** avant
+    l'appel, présenté comme nécessaire pour ne pas perdre ces points.
+  - **Attributs de repli d'altitude** : `roofer_roof.write_footprint_gpkg`
+    n'écrit aujourd'hui que `cleabs` + géométrie, aucun attribut de
+    hauteur. Or `roofer` expose déjà ses propres paramètres de repli --
+    `--h-terrain-attribute <string>` et `--h-roof-attribute <string>`
+    (confirmés dans `roofer --help-all`), utilisés uniquement quand sa
+    couverture LiDAR est insuffisante pour dériver l'altitude sol/toit
+    d'un bâtiment depuis le nuage. `roofer-with-ignf-datasets` alimente ces
+    attributs par une cascade de complétion des colonnes BD TOPO
+    (`altitude_minimale_sol`/`altitude_maximale_toit`/`hauteur`, déjà
+    extraites telles quelles par `bati.py` -- mêmes champs que ceux
+    filtrés `NaN` par `_fnum`, cf. plus haut) -- jamais transmises à
+    `roofer` actuellement. Bonus repéré dans `roofer --help-all` : avec
+    `--clear-insufficient` (vrai par défaut), un bâtiment à couverture
+    insuffisante SANS `--h-roof-attribute` ne reçoit aucun modèle de
+    `roofer` (repli pyramidal maison) ; avec l'attribut fourni, `roofer`
+    produit lui-même une extrusion LoD1.1 -- un cas de plus couvert par
+    `roofer` plutôt que par le repli pyramidal du projet.
+  - Dans les deux cas, il s'agit de **préparer l'entrée dans un format que
+    `roofer` sait déjà consommer** (paramètres CLI existants), pas d'une
+    reconstruction géométrique ou d'un calcul d'altitude côté projet --
+    cohérent avec le choix déjà fait de consommer le `Solid` de `roofer`
+    tel quel (cf. plus haut).
+  - **Piste écartée pour l'instant, documentée seulement** : le
+    téléchargement de dalle LAZ entière (`cg.lidar_points_l93`) pourrait
+    être remplacé par un crop streamé (`readers.copc` PDAL, comme dans
+    `roofer-with-ignf-datasets`), potentiellement lié aux
+    `ConnectionResetError` déjà documentées (cf. "Cache disque WFS/WMS"
+    ci-dessus). Nouvelle dépendance PDAL (le projet a explicitement choisi
+    de s'en passer, `config/environment.yml`) + refonte du cache LiDAR :
+    hors périmètre, pas engagé cette session.
+  - Aucun code n'a été modifié pour ce point : diagnostic + vérification
+    documentaire seulement, à reprendre pour une session ultérieure.
 
 ## git
 
