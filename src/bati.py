@@ -7,12 +7,16 @@ WFS BDTOPO_V3:batiment -> Lambert-93 -> classe (par aire majoritaire) :
 
 Sorties dans data/ :
   bati.json                    tous les batiments (id, classe, hauteur, alt_*, mur, toit, rings_cm)
-  bati_voisinage.obj / .mtl    prisme mur + toit pyramidal par batiment voisinage (PyVista),
+  bati_voisinage.obj / .mtl    prisme mur + toit multi-pans par batiment voisinage (PyVista),
                                1 OBJ multi-materiaux (mur / tuile / ardoise / fibro)
-  bati_propriete.obj / .mtl    idem, pour les batiments de la propriete : toit multi-pans
-                               extrapole du nuage LiDAR HD (roof_lidar.build_roof) quand
-                               assez fiable, sinon repli sur le meme toit pyramidal que le
-                               voisinage (jamais de batiment propriete sans toit modelise)
+  bati_propriete.obj / .mtl    idem, pour les batiments de la propriete. Toit reconstruit par
+                               roofer (moteur 3DBAG/TU Delft, outil externe GPLv3, cf.
+                               CLAUDE.md) depuis le nuage LiDAR HD IGN pour TOUS les batiments
+                               (propriete et voisinage, un seul appel CLI sur l'emprise du
+                               site), sinon repli sur un toit pyramidal simple par batiment
+                               (jamais de batiment sans toit modelise). Suppose un
+                               environnement Linux (roofer n'a pas de build Windows officiel) ;
+                               repli pyramidal silencieux si le binaire est absent.
   bati_propriete_ref.json      emprises au sol 2D + etiquettes (commandes MCP), + hauteur de
                                reference de la camera de visite 3D (cf. build_home.py)
 """
@@ -22,7 +26,7 @@ import json
 
 import numpy as np
 
-import roof_lidar
+import roofer_roof
 import sitegeo as cg
 
 GEO = cg.GEO
@@ -61,8 +65,9 @@ def main() -> None:
     ortho, obb = cg.wms_ortho_rgb(mult=4)
     z_min = cg.META.z_min
 
-    bat, groups, groups_prop, n_vois, n_prop_lidar, n_prop_pyr = [], {"mur": []}, {"mur": []}, 0, 0, 0
-    prop_bldgs = []
+    bat, groups, groups_prop = [], {"mur": []}, {"mur": []}
+    n_vois_roofer, n_vois_pyr, n_prop_roofer, n_prop_pyr = 0, 0, 0, 0
+    all_bldgs = []
     for _, row in g.iterrows():
         geom = row.geometry
         polys = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
@@ -92,62 +97,62 @@ def main() -> None:
             "rings_cm": rings_cm,
             "centroid_cm": [round(float(cx), 1), round(float(cy), 1)],
         })
+        all_bldgs.append((classe, polys, rings_cm, haut, alt_sol, alt_toit, rid))
 
-        if classe == "propriete":
-            prop_bldgs.append((polys, rings_cm, haut, alt_sol, alt_toit))
-            continue
-
-        for poly, ring in zip(polys, rings_cm):
-            if poly.area < 4 or len(ring) < 3:
-                continue
-            n_vois += 1
-            base, eave, mur_mesh, toit_mesh = _pyramidal_mesh(poly, ring, haut, alt_toit, z_min)
-            groups["mur"].append(mur_mesh)
-            rc = cg.roof_color_from_ortho(poly, ortho, obb)
-            key = _ROOF_KEY.get(tuple(rc), "ardoise")
-            groups.setdefault(key, []).append(toit_mesh)
-
-    # --- batiments de la propriete : LiDAR HD si assez fiable, sinon pyramidal ---
+    # --- toit multi-pans reconstruit par roofer (LiDAR HD IGN) pour TOUS les
+    # batiments (propriete et voisinage, un seul appel CLI sur l'emprise du
+    # site), sinon repli pyramidal par batiment (binaire absent, echec, ou
+    # batiment sans geometrie LoD2.2 exploitable -- cf. roofer_roof.py) ---
     plan_origin_l93 = (cg.META.E0, cg.META.N1)
-    prop_lidar_pts_cm = None
-    if prop_bldgs:
-        pe0, pn0, pe1, pn1 = prop_zone.bounds
-        raw = cg.lidar_points_l93((pe0, pn0, pe1, pn1), margin_m=5.0)
-        if len(raw):
-            xc, yc = cg.to_plan_cm(raw[:, 0], raw[:, 1])
-            prop_lidar_pts_cm = np.column_stack([xc, yc, (raw[:, 2] - z_min) * 100.0])
-        print(f"toit propriete : {len(raw) if len(raw) else 0} points LiDAR HD (classe bati)")
+    roofer_data = None
+    if all_bldgs:
+        e0, n0, e1, n1 = cg.META.bbox_l93
+        laz_paths = roofer_roof.lidar_tile_paths((e0, n0, e1, n1), margin_m=5.0)
+        footprint_gpkg = GEO / "_roofer_footprint.gpkg"
+        roofer_roof.write_footprint_gpkg(
+            [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
+             for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
+            footprint_gpkg)
+        roofer_data = roofer_roof.run_roofer(footprint_gpkg, laz_paths, GEO / "_roofer_output")
 
-    for polys, rings_cm, haut, alt_sol, alt_toit in prop_bldgs:
+    for classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs:
+        dest = groups_prop if classe == "propriete" else groups
         for poly, ring in zip(polys, rings_cm):
             if poly.area < 4 or len(ring) < 3:
                 continue
             base = min(cg.terrain_z_at(x, y) for x, y in ring) - 3.0
-            eave_attr = base + (haut * 100 if haut else 400.0)
-            mesh_groups = None
-            if prop_lidar_pts_cm is not None and len(prop_lidar_pts_cm):
-                mesh_groups = roof_lidar.build_roof(
-                    ring, base, eave_attr, prop_lidar_pts_cm, plan_origin_l93, ortho, obb)
+            mesh_groups = roofer_roof.build_roof(
+                roofer_data, rid, ring, base, plan_origin_l93, z_min, ortho, obb)
             if mesh_groups is not None:
-                n_prop_lidar += 1
+                if classe == "propriete":
+                    n_prop_roofer += 1
+                else:
+                    n_vois_roofer += 1
                 for name, mesh, mtl in mesh_groups:
-                    groups_prop.setdefault(mtl, []).append(mesh)
+                    dest.setdefault(mtl, []).append(mesh)
             else:
-                n_prop_pyr += 1
+                if classe == "propriete":
+                    n_prop_pyr += 1
+                else:
+                    n_vois_pyr += 1
                 _, _, mur_mesh, toit_mesh = _pyramidal_mesh(poly, ring, haut, alt_toit, z_min)
-                groups_prop["mur"].append(mur_mesh)
+                dest["mur"].append(mur_mesh)
                 rc = cg.roof_color_from_ortho(poly, ortho, obb)
                 key = _ROOF_KEY.get(tuple(rc), "ardoise")
-                groups_prop.setdefault(key, []).append(toit_mesh)
+                dest.setdefault(key, []).append(toit_mesh)
 
     (GEO / "bati.json").write_text(json.dumps(
         {"z_min_ngf": z_min, "batiments": bat}, indent=1), encoding="utf-8")
     npr = sum(b["classe"] == "propriete" for b in bat)
+    n_vois = n_vois_roofer + n_vois_pyr
     print(f"{len(bat)} batiments : {npr} propriete, {len(bat) - npr} voisinage "
           f"({n_vois} emprises voisinage modelisees)")
     if npr:
-        print(f"toit propriete : {n_prop_lidar} en LiDAR HD multi-pans, "
+        print(f"toit propriete : {n_prop_roofer} via roofer (LiDAR HD IGN), "
               f"{n_prop_pyr} en repli pyramidal")
+    if n_vois:
+        print(f"toit voisinage : {n_vois_roofer} via roofer (LiDAR HD IGN), "
+              f"{n_vois_pyr} en repli pyramidal")
 
     # --- OBJ voisinage multi-materiaux ---
     import pyvista as pv

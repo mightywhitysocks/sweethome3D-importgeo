@@ -14,6 +14,20 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
 
 ## Environnement
 
+**Le pipeline de génération suppose désormais un environnement Linux**
+(`phase1_cadastre.py` -> `terrain.py` -> `bati.py` -> `vegetation.py` ->
+`courbes.py` -> `build_home.py`) : `bati.py` appelle `roofer` (cf. "Points
+durs" > roofer) pour le toit multi-pans des bâtiments propriété, et `roofer`
+n'a pas de build Windows officiel. Ce pipeline tourne dans une session
+Claude Code distante (venv pip, cf. ci-dessous) ou tout environnement Linux
+équivalent (WSL2, Docker). **Windows + conda `sitegeo` sert uniquement à
+ouvrir/rendre `Plan 3D.sh3d` dans l'application Sweet Home 3D native** — pas
+à relancer le pipeline de génération : `bati.py` s'y replierait
+silencieusement sur le toit pyramidal (binaire `roofer` introuvable), sans
+planter. `.\run.ps1` reste documenté ci-dessous pour un lancement partiel
+(un seul script, ex. `terrain.py` seul) ou historique, pas comme méthode
+principale.
+
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
 - **Jamais** `py` (Python système). **Jamais** `conda run` (casse le multi-lignes).
@@ -97,6 +111,15 @@ distinction ; le corriger si elle redevient trop générale.
   relecture par `Conv` + ouverture native. Ne pas s'y fier pour vérifier les calques.
 - **`bati.py` `_fnum`** filtre les NaN (BD TOPO `altitude_maximale_toit` souvent
   absente sur les parcelles voisines) sinon apex de toit NaN -> mesh cassé.
+- **Cache disque WFS/WMS** (`sitegeo._cached`, `data/net_cache/`) : le
+  Géoplateforme IGN limite le nombre d'accès consécutifs (constaté :
+  `ConnectionResetError` répétées en usage normal, PAS une coupure réseau).
+  `wfs_l93`, `wms_getmap` (donc `wms_ortho_rgb`/`wms_raster`) et
+  `lidar_tile_index` mettent leur réponse déjà parsée en cache disque,
+  indéfiniment -- **jamais invalidé automatiquement**. Si les données
+  source changent (nouvelle bbox, nouveau site, données BD TOPO/LiDAR mises
+  à jour côté IGN) : `rm -rf data/net_cache` avant de relancer. Même
+  répertoire `data/` que le reste (git-ignore).
 - **Rendu photo headless** (`verif.py --render`, `src/preview.py`) : `RenderPhoto.java`
   compilé comme `Conv.java`, moteur SunFlow de Sweet Home 3D. `.jar` et jars de
   rendu auto-détectés (installeur classique + Microsoft Store). Détails, cas Linux
@@ -113,25 +136,80 @@ distinction ; le corriger si elle redevient trop générale.
   n'est fiable qu'APRÈS `compute_normals(auto_orient_normals=True,
   consistent_normals=True)` -- `extrude(capping=True)` seul peut laisser des
   faces à l'envers (constaté : volume 2,3x trop grand avant, correct après).
-- **Dépendance externe optionnelle : `roofer`** (moteur 3DBAG/TU Delft,
-  https://github.com/3DBAG/roofer, **licence GPLv3**) -- utilisé uniquement par
-  `src/roofer_compare.py`, un outil de diagnostic ponctuel qui compare
-  `roof_lidar.build_roof` à `roofer` sur le(s) bâtiment(s) propriété. **Jamais
-  intégré à `run.ps1` / `build_home.py`**, ni redistribué dans ce dépôt : appelé
-  en sous-processus CLI (binaire externe, aucun code copié/lié) -- pas de
-  contamination de licence sur le code du dépôt. Installation : script officiel
-  `distribution/install.sh` du dépôt `roofer` (binaire précompilé Linux x86_64,
-  pas de sudo requis, pose `~/.local/bin/roofer`). Entrée attendue : dalle(s)
-  LAZ IGN (déjà ce que télécharge `cg.lidar_points_l93`, dalle brute non
-  filtrée par classe) + empreinte bâtiment en GeoPackage EPSG:2154 ; sortie :
-  CityJSONSequence (`*.city.jsonl`), attributs `rf_roof_planes`,
-  `rf_h_roof_ridge`, `rf_rmse_lod22`, etc. -- `rf_h_roof_ridge` peut être `None`
-  (aucun faîtage détecté), toujours protéger le formatage. Validé mécaniquement
-  (installation + CLI + parsing CityJSON) sur le jeu de test officiel du projet
-  (`wippolder.zip`, 60 bâtiments, ~2 s) dans une session Claude Code distante ;
-  jamais exécuté sur les données réelles du site (nécessite `config/site.local.toml`
-  rempli, absent par construction de ce type de session -- cf. section
-  Environnement).
+- **Dépendance externe : `roofer`** (moteur 3DBAG/TU Delft,
+  https://github.com/3DBAG/roofer, **licence GPLv3**) -- **méthode principale**
+  du toit + mur de TOUS les bâtiments (propriété et voisinage), appelée depuis
+  `bati.py` via `src/roofer_roof.py` (remplace l'ancien `roof_lidar.py`,
+  conservé dans le dépôt pour référence/comparaison avec
+  `src/roofer_compare.py`, plus appelés depuis `bati.py`). Non redistribué
+  dans ce dépôt : appelé en sous-processus CLI (binaire externe, aucun code
+  copié/lié) -- pas de contamination de licence sur le code du dépôt.
+  Installation : script officiel `distribution/install.sh` du dépôt `roofer`
+  (binaire précompilé Linux x86_64, pas de sudo requis, pose
+  `~/.local/bin/roofer`) -- **pas de build Windows officiel** (cf. section
+  Environnement : le pipeline de génération tourne donc en environnement
+  Linux, Windows sert uniquement au rendu/visualisation Sweet Home 3D).
+  Binaire absent ou en échec -> `roofer_roof.run_roofer` renvoie `None`, log
+  explicite, `bati.py` se replie sur le toit pyramidal pour tous les
+  bâtiments (jamais d'exception qui remonte). Entrée attendue : dalle(s) LAZ
+  IGN (déjà ce que télécharge `cg.lidar_points_l93`, dalle brute non filtrée
+  par classe) + empreinte de TOUS les bâtiments du site en un seul
+  GeoPackage EPSG:2154 (colonne `cleabs`, un seul appel CLI pour tout le lot
+  -- `roofer_roof.write_footprint_gpkg`) ; sortie : CityJSONSequence
+  (`*.city.jsonl`), géométrie `Solid` LoD2.2 par bâtiment (portée par le
+  `BuildingPart` enfant, PAS le `Building` parent qui porte `cleabs` -- cf.
+  `roofer_roof._find_roof_geometry`).
+  **`roofer_roof.py` consomme le `Solid` de roofer TEL QUEL** (aucune
+  reconstruction géométrique propre du mur ni regroupement de faces en pans
+  -- ni Union-Find sur les normales, ni ajustement de plan SVD, ni
+  extrapolation) : les semantics CityJSON (`GroundSurface`/`WallSurface`/
+  `RoofSurface`, `_solid_faces`) donnent directement le type de chaque face
+  et son pan d'appartenance (un index de surface `RoofSurface` = un pan
+  complet, roofer ne fragmente jamais un pan en plusieurs faces -- vérifié
+  sur 18 bâtiments réels). Seul ajout : un décalage vertical RIGIDE (une
+  seule translation, jamais de reconstruction par sommet) pour ancrer le
+  solide sous le maillage terrain, avec la même marge de sécurité que les
+  autres types de bâtiments du pipeline (`base_cm`, calculé par `bati.py`).
+  Chaque face est triangulée par éventail-centroïde (ajout du centroïde de
+  la face, un triangle par arête) plutôt que via `.triangulate()` générique
+  -- **constaté sur un bâtiment réel** : `.triangulate()` (VTK) peut laisser
+  un petit trou au milieu d'un pan à forme très étirée/complexe (11 sommets),
+  l'éventail-centroïde couvre par construction tout polygone simple, quelle
+  que soit sa forme. Approche alignée sur la pratique du projet officiel
+  `3DBAG/3dbag-surfaces` (classification par semantics, jamais de
+  reconstruction de mur à part) et sur l'algorithme documenté de roofer
+  (partition de l'empreinte d'entrée puis extrusion -- garantit que
+  l'empreinte du `Solid` en sortie correspond à l'empreinte BD TOPO fournie
+  en entrée, vérifié au cm près). Découpage en groupes de matériau pour
+  l'OBJ multi-matériaux (mur = Ground+Wall, un groupe par pan coloré via
+  `cg.roof_color_from_ortho`) fait sur le solide déjà validé fermé -- ne
+  réintroduit pas de trou (les arêtes de bord entre deux groupes restent
+  géométriquement coïncidentes, cf. vérification empirique : 0 arête ouverte
+  sur les 18 bâtiments reconstruits de cette session, groupes inclus).
+  **Bug confirmé (roofer 1.1.0-beta.1), n'affecte QUE `roofer_compare.py`**
+  (attributs CityJSON `rf_h_*`, pas la géométrie du `Solid` que consomme
+  `roofer_roof.py`) : `rf_h_ground` est exposé relatif à
+  `transform.translate[2]` (translation Z interne du CityJSON, pour la
+  compression des coordonnées), PAS en NGF absolu -- contrairement à
+  `rf_h_roof_min/max/50p/70p`, qui eux le sont bien. Confirmé empiriquement en
+  comparant le nuage rogné par roofer lui-même (`--crop-output`) : le Z réel
+  des points sol retombe à quelques cm de `rf_h_ground + transform.translate[2]`.
+  Écarté : bug connu "garbage value avec plusieurs pointclouds en entrée"
+  (déjà corrigé en v1.0.0-beta.6, testé ici avec 1 seule dalle -- résultat
+  identique). `rf_h_roof_ridge` (hauteur relative au sol) était déjà correct
+  tel quel ; seul `rf_h_ground` manquait ce recalage. Correctif appliqué dans
+  `_roofer_metrics` (`roofer_compare.py`) : lire `transform.translate[2]` sur
+  la ligne de métadonnées du `.city.jsonl` et l'ajouter à `rf_h_ground`.
+  Validé mécaniquement (installation + CLI + parsing CityJSON) sur le jeu de
+  test officiel du projet (`wippolder.zip`, 60 bâtiments, ~2 s), **et exécuté
+  de bout en bout sur les données réelles du site** dans une session Claude
+  Code distante (`config/site.local.toml` renseigné manuellement pour ce test,
+  jamais committé) : 5 bâtiments propriété, résultats cohérents avec
+  `roof_lidar.py` sur les cas simples (écart de quelques cm), divergents sur
+  un cas complexe (nombre de pans) et sur 2 cas limites (chacune des deux
+  méthodes réussit là où l'autre échoue) -- pas de verdict tranché en faveur
+  de l'une ou l'autre à ce stade, juste une confirmation que la comparaison
+  est mécaniquement fiable.
 
 ## git
 

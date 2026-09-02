@@ -4,6 +4,10 @@ Plan 3D.sh3d.bak
 *.sh3d.bak
 /data/
 /docs/notice_calage.md
+# log brut du CLI roofer (ecrit a la racine, hors data/) -- contient les
+# coordonnees L93 reelles de la parcelle en clair, cf. CLAUDE.md
+# Confidentialite
+roofer.log.json
 
 # --- config locale (donnees de la parcelle) ---
 /config/site.local.toml
