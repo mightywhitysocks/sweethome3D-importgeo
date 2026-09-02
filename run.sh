@@ -49,11 +49,15 @@ if [ -n "$site" ]; then
   export SITEGEO_CONFIG="$(cd "$(dirname "$site")" && pwd)/$(basename "$site")"
   echo ">> config site : $SITEGEO_CONFIG"
 else
+  # Tri par nouvelle ligne (pas `sort -z`/`find -print0`, absent du sort
+  # BSD par defaut sous macOS) : gere les espaces dans un nom de fichier,
+  # seul un saut de ligne litteral dans un nom (jamais en pratique) casserait.
   sites=()
-  while IFS= read -r -d '' f; do
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
     [ "$(basename "$f")" = "site.example.toml" ] && continue
     sites+=("$f")
-  done < <(find "$config_dir" -maxdepth 1 -name '*.toml' -print0 | sort -z)
+  done < <(find "$config_dir" -maxdepth 1 -name '*.toml' | sort)
 
   if [ "${#sites[@]}" -eq 0 ]; then
     cp "$config_dir/site.example.toml" "$local_cfg"

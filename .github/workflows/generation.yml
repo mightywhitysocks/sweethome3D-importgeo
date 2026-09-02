@@ -15,6 +15,16 @@ name: Génération
 on:
   workflow_dispatch:
 
+# File les declenchements en double (double-clic, deux personnes) au lieu de
+# les laisser courir en parallele pour rien (deux runs independants, meme
+# resultat, juste du calcul gaspille) -- ne PAS annuler un run deja en cours
+# (cancel-in-progress: false) : contrairement a build-image.yml, ici un run
+# en cours a de la valeur (potentiellement 30-60 min de travail reseau deja
+# fait), pas juste une image a reconstruire.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   packages: read
@@ -27,6 +37,7 @@ jobs:
   # GHCR/OCI (push/pull echoueraient sinon avec "must be lowercase").
   image-name:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       image: ${{ steps.compute.outputs.image }}
     steps:
@@ -37,7 +48,13 @@ jobs:
   generation:
     needs: image-name
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Estimation large, non mesuree sur un run reel (cf. limites connues) :
+    # roofer a son propre timeout interne de 600 s (roofer_roof.py), les
+    # telechargements LiDAR HD ont leur propre retry/backoff (429 IGN) qui
+    # peut a lui seul prendre plusieurs minutes sur un site avec beaucoup de
+    # batiments. Mieux vaut un budget large qu'un job tue en plein milieu
+    # sans rien a montrer -- ajuster ici si un run reel s'avere plus long.
+    timeout-minutes: 90
     container:
       image: ${{ needs.image-name.outputs.image }}
       # Obligatoire : un package GHCR publie par un run precedent n'est pas
@@ -113,6 +130,24 @@ jobs:
       - name: verif.py (contrôle, non bloquant)
         continue-on-error: true
         run: python3 src/verif.py
+
+      # Si une étape plante en cours de route, rien n'est publié par défaut
+      # (job en échec = pas d'artefact) : aucune visibilité sur ce qui a
+      # réellement tourné. `data/` (hors cache LiDAR, potentiellement
+      # volumineux) contient les sorties intermédiaires de chaque étape déjà
+      # passée — utile pour diagnostiquer sans relancer tout le pipeline en
+      # local. Même politique de rétention réduite que l'artefact principal
+      # (mêmes données géométriques du site).
+      - name: Publier data/ pour diagnostic (seulement si le job a échoué)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "data (diagnostic, run en échec)"
+          path: |
+            data/
+            !data/lidar_cache/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Publier Plan 3D.sh3d
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir -r /app/config/requirements-venv.txt
 # gdal (PROJ/GDAL statiquement lies) : on garde l'arborescence telle quelle
 # et on ajoute bin/ au PATH, pas de copie isolee du seul binaire.
 RUN mkdir -p /opt/roofer \
-    && curl -fsSL "https://github.com/3DBAG/roofer/releases/download/v1.1.0-beta.1/roofer-linux-x86_64-v1.1.0-beta.1.tar.gz" \
+    && curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused \
+       "https://github.com/3DBAG/roofer/releases/download/v1.1.0-beta.1/roofer-linux-x86_64-v1.1.0-beta.1.tar.gz" \
        -o /tmp/roofer.tar.gz \
     && tar -xzf /tmp/roofer.tar.gz -C /opt/roofer \
     && rm /tmp/roofer.tar.gz \
@@ -39,9 +40,14 @@ ENV PATH="/opt/roofer/bin:${PATH}"
 # par generation.yml pour ecrire [tools].sweethome3d_jar. `--strip-components=1`
 # retire le dossier versionne (SweetHome3D-7.5/) du tgz -- le jar et les jars
 # de rendu vivent ensuite dans lib/ (verifie sur l'archive reelle), PAS a la
-# racine de l'archive.
+# racine de l'archive. SourceForge peut repondre 403 (Cloudflare) a certains
+# clients/IP sans user-agent de navigateur -- `-A` + `--retry-all-errors` en
+# best-effort ; si ca s'avere instable en pratique en CI, repli possible :
+# heberger ce tgz en asset d'une release du depot plutot que sur SourceForge.
 RUN mkdir -p /opt/sweethome3d \
-    && curl -fsSL "https://sourceforge.net/projects/sweethome3d/files/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz/download" \
+    && curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+       -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+       "https://sourceforge.net/projects/sweethome3d/files/SweetHome3D/SweetHome3D-7.5/SweetHome3D-7.5-linux-x64.tgz/download" \
        -o /tmp/sh3d.tgz \
     && tar -xzf /tmp/sh3d.tgz -C /opt/sweethome3d --strip-components=1 \
     && rm /tmp/sh3d.tgz \
