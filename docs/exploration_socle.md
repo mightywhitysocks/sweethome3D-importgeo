@@ -6,7 +6,10 @@ maintenance à long terme (suite à la bascule `roof_lidar.py` -> `roofer`).
 Pistes évaluées : Potree/point-server/PointsTools (viewer derrière
 visionneuse-lidarhd.ign.fr), cartes-ign-app, lidar-prod, myria3d, puis
 approfondissement ciblé sur `ign-pdal-tools`, un remplaçant pour
-`vegetation.py`, et Entwine/Potree upstream comme outil de QC.
+`vegetation.py`, Entwine/Potree upstream comme outil de QC, puis, sur les
+zones de code maison restant hors LiDAR/végétation : écrire le `.sh3d` sans
+bridge Java, un client cadastre officiel, et un générateur de terrain 3D
+existant.
 
 **Conclusion générale : aucune des pistes ne remplace de code existant.** Le
 socle actuel (LiDAR HD déjà classé à la source + `roofer` pour la géométrie +
@@ -39,6 +42,9 @@ article *3D AI in the LiDAR HD Production Process* (LIDAR Magazine, 2024).
 | ign-pdal-tools | Écarté (voir détail) | Ne télécharge aucun nuage LiDAR depuis le Géoplateforme — hors du besoin critique. |
 | Entwine/Potree upstream (QC) | Écarté (voir détail) | Dépendance PDAL native non trivialement installable dans l'environnement du pipeline, pour un gain marginal. |
 | Remplaçant `vegetation.py` | Aucun trouvé | Pas d'outil mûr, maintenu et gratuit qui fasse détection d'arbres individuels + haies à cette échelle. |
+| `sh3d.py` / `python-javaobj` (écrire le `.sh3d` sans JVM) | Écarté (voir détail) | Le premier ne fait que lire ; le second sait écrire du Java sérialisé générique mais pas le graphe d'objets `Home` réel. |
+| Client Python officiel pour le cadastre (`phase1_cadastre.py`) | Aucun trouvé | Aucun wrapper maintenu au-delà du WFS brut ; la doc officielle recommande elle-même `requests` nu. |
+| Génération terrain (`terrain.py`) par un outil DEM->mesh existant | Écarté (voir détail) | Outils trouvés visent l'impression 3D ou le tuilage massif, aucun ne fait le drapage UV + volume fermé dans un repère plan cm arbitraire. |
 
 ## Focus 1 — `ign-pdal-tools`
 
@@ -140,6 +146,95 @@ natif, non garanti dans l'environnement de session distante) dépasse le gain
 par rapport à l'existant (`preview.py` en 2D, rendu SunFlow pour le contrôle
 qualité final).
 
+## Focus 4 — écrire le `.sh3d` sans bridge Java (`build_home.py` / `java/Conv.java`)
+
+Le point dur le plus lourd du pipeline (cf. `docs/PIPELINE.md`) : le loader
+Sweet Home 3D exige une entrée `Home` **sérialisée au format binaire Java**
+(`ObjectOutputStream`), que Python ne sait pas produire nativement — d'où le
+détour actuel par une JVM (`javac` + `java` sur `Conv.java`, qui appelle les
+vraies classes `com.eteks.sweethome3d.io.HomeFileRecorder` du `.jar`
+propriétaire). Question : existe-t-il un moyen de produire ce flux binaire
+directement en Python, sans JVM ?
+
+- **`Salamek/sh3d.py`** (PyPI `sh3d.py`, LGPL-3.0, actif — dernière version
+  0.2.2 en juin 2025) : parseur Python pur du format `.sh3d`, capable de
+  décoder **aussi bien** `Home.xml` que l'entrée binaire `Home` (options
+  `HomeSource.XML` / `HomeSource.JavaObject`). Confirme que le format binaire
+  est décodable hors JVM. Mais c'est un lecteur seul — aucune fonction
+  d'écriture n'est exposée ni documentée.
+- **`tcalmant/python-javaobj`** (Apache-2.0, actif, 84 étoiles) : la brique
+  générique dont dépend probablement ce type de lecteur — son implémentation
+  `v3` sait à la fois lire **et écrire** (`dump()`/`dumps()`) le format
+  Java Object Serialization en pur Python. Ce n'est donc pas la sérialisation
+  binaire elle-même qui bloque : l'obstacle est ailleurs.
+- **L'obstacle réel** : `python-javaobj` sérialise des objets Python déjà
+  construits pour ressembler à des beans Java (mêmes champs, mêmes types) —
+  il ne connaît rien de la classe `com.eteks.sweethome3d.model.Home` ni de
+  ses dizaines de classes associées (`Wall`, `Room`, `HomePieceOfFurniture`,
+  `Level`, `Camera`, …), dont beaucoup implémentent des méthodes
+  `writeObject`/`readObject` personnalisées (pas la sérialisation par défaut
+  champ-à-champ) pour gérer la compatibilité de version entre releases de
+  Sweet Home 3D. Reproduire ça à la main reviendrait à ré-implémenter et
+  maintenir, en Python, un décalque du modèle de données interne de Sweet
+  Home 3D — recalé à chaque montée de version de l'appli — soit une dette
+  largement supérieure au bridge Java actuel, qui lui délègue cette
+  correctness aux vraies classes upstream quelle que soit la version du
+  `.jar` détectée.
+
+**Verdict : ne pas remplacer le bridge Java.** Le fondement technique du
+blocage (sérialisation Java binaire) est contournable en pur Python, mais le
+vrai coût — modéliser fidèlement et maintenir le graphe de classes Sweet
+Home 3D — resterait entier et deviendrait une charge de maintenance propre au
+projet, à l'exact inverse de l'objectif de cette exploration.
+
+## Focus 5 — client Python pour le cadastre (`phase1_cadastre.py`)
+
+`phase1_cadastre.py` interroge directement le WFS IGN via
+`cg.parcels_l93()` (requêtes HTTP maison). Recherche d'un client officiel ou
+communautaire mûr qui réduirait ce code :
+
+- **`IGNF/apicarto`** (dépôt GitHub officiel) : c'est l'implémentation de
+  l'API elle-même (JavaScript, service derrière `apicarto.ign.fr`), pas une
+  bibliothèque cliente à installer côté consommateur.
+- **Guide officiel `data.gouv.fr`** ("Manipuler les données du cadastre") :
+  recommande explicitement `requests` pour des appels ponctuels et `httpx`
+  asynchrone pour du batch — aucun client Python dédié n'est mentionné ni
+  requis.
+- Aucun autre wrapper Python maintenu trouvé pour l'API Carto module
+  cadastre (les projets Python "cadastre" identifiés sur GitHub visent
+  d'autres pays — Russie, Italie, Espagne — ou d'autres formats, ex. export
+  OSM du Plan Cadastral Informatisé, hors sujet ici).
+
+**Verdict : garder le code maison.** L'écosystème officiel recommande
+lui-même l'appel HTTP direct ; il n'y a pas de dette à réduire ici, la
+fonction `parcels_l93()` fait déjà ce que la documentation IGN suggère de
+faire.
+
+## Focus 6 — génération du terrain (`terrain.py`) par un outil DEM->mesh existant
+
+`terrain.py` transforme un MNT LIDAR HD en volume fermé texturé (grille
+régulière -> `cg.grid_surface` + `cg.solidify` PyVista, UV drapées sur
+l'ortho, écrit en OBJ dans le repère plan cm du projet). Outils candidats
+identifiés pour remplacer cette étape :
+
+| Outil | Écarté pourquoi |
+|---|---|
+| `tin-terrain` (HERE Maps) | Pensé pour du tuilage de terrain à l'échelle d'un territoire (sorties tuile par tuile, format `quantized-mesh`) ; pas de notion de volume fermé ni de drapage UV sur une orthophoto propre au projet. |
+| `TouchTerrain`, `dem2stl`, `phstl`, DEMto3D (QGIS) | Toute la famille "impression 3D" : sortie STL non texturée, souvent non fermée dans le sens attendu ici (fermeture pour l'impression, pas pour un rendu texturé), aucune gestion de repère plan local en cm. |
+| `DTM2MESH` | Portage DTM -> Collada via OpenCV, mais projet isolé/peu maintenu, sans drapage UV sur une ortho externe ni sortie OBJ directe. |
+
+Aucun de ces outils ne couvre le vrai besoin : un maillage **dans le repère
+plan cm propre à ce projet** (pas WGS84/Web Mercator), avec **drapage UV**
+exact sur l'ortho IGN déjà téléchargée par `phase1_cadastre.py`, en **volume
+fermé** utilisable tel quel par le loader OBJ de Sweet Home 3D. C'est un
+besoin de glue spécifique au pipeline, pas un problème géométrique générique
+— le cœur géométrique (`grid_surface`/`solidify`, une quinzaine de lignes
+PyVista) est déjà minimal.
+
+**Verdict : garder le code maison**, même conclusion que pour `vegetation.py` :
+pas de dette technique à réduire, aucun outil mûr ne fait ce drapage
+spécifique.
+
 ## Point encore ouvert : `roof_lidar.py` / `roofer_compare.py`
 
 Seul reliquat de développement spécifique identifié par l'audit interne :
@@ -165,3 +260,10 @@ comparaison avec une échéance de décision.
   `github.com/manaakiwhenua/pycrown` (archivé), `github.com/jblindsay/whitebox-tools`
 - Comparatif couches végétation BD TOPO :
   `geoservices.ign.fr/sites/default/files/2021-07/Comparatif_Vegetation.pdf`
+- `pypi.org/project/sh3d.py/`, `github.com/Salamek/sh3d.py` (lecteur `.sh3d`)
+- `github.com/tcalmant/python-javaobj` (sérialisation Java générique lire/écrire)
+- `github.com/IGNF/apicarto`, guide `data.gouv.fr` "Manipuler les données du
+  cadastre" (`guides.data.gouv.fr/guides/reutiliser-des-donnees/autour-du-cadastre`)
+- `github.com/heremaps/tin-terrain`,
+  `github.com/ChHarding/TouchTerrain_for_CAGEO`, `github.com/cvr/dem2stl`,
+  `github.com/anoved/phstl`, `github.com/jonathanlurie/DTM2MESH`
