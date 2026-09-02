@@ -27,8 +27,13 @@ RUN pip install --no-cache-dir -r /app/config/requirements-venv.txt
 # cf. plan, revue securite). Contient son propre bin/ + share/proj + share/
 # gdal (PROJ/GDAL statiquement lies) : on garde l'arborescence telle quelle
 # et on ajoute bin/ au PATH, pas de copie isolee du seul binaire.
+# `--retry-all-errors` (pas seulement `--retry-connrefused`) : un premier
+# run reel a echoue ici en ~1 s, trop vite pour un vrai retry reseau --
+# signe d'une erreur HTTP transitoire (4xx/5xx) que `--retry-connrefused`
+# seul ne couvre pas (reproduit sans probleme en local juste apres, donc
+# bien transitoire cote CDN, pas l'URL/le contenu).
 RUN mkdir -p /opt/roofer \
-    && curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused \
+    && curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
        "https://github.com/3DBAG/roofer/releases/download/v1.1.0-beta.1/roofer-linux-x86_64-v1.1.0-beta.1.tar.gz" \
        -o /tmp/roofer.tar.gz \
     && tar -xzf /tmp/roofer.tar.gz -C /opt/roofer \
