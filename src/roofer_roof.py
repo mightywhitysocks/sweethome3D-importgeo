@@ -38,6 +38,7 @@ toit pyramidal, jamais de batiment sans toit modelise.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -61,6 +62,19 @@ def find_roofer_bin() -> str | None:
     return p if Path(p).exists() else None
 
 
+def _roofer_gdal_data(bin_path: str) -> str | None:
+    """Dossier `share/gdal` du bundle roofer (`bin/roofer` + `share/proj` +
+    `share/gdal` cote a cote dans l'archive officielle, cf. Dockerfile),
+    ou None si absent. PROJ se relocalise seul (`/proc/self/exe` + chemin
+    relatif, verifie dans le binaire), mais GDAL n'a pas cet equivalent -- le
+    binaire ne retrouverait alors que son chemin de build Conan (absent a
+    l'execution). Ne JAMAIS positionner GDAL_DATA globalement (casserait le
+    gdal_contour systeme utilise par courbes.py, qui trouve deja tout seul
+    son propre GDAL_DATA) : uniquement pour ce sous-processus roofer."""
+    share_gdal = Path(bin_path).resolve().parent.parent / "share" / "gdal"
+    return str(share_gdal) if share_gdal.is_dir() else None
+
+
 def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, log=print):
     """Appel CLI unique sur tous les batiments du footprint_gpkg (un
     GeoPackage EPSG:2154 avec une colonne 'cleabs'). Renvoie
@@ -79,8 +93,12 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
     shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True)
     cmd = [bin_path, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
+    env = os.environ.copy()
+    gdal_data = _roofer_gdal_data(bin_path)
+    if gdal_data:
+        env["GDAL_DATA"] = gdal_data
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=ROOFER_TIMEOUT_S)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=ROOFER_TIMEOUT_S, env=env)
     except Exception as e:                                          # noqa: BLE001
         log(f"  toit roofer : appel CLI echoue ({type(e).__name__}: {e}) -> repli pyramidal")
         return None

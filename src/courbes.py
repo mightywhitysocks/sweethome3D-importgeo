@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 
 import sitegeo as cg          # noqa: E402  (regle GDAL_DATA/PROJ_LIB en premier)
@@ -19,18 +20,40 @@ ENV = cg.ENV_ROOT
 EQUI = 1.0
 
 
+def _gdal_contour_cmd() -> tuple[list[str], dict] | None:
+    """(argv, env) pour lancer gdal_contour, ou None si introuvable -- jamais
+    d'exception, meme esprit que roofer_roof.find_roofer_bin /
+    cg.find_sweethome3d_jar. `shutil.which` d'abord (gdal-bin Linux/macOS,
+    ou tout gdal_contour deja sur le PATH) : dans ce cas on herite
+    l'environnement courant tel quel -- ne jamais imposer le PATH/GDAL_DATA
+    du conda Windows a un binaire qui n'en vient pas. Sinon, replie sur le
+    conda Windows (gdal_contour.exe absent du PATH par defaut la, meme sous
+    l'env `sitegeo` actif) avec son GDAL_DATA/PROJ_LIB/PATH dedies."""
+    found = shutil.which("gdal_contour")
+    if found:
+        return [found], dict(os.environ)
+    win = ENV / "Library" / "bin" / "gdal_contour.exe"
+    if win.exists():
+        return [str(win)], {**os.environ,
+                            "GDAL_DATA": str(ENV / "Library/share/gdal"),
+                            "PROJ_LIB": str(ENV / "Library/share/proj"),
+                            "PATH": str(ENV / "Library/bin")}
+    return None
+
+
 def main() -> None:
     gj = GEO / "courbes.geojson"
     if gj.exists():
         gj.unlink()
+    cmd = _gdal_contour_cmd()
+    if cmd is None:
+        print("gdal_contour introuvable (PATH, ni conda Windows) -> courbes de niveau ignorees.")
+        return
+    argv, env = cmd
     subprocess.run(
-        [str(ENV / "Library" / "bin" / "gdal_contour.exe"),
-         "-a", "alt", "-i", str(EQUI), "-f", "GeoJSON",
+        [*argv, "-a", "alt", "-i", str(EQUI), "-f", "GeoJSON",
          str(GEO / "mnt.tif"), str(gj)],
-        check=True, env={**os.environ,
-                         "GDAL_DATA": str(ENV / "Library/share/gdal"),
-                         "PROJ_LIB": str(ENV / "Library/share/proj"),
-                         "PATH": str(ENV / "Library/bin")})
+        check=True, env=env)
 
     feats = json.loads(gj.read_text(encoding="utf-8"))["features"]
     alts = sorted({round(f["properties"]["alt"]) for f in feats})

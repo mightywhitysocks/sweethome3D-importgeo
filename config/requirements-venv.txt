@@ -1,26 +1,25 @@
 # Substitut pip (sans conda) de config/environment.yml, pour lancer src/*.py
 # directement (verif.py, build_home.py, bati.py, ...) dans un venv classique --
-# utile quand l'env conda `sitegeo` n'est pas disponible (ex. session Claude
-# Code distante, cf. CLAUDE.md §Environnement > Session Claude Code distante).
+# utilise par run.sh (Linux/macOS) et par l'image Docker de generation.yml.
 #
 #   python3 -m venv .venv && .venv/bin/pip install -r config/requirements-venv.txt
 #   .venv/bin/python src/verif.py
 #
-# Valide de bout en bout dans ce mode (imports + execution reelle, pas
-# seulement l'installation) : verif.py, build_home.py, bati.py (incluant
-# roof_lidar.py). Un seul manque connu et non bloquant pour build_home.py :
-# gdal_contour.exe (courbes.py) n'a pas d'equivalent pip installable (binaire
-# GDAL Windows).
+# gdal_contour (courbes.py) n'a pas d'equivalent pip installable : requiert
+# le paquet systeme gdal-bin (apt) / gdal (Homebrew), deja present dans
+# l'image Docker de generation.yml -- cf. README.md > Prerequis pour un venv
+# local.
 #
-# Versions figees a celles reellement testees (pas un simple report des
-# pins conda de environment.yml : le python3 par defaut de ce type de
-# conteneur est 3.11, pas 3.12 -- numpy 2.5.* exige >=3.12 et n'installe pas).
-numpy~=2.4.6
-scipy~=1.17.1
+# Versions harmonisees avec config/environment.yml (memes versions cote
+# conda Windows et pip Linux/macOS/Docker, cf. CLAUDE.md) -- besoin de
+# Python >=3.12 (numpy 2.5.* l'exige). Python 3.14 recommande (image Docker
+# et environment.yml alignes dessus).
+numpy~=2.5.2
+scipy~=1.18.1
 shapely~=2.1.2
 geopandas~=1.1.4
-owslib~=0.35.0
-rasterio~=1.4.4
+owslib~=0.36.0
+rasterio~=1.5.1
 scikit-image~=0.26.0
 networkx~=3.6.1
 pyproj~=3.7.2

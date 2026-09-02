@@ -1,0 +1,160 @@
+# Lance le pipeline de generation complet (phase1_cadastre -> ... ->
+# build_home) dans l'image CI (Dockerfile, publiee par build-image.yml) et
+# publie Plan 3D.sh3d en artefact. A la demande uniquement (jamais sur
+# push/PR : appels reseau IGN/LiDAR HD couteux en temps).
+#
+# A NE DECLENCHER QUE depuis une copie PRIVEE de ce depot (cf. README.md) :
+# sur un depot public, les logs de ce run et l'artefact publie sont visibles
+# par n'importe quel compte GitHub, pas seulement les collaborateurs.
+#
+# Prerequis : le secret de repo SITE_LOCAL_TOML (contenu d'un
+# config/site.local.toml SANS section [tools] -- celle-ci est calculee par
+# ce workflow) et une image CI deja construite (build-image.yml).
+name: Génération
+
+on:
+  workflow_dispatch:
+
+# File les declenchements en double (double-clic, deux personnes) au lieu de
+# les laisser courir en parallele pour rien (deux runs independants, meme
+# resultat, juste du calcul gaspille) -- ne PAS annuler un run deja en cours
+# (cancel-in-progress: false) : contrairement a build-image.yml, ici un run
+# en cours a de la valeur (potentiellement 30-60 min de travail reseau deja
+# fait), pas juste une image a reconstruire.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  # `container:` (job generation ci-dessous) est evalue AVANT toute step de
+  # ce job -- impossible d'y calculer les minuscules dans une step normale.
+  # Job separe uniquement pour ca : `github.repository` peut contenir des
+  # majuscules (ex. "sweethome3D-importgeo"), interdites dans un chemin
+  # GHCR/OCI (push/pull echoueraient sinon avec "must be lowercase").
+  image-name:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.compute.outputs.image }}
+    steps:
+      - name: Minuscules (requis par OCI/GHCR)
+        id: compute
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
+  generation:
+    needs: image-name
+    runs-on: ubuntu-latest
+    # Estimation large, non mesuree sur un run reel (cf. limites connues) :
+    # roofer a son propre timeout interne de 600 s (roofer_roof.py), les
+    # telechargements LiDAR HD ont leur propre retry/backoff (429 IGN) qui
+    # peut a lui seul prendre plusieurs minutes sur un site avec beaucoup de
+    # batiments. Mieux vaut un budget large qu'un job tue en plein milieu
+    # sans rien a montrer -- ajuster ici si un run reel s'avere plus long.
+    timeout-minutes: 90
+    container:
+      image: ${{ needs.image-name.outputs.image }}
+      # Obligatoire : un package GHCR publie par un run precedent n'est pas
+      # garanti pullable par le seul GITHUB_TOKEN implicite d'un job
+      # `container:`, meme dans le meme depot (echecs "unauthorized"
+      # confirmes sans ce bloc explicite).
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Écrire config/site.local.toml (secret + [tools] calculés par le workflow)
+        env:
+          SITE_LOCAL_TOML: ${{ secrets.SITE_LOCAL_TOML }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          raw = os.environ["SITE_LOCAL_TOML"]
+          if not raw.strip():
+              raise SystemExit(
+                  "Secret SITE_LOCAL_TOML absent ou vide -- a créer dans "
+                  "Settings > Secrets and variables > Actions de cette copie privée."
+              )
+          try:
+              data = tomllib.loads(raw)
+          except tomllib.TOMLDecodeError:
+              # Pas de details de l'erreur ici : un message tomllib peut
+              # citer un fragment du contenu du secret.
+              raise SystemExit(
+                  "SITE_LOCAL_TOML n'est pas un TOML valide -- validez-le "
+                  "localement (ex. python3 -c \"import tomllib; "
+                  "tomllib.load(open('site.local.toml','rb'))\") avant de "
+                  "mettre a jour le secret."
+              )
+          if "tools" in data:
+              raise SystemExit(
+                  "SITE_LOCAL_TOML contient déjà une section [tools] -- à retirer du "
+                  "secret, elle est ajoutée automatiquement par ce workflow "
+                  "(chemins fixes de l'image CI)."
+              )
+
+          text = raw if raw.endswith("\n") else raw + "\n"
+          text += '\n[tools]\nsweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"\n'
+          path = pathlib.Path("config/site.local.toml")
+          path.write_text(text, encoding="utf-8")
+
+          tomllib.loads(path.read_text(encoding="utf-8"))  # re-parse de contrôle
+          print("config/site.local.toml écrit (contenu non affiché).")
+          PY
+
+      - name: phase1_cadastre.py
+        run: python3 src/phase1_cadastre.py
+
+      - name: terrain.py
+        run: python3 src/terrain.py
+
+      - name: bati.py
+        run: python3 src/bati.py
+
+      - name: vegetation.py
+        run: python3 src/vegetation.py
+
+      - name: courbes.py
+        run: python3 src/courbes.py
+
+      - name: build_home.py
+        run: python3 src/build_home.py
+
+      - name: verif.py (contrôle, non bloquant)
+        continue-on-error: true
+        run: python3 src/verif.py
+
+      # Si une étape plante en cours de route, rien n'est publié par défaut
+      # (job en échec = pas d'artefact) : aucune visibilité sur ce qui a
+      # réellement tourné. `data/` (hors cache LiDAR, potentiellement
+      # volumineux) contient les sorties intermédiaires de chaque étape déjà
+      # passée — utile pour diagnostiquer sans relancer tout le pipeline en
+      # local. Même politique de rétention réduite que l'artefact principal
+      # (mêmes données géométriques du site).
+      - name: Publier data/ pour diagnostic (seulement si le job a échoué)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "data (diagnostic, run en échec)"
+          path: |
+            data/
+            !data/lidar_cache/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Publier Plan 3D.sh3d
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "Plan 3D"
+          path: "Plan 3D.sh3d"
+          if-no-files-found: error
+          # Minimise la fenêtre de rétention d'un artefact contenant la
+          # géométrie exacte du site, même sur une copie privée.
+          retention-days: 7
