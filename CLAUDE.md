@@ -124,14 +124,19 @@ distinction ; le corriger si elle redevient trop générale.
   compilé comme `Conv.java`, moteur SunFlow de Sweet Home 3D. `.jar` et jars de
   rendu auto-détectés (installeur classique + Microsoft Store). Détails, cas Linux
   (`xvfb-run`) et limites : `docs/PIPELINE.md`.
-- **`roof_lidar.py`** (toit multi-pans de la propriété) : `MIN_INLIERS` RANSAC
-  et `MIN_COMPONENT_PTS` (repli coin en L) sont volontairement bas -- un seuil
-  trop haut traite un vrai pan/segment de jonction comme du bruit statistique
-  (constaté : un amas de 3-5 points gagnait par hasard le ratio des valeurs
-  singulières devant un amas réel de 40-80 points). Toujours revalider par
-  cohérence spatiale (composantes connexes), jamais par un seul seuil. `None`
-  en sortie (nuage trop petit, aucun plan, partition non close) -> `bati.py`
-  se replie sur le toit pyramidal, jamais de bâtiment propriété sans toit.
+- **`roof_lidar.py`** (ancienne méthode de reconstruction du toit multi-pans
+  de la propriété par RANSAC direct sur le nuage LiDAR ; **plus appelée par
+  `bati.py`**, remplacée par `roofer` -- cf. "Dépendance externe : roofer"
+  ci-dessous -- conservée dans le dépôt uniquement pour référence/comparaison
+  via `roofer_compare.py`) : `MIN_INLIERS` RANSAC et `MIN_COMPONENT_PTS`
+  (repli coin en L) y sont volontairement bas -- un seuil trop haut traite un
+  vrai pan/segment de jonction comme du bruit statistique (constaté : un
+  amas de 3-5 points gagnait par hasard le ratio des valeurs singulières
+  devant un amas réel de 40-80 points). Toujours revalider par cohérence
+  spatiale (composantes connexes), jamais par un seul seuil. `None` en
+  sortie (nuage trop petit, aucun plan, partition non close) -> repli sur le
+  toit pyramidal côté appelant (comportement d'origine, non exercé par le
+  pipeline actuel).
 - **Solide fermé PyVista** : `mesh.volume` (et tout calcul de volume signé)
   n'est fiable qu'APRÈS `compute_normals(auto_orient_normals=True,
   consistent_normals=True)` -- `extrude(capping=True)` seul peut laisser des
