@@ -59,15 +59,21 @@ def _load_site() -> dict:
     if not p.exists():
         ex = ROOT / "config" / "site.example.toml"
         dst = ROOT / "config" / "site.local.toml"
+        copied = False
         try:
             if ex.exists() and not dst.exists():
                 shutil.copy(ex, dst)
+                copied = True
         except OSError:
             pass
-        raise SystemExit(
-            f"Config absente : {p}\n"
+        detail = (
             f"  '{dst}' vient d'etre cree depuis le gabarit ; renseignez votre "
-            f"parcelle (insee / section / parcels) puis relancez.")
+            f"parcelle (insee / section / parcels) puis relancez."
+        ) if copied else (
+            f"  '{dst}' introuvable et le gabarit '{ex}' n'a pas pu etre copie "
+            f"(absent, ou erreur de copie) ; creez '{dst}' manuellement puis relancez."
+        )
+        raise SystemExit(f"Config absente : {p}\n{detail}")
     return tomllib.loads(p.read_text(encoding="utf-8"))
 
 
@@ -236,6 +242,12 @@ _ENV_ROOT = ENV_ROOT          # compat
 os.environ.setdefault("GDAL_DATA", str(ENV_ROOT / "Library" / "share" / "gdal"))
 os.environ.setdefault("PROJ_LIB", str(ENV_ROOT / "Library" / "share" / "proj"))
 
+# Timeout HTTP GDAL (vsicurl) : sans lui, gpd.read_file() sur une URL (parcels_l93,
+# wfs_l93) peut bloquer indefiniment sur une connexion ouverte sans reponse -- deja
+# constate sur le Geoplateforme IGN (limite d'acces consecutifs, cf. CLAUDE.md).
+os.environ.setdefault("GDAL_HTTP_TIMEOUT", "60")
+os.environ.setdefault("GDAL_HTTP_CONNECTTIMEOUT", "10")
+
 
 # --------------------------------------------------------------------------- #
 # Repere plan SH3D
@@ -396,10 +408,12 @@ def wms_getmap(layers, bbox_l93, res_m: float = 0.5,
     def _fetch():
         from owslib.wms import WebMapService
 
-        wms = WebMapService(WMS_URL, version="1.3.0")
+        # timeout explicite (GetCapabilities a la construction + GetMap) plutot
+        # que de compter sur le defaut owslib (30s, implicite, non documente ici).
+        wms = WebMapService(WMS_URL, version="1.3.0", timeout=60)
         r = wms.getmap(layers=layer_names, srs="EPSG:2154",
                        bbox=(e0, n0, e1, n1), size=(w, h), format=fmt,
-                       transparent=False)
+                       transparent=False, timeout=60)
         return r.read()
 
     key = f"wms_{'_'.join(layer_names)}_{e0:.2f}_{n0:.2f}_{e1:.2f}_{n1:.2f}_{w}x{h}_{fmt.replace('/', '_')}"
@@ -564,6 +578,12 @@ def roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox) -> tuple[int, int, in
     if (r + g + b) / 3 > 150:
         return (120, 124, 130)        # fibro / toit clair
     return (62, 66, 72)               # ardoise / zinc
+
+
+# Cle materiau pour chacune des 3 couleurs renvoyees par roof_color_from_ortho
+# (bati.py, roofer_roof.py, roof_lidar.py) -- une seule definition : un futur
+# changement de palette ne doit etre applique qu'ici.
+ROOF_COLOR_KEY = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise", (120, 124, 130): "fibro"}
 
 
 # --------------------------------------------------------------------------- #

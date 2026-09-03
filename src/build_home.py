@@ -271,10 +271,11 @@ def _prepare_java() -> Path:
     cls = JCONV / "com" / "eteks" / "sweethome3d" / "io" / "Conv.class"
     src = cg.JAVA / "Conv.java"
     if not cls.exists() or cls.stat().st_mtime < src.stat().st_mtime:
-        subprocess.run(["javac", "-cp", str(jar), "-d", str(JCONV), str(src)],
-                       check=False, capture_output=True, text=True)
+        r = subprocess.run(["javac", "-cp", str(jar), "-d", str(JCONV), str(src)],
+                           check=False, capture_output=True, text=True)
         if not cls.exists():
-            raise SystemExit("javac a echoue (JDK sur le PATH ?)")
+            print(r.stdout.strip() or r.stderr.strip()[:800])
+            raise SystemExit("javac a echoue (JDK sur le PATH, ou erreur de compilation ci-dessus)")
     return jar
 
 
