@@ -1,8 +1,13 @@
 # Image CI figee pour le pipeline de generation (phase1_cadastre -> ... ->
 # build_home), publiee par .github/workflows/build-image.yml et consommee
-# par .github/workflows/generation.yml. Toutes les versions sont epinglees
-# (aucun "latest") ; versions harmonisees avec config/environment.yml /
-# config/requirements-venv.txt -- cf. CLAUDE.md section Environnement.
+# par .github/workflows/generation.yml. Image de base, telechargements
+# binaires externes (roofer, Sweet Home 3D -- avec somme de controle) et
+# dependances Python epingles par version (aucun "latest") ; versions
+# harmonisees avec config/environment.yml / config/requirements-venv.txt --
+# cf. CLAUDE.md section Environnement. Seuls les paquets `apt-get install`
+# ci-dessous ne le sont pas (versions Debian `trixie`, susceptibles de
+# deriver dans le temps au gre des mises a jour de securite) :
+# reproductibilite partielle sur ce point precis, pas totale.
 #
 # Ne contient AUCUNE donnee de site : config/site.local.toml est ecrit par
 # le workflow a partir d'un secret de repo, jamais bake ici.
@@ -34,10 +39,16 @@ RUN pip install --no-cache-dir -r /app/config/requirements-venv.txt
 # officiel embarque `bin/roofer` en `-rw-r--r--` (pas executable), pas un
 # probleme reseau -- `chmod +x` explicite apres extraction (le tar
 # lui-meme se telecharge/extrait sans probleme, confirme sur ce run).
+# Somme de controle calculee sur l'archive telle que publiee sur ce tag GitHub
+# release (immutable) -- gzip -t seul valide l'integrite de l'archive, pas son
+# contenu : un miroir compromis ou une attaque MITM servant un gzip valide
+# mais altere passerait silencieusement sinon.
+ARG ROOFER_SHA256=12096b4bc2f96d9134aba4b9a5d9268c06c69b873619a742b08c6f22ba2c2e99
 RUN mkdir -p /opt/roofer \
     && curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
        "https://github.com/3DBAG/roofer/releases/download/v1.1.0-beta.1/roofer-linux-x86_64-v1.1.0-beta.1.tar.gz" \
        -o /tmp/roofer.tar.gz \
+    && echo "${ROOFER_SHA256}  /tmp/roofer.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/roofer.tar.gz -C /opt/roofer \
     && rm /tmp/roofer.tar.gz \
     && chmod +x /opt/roofer/bin/roofer \
@@ -64,6 +75,13 @@ ENV PATH="/opt/roofer/bin:${PATH}"
 #      (sweethome3d-mirror-7.5, verifiee identique octet pour octet a
 #      l'archive officielle, redistribution GPL non modifiee -- cf.
 #      NOTICE).
+# Somme de controle unique pour les 5 miroirs : tous censes servir le meme
+# fichier officiel SweetHome3D-7.5-linux-x64.tgz (le miroir 5, copie hebergee
+# par ce depot, est verifie identique octet pour octet a l'archive officielle,
+# cf. NOTICE) -- gzip -t seul (deja en place) ne detecte qu'un gzip invalide
+# (page HTML d'interstitiel SourceForge), pas un contenu altere par un miroir
+# compromis ou une attaque MITM.
+ARG SH3D_SHA256=53487eed09650d5cd4310733e3ec80434633ed9df372793acd6fab2c319c2322
 RUN mkdir -p /opt/sweethome3d \
     && ok=0 \
     && for u in \
@@ -76,6 +94,7 @@ RUN mkdir -p /opt/sweethome3d \
          echo "sh3d : essai $u"; \
          curl -fsSL --max-time 20 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" "$u" -o /tmp/sh3d.tgz 2>/dev/null || { echo "  -> curl echoue"; continue; }; \
          gzip -t /tmp/sh3d.tgz 2>/dev/null || { echo "  -> pas un gzip valide (page HTML probable)"; continue; }; \
+         echo "${SH3D_SHA256}  /tmp/sh3d.tgz" | sha256sum -c - 2>/dev/null || { echo "  -> gzip valide mais somme de controle incorrecte"; continue; }; \
          echo "  -> OK"; \
          ok=1; break; \
        done \
