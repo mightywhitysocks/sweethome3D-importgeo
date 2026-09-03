@@ -50,6 +50,20 @@ pas comme méthode principale de génération.
   (backend LAZ requis seulement côté pip, `laspy` conda l'embarque
   autrement) et GDAL (`libgdal` conda vs `gdal-bin` système, mécanismes de
   paquet différents par nature).
+- **Détection des montées de version** : `.github/dependabot.yml`
+  (écosystèmes `pip` sur `config/requirements-venv.txt` et `github-actions`
+  sur `.github/workflows/`) ouvre des PR de mise à jour, sans jamais
+  reconstruire ni publier d'image — le comportement de `build-image.yml`
+  (déclenché par push sur `Dockerfile`/`requirements-venv.txt` ou
+  manuellement, jamais planifié : un rebuild périodique n'apporterait
+  qu'un gain marginal — apt/Debian, seul pan non épinglé du Dockerfile —
+  pour un risque réel sur son tag mono-`latest` sans rollback) reste
+  inchangé. **Toute PR Dependabot sur `requirements-venv.txt` doit être
+  répercutée à la main dans `environment.yml`** (Dependabot ne couvre pas
+  conda). Restent hors périmètre de Dependabot, à vérifier manuellement et
+  occasionnellement : `environment.yml` lui-même, et les pins durs du
+  `Dockerfile` (roofer, Sweet Home 3D — volontairement non automatisés,
+  cf. "Points durs" > roofer).
 
 ### Trois façons de lancer la génération complète (toit multi-pans)
 
