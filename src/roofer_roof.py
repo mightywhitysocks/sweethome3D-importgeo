@@ -90,7 +90,15 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
     # repris a tort par le glob() ci-dessous (constate : sortie obsolete
     # d'un ancien run "propriete seule" relue a la place de la sortie fraiche).
     shutil.rmtree(out_dir, ignore_errors=True)
-    out_dir.mkdir(parents=True)
+    try:
+        out_dir.mkdir(parents=True)
+    except OSError as e:
+        # rmtree ignore_errors=True peut laisser out_dir non vide (permissions,
+        # fichier tenu ouvert) -> mkdir() sans exist_ok leverait FileExistsError,
+        # exception non interceptee qui casserait tout le pipeline (meme
+        # invariant que le parsing CityJSON plus bas).
+        log(f"  toit roofer : dossier de sortie inutilisable ({type(e).__name__}: {e}) -> repli pyramidal")
+        return None
     cmd = [bin_path, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
     env = os.environ.copy()
     gdal_data = _roofer_gdal_data(bin_path)

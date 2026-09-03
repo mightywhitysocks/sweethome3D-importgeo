@@ -214,7 +214,7 @@ def _propriete_ref(props) -> None:
         if b["hauteur"]:
             txt += f"\\nh {b['hauteur']} m"
         if b["etages"]:
-            txt += f" | {b['etages']} niv"
+            txt += f" | {int(b['etages'])} niv"
         if b["alt_toit"]:
             txt += f"\\ntoit {b['alt_toit']} m NGF"
         cmds.append({"action": "add_label", "params": {

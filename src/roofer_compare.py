@@ -115,7 +115,12 @@ def _run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path):
     # bas) et GDAL_DATA du bundle roofer (sinon le binaire ne retrouve pas ses
     # donnees GDAL a l'execution -- cf. roofer_roof._roofer_gdal_data).
     shutil.rmtree(out_dir, ignore_errors=True)
-    out_dir.mkdir(parents=True)
+    try:
+        out_dir.mkdir(parents=True)
+    except OSError as e:
+        # rmtree ignore_errors=True peut laisser out_dir non vide (permissions,
+        # fichier tenu ouvert) -> mkdir() sans exist_ok leverait FileExistsError.
+        raise SystemExit(f"dossier de sortie roofer inutilisable : {out_dir} ({e})")
     cmd = [ROOFER_BIN, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
     env = os.environ.copy()
     gdal_data = roofer_roof._roofer_gdal_data(ROOFER_BIN)
