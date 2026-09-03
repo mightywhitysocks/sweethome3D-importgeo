@@ -59,15 +59,21 @@ def _load_site() -> dict:
     if not p.exists():
         ex = ROOT / "config" / "site.example.toml"
         dst = ROOT / "config" / "site.local.toml"
+        copied = False
         try:
             if ex.exists() and not dst.exists():
                 shutil.copy(ex, dst)
+                copied = True
         except OSError:
             pass
-        raise SystemExit(
-            f"Config absente : {p}\n"
+        detail = (
             f"  '{dst}' vient d'etre cree depuis le gabarit ; renseignez votre "
-            f"parcelle (insee / section / parcels) puis relancez.")
+            f"parcelle (insee / section / parcels) puis relancez."
+        ) if copied else (
+            f"  '{dst}' introuvable et le gabarit '{ex}' n'a pas pu etre copie "
+            f"(absent, ou erreur de copie) ; creez '{dst}' manuellement puis relancez."
+        )
+        raise SystemExit(f"Config absente : {p}\n{detail}")
     return tomllib.loads(p.read_text(encoding="utf-8"))
 
 
@@ -572,6 +578,12 @@ def roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox) -> tuple[int, int, in
     if (r + g + b) / 3 > 150:
         return (120, 124, 130)        # fibro / toit clair
     return (62, 66, 72)               # ardoise / zinc
+
+
+# Cle materiau pour chacune des 3 couleurs renvoyees par roof_color_from_ortho
+# (bati.py, roofer_roof.py, roof_lidar.py) -- une seule definition : un futur
+# changement de palette ne doit etre applique qu'ici.
+ROOF_COLOR_KEY = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise", (120, 124, 130): "fibro"}
 
 
 # --------------------------------------------------------------------------- #

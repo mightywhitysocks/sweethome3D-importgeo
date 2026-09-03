@@ -1,0 +1,12 @@
+# Contexte de build Docker : le Dockerfile ne COPY que config/requirements-venv.txt
+# (tout le reste vient de telechargements curl), mais sans ce fichier
+# l'integralite de l'arbre de travail -- .git compris -- est envoyee comme
+# contexte a chaque build. Pas un souci de confidentialite en soi (seuls des
+# fichiers explicitement listes sont COPY'es), un surcout de transfert evitable.
+.git/
+data/
+.venv/
+__pycache__/
+*.pyc
+*.sh3d
+*.sh3d.bak

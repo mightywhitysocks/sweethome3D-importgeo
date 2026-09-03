@@ -52,7 +52,6 @@ import sitegeo as cg
 
 CLEAN_TOLERANCE_CM = 1e-2         # fusion des sommets dupliques entre faces adjacentes du Solid
 ROOFER_TIMEOUT_S = 600
-_ROOF_COLOR_KEY = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise", (120, 124, 130): "fibro"}
 
 
 def find_roofer_bin() -> str | None:
@@ -320,7 +319,7 @@ def _build_roof_impl(roofer_data, cleabs, ring_cm, base_cm, plan_origin_l93,
         # suppose pas cette garantie ici)
         poly_l93 = unary_union([Polygon([(x, y) for x, y, _z in pf["pts"]]) for pf in pan_faces])
         rc = cg.roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox_l93)
-        key = _ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
+        key = cg.ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
         pans.append((sidx, pan_mesh, poly_l93.area, key))
 
     if not pans:

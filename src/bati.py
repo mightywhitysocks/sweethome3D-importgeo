@@ -34,7 +34,6 @@ ROOF_RISE_MAX = 350.0        # cm : hauteur de comble max
 COL_MUR = (0.79, 0.74, 0.65)
 ROOF_MTL = {"tuile": (0.545, 0.227, 0.169), "ardoise": (0.243, 0.259, 0.282),
             "fibro": (0.471, 0.486, 0.510)}
-_ROOF_KEY = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise", (120, 124, 130): "fibro"}
 
 
 def _fnum(v):
@@ -147,7 +146,7 @@ def main() -> None:
                 _, _, mur_mesh, toit_mesh = _pyramidal_mesh(poly, ring, haut, alt_toit, z_min)
                 dest["mur"].append(mur_mesh)
                 rc = cg.roof_color_from_ortho(poly, ortho, obb)
-                key = _ROOF_KEY.get(tuple(rc), "ardoise")
+                key = cg.ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
                 dest.setdefault(key, []).append(toit_mesh)
 
     (GEO / "bati.json").write_text(json.dumps(
