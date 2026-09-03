@@ -146,11 +146,17 @@ def lidar_tile_paths(bbox_l93, margin_m: float = 5.0) -> list[Path]:
 def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     """GeoPackage EPSG:2154 des empreintes des batiments (colonne 'cleabs'),
     format d'entree attendu par roofer. `prop_bldgs` = la liste deja
-    construite par bati.py : (polys, rings_cm, haut, alt_sol, alt_toit, rid)."""
+    construite par bati.py : (polys, rings_cm, haut, alt_sol, alt_toit, rid).
+    Un batiment MultiPolygon (parties disjointes) recoit un cleabs suffixe
+    par polygone (`{rid}_{i}`) -- sinon roofer produit un CityObject par
+    polygone mais tous portant le meme cleabs, et `_find_roof_geometry` ne
+    peut renvoyer que le premier trouve pour les parties suivantes (toit
+    disjoint) -- cf. `build_roof`, appele avec le meme suffixe."""
     import geopandas as gpd
 
-    rows = [{"cleabs": rid, "geometry": poly}
-            for polys, _rings, _h, _as, _at, rid in prop_bldgs for poly in polys]
+    rows = [{"cleabs": rid if len(polys) == 1 else f"{rid}_{i}", "geometry": poly}
+            for polys, _rings, _h, _as, _at, rid in prop_bldgs
+            for i, poly in enumerate(polys)]
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
     gdf.to_file(path, driver="GPKG")
 

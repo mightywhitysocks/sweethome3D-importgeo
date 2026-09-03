@@ -122,12 +122,16 @@ def main() -> None:
 
     for classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs:
         dest = groups_prop if classe == "propriete" else groups
-        for poly, ring in zip(polys, rings_cm):
+        for i, (poly, ring) in enumerate(zip(polys, rings_cm)):
             if poly.area < 4 or len(ring) < 3:
                 continue
             base = min(cg.terrain_z_at(x, y) for x, y in ring) - 3.0
+            # meme suffixe que write_footprint_gpkg pour un batiment MultiPolygon
+            # (parties disjointes) : sinon roofer_roof.build_roof recupererait le
+            # toit de la 1ere partie pour toutes les suivantes (cf. issue #35).
+            cleabs = rid if len(polys) == 1 else f"{rid}_{i}"
             mesh_groups = roofer_roof.build_roof(
-                roofer_data, rid, ring, base, plan_origin_l93, z_min, ortho, obb)
+                roofer_data, cleabs, ring, base, plan_origin_l93, z_min, ortho, obb)
             if mesh_groups is not None:
                 if classe == "propriete":
                     n_prop_roofer += 1
