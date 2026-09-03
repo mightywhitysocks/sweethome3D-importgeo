@@ -50,8 +50,15 @@ def main() -> None:
         print("gdal_contour introuvable (PATH, ni conda Windows) -> courbes de niveau ignorees.")
         return
     argv, env = cmd
+    # -nodata : le tag NODATA embarque par le GeoTIFF IGN (WMS GetMap) n'est pas
+    # fiablement reconnu par rasterio/GDAL en l'etat (terrain.py applique un
+    # masque manuel `< -9000` en plus). Lu depuis le fichier si present, sinon
+    # replie sur -9999 (valeur usuelle IGN) -- sans ca, gdal_contour peut tracer
+    # des courbes parasites a travers les cellules nodata (zones de marge).
+    with rasterio.open(GEO / "mnt.tif") as r:
+        nodata = r.nodata if r.nodata is not None else -9999.0
     subprocess.run(
-        [*argv, "-a", "alt", "-i", str(EQUI), "-f", "GeoJSON",
+        [*argv, "-a", "alt", "-i", str(EQUI), "-nodata", str(nodata), "-f", "GeoJSON",
          str(GEO / "mnt.tif"), str(gj)],
         check=True, env=env)
 
@@ -64,6 +71,7 @@ def main() -> None:
         T = r.transform
         H, W = Z.shape
     Z[Z < -9000] = np.nan
+    Z = cg.fill_nan_nearest(Z)          # evite un cast NaN -> uint8 indefini plus bas
     g = ((Z - np.nanmin(Z)) / (np.nanmax(Z) - np.nanmin(Z)) * 200 + 30).astype("uint8")
     img = Image.fromarray(np.stack([g, g, g], -1)).convert("RGB")
     d = ImageDraw.Draw(img)
