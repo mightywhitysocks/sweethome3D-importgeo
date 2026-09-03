@@ -135,7 +135,11 @@ script isolément (cf. Environnement) — pas la génération complète.
   réutilisée telle quelle partout. `verif.py` la contrôle.
 - **`sitegeo.META`** est un proxy paresseux (`meta.json` n'existe pas au 1er run).
 - **Winding OBJ** : `write_obj` écrit y-up (réflexion) -> faces émises `f c b a`
-  pour ne pas être cullées ; vérif = `signed_volume > 0` d'un mesh fermé.
+  pour ne pas être cullées ; invariant contrôlé par `verif.py`
+  (`_check_closed_mesh` : 0 arête ouverte + volume signé positif, calculé par
+  une formule maison -- `PolyData.volume`/vtkMassProperties ne convient pas,
+  il renvoie une magnitude insensible au winding) sur `terrain.obj`/`haies.obj`
+  (les seuls OBJ garantis fermés par construction).
 - **Ancrage sol** : objets posés à `cg.terrain_z_at(x, y)` = altitude de la
   **surface du maillage** (pas le MNT brut 0,5 m ; le maillage est à 2 m).
 - **`.mtl` 100 % mat** : `Ka 0`, `Ks 0`, `Ns 1`, `illum 1` (`write_mtl`).

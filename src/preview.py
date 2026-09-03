@@ -55,16 +55,18 @@ def _viewpoints():
                      default=0.0)
         standoff = radius + 100.0
         cap = radius + STANDOFF_MAX_CM
-        while True:
-            s = min(standoff, cap)
-            px, py = cx + s * math.sin(yaw), cy + s * math.cos(yaw)
-            # garde-fou : au plafond, on rend quand meme avec le point clampe
-            # (jamais un point rejete a un recul moindre) -- mieux qu'une
-            # boucle infinie si tous les points candidats tombent dans
-            # l'emprise d'un batiment.
-            if s >= cap or not any(fp.contains(Point(px, py)) for fp in footprints):
+        while standoff < cap:
+            px, py = cx + standoff * math.sin(yaw), cy + standoff * math.cos(yaw)
+            if not any(fp.contains(Point(px, py)) for fp in footprints):
                 break
             standoff += STANDOFF_STEP_CM
+        else:
+            # garde-fou : tous les points candidats jusqu'au plafond tombent
+            # dans l'emprise d'un batiment -> on rend quand meme avec le point
+            # clampe exactement au plafond (jamais un point rejete a un recul
+            # moindre) -- mieux qu'une boucle infinie.
+            standoff = cap
+            px, py = cx + standoff * math.sin(yaw), cy + standoff * math.cos(yaw)
         z = cg.terrain_z_at(px, py) + CAM_UP_CM
         views.append((f"bati{i}_{b['id'][-4:]}", (px, py, z, yaw, PITCH)))
     if props:

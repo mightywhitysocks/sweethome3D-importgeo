@@ -125,10 +125,11 @@ def main() -> None:
             if poly.area < 4 or len(ring) < 3:
                 continue
             base = min(cg.terrain_z_at(x, y) for x, y in ring) - 3.0
-            # meme suffixe que write_footprint_gpkg pour un batiment MultiPolygon
-            # (parties disjointes) : sinon roofer_roof.build_roof recupererait le
-            # toit de la 1ere partie pour toutes les suivantes (cf. issue #35).
-            cleabs = rid if len(polys) == 1 else f"{rid}_{i}"
+            # meme identifiant que write_footprint_gpkg (roofer_roof.cleabs_for)
+            # pour un batiment MultiPolygon (parties disjointes) : sinon
+            # roofer_roof.build_roof recupererait le toit de la 1ere partie
+            # pour toutes les suivantes (cf. issue #35).
+            cleabs = roofer_roof.cleabs_for(rid, i, len(polys))
             mesh_groups = roofer_roof.build_roof(
                 roofer_data, cleabs, ring, base, plan_origin_l93, z_min, ortho, obb)
             if mesh_groups is not None:

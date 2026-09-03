@@ -57,6 +57,9 @@ def main() -> None:
     # des courbes parasites a travers les cellules nodata (zones de marge).
     with rasterio.open(GEO / "mnt.tif") as r:
         nodata = r.nodata if r.nodata is not None else -9999.0
+        Z = r.read(1).astype(float)
+        T = r.transform
+        H, W = Z.shape
     subprocess.run(
         [*argv, "-a", "alt", "-i", str(EQUI), "-nodata", str(nodata), "-f", "GeoJSON",
          str(GEO / "mnt.tif"), str(gj)],
@@ -66,10 +69,6 @@ def main() -> None:
     alts = sorted({round(f["properties"]["alt"]) for f in feats})
     print(f"{len(feats)} courbes, equidistance {EQUI} m, altitudes {alts}")
 
-    with rasterio.open(GEO / "mnt.tif") as r:
-        Z = r.read(1).astype(float)
-        T = r.transform
-        H, W = Z.shape
     Z[Z < -9000] = np.nan
     Z = cg.fill_nan_nearest(Z)          # evite un cast NaN -> uint8 indefini plus bas
     g = ((Z - np.nanmin(Z)) / (np.nanmax(Z) - np.nanmin(Z)) * 200 + 30).astype("uint8")

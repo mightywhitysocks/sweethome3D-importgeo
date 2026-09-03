@@ -61,7 +61,7 @@ def find_roofer_bin() -> str | None:
     return p if Path(p).exists() else None
 
 
-def _roofer_gdal_data(bin_path: str) -> str | None:
+def roofer_gdal_data(bin_path: str) -> str | None:
     """Dossier `share/gdal` du bundle roofer (`bin/roofer` + `share/proj` +
     `share/gdal` cote a cote dans l'archive officielle, cf. Dockerfile),
     ou None si absent. PROJ se relocalise seul (`/proc/self/exe` + chemin
@@ -69,9 +69,30 @@ def _roofer_gdal_data(bin_path: str) -> str | None:
     binaire ne retrouverait alors que son chemin de build Conan (absent a
     l'execution). Ne JAMAIS positionner GDAL_DATA globalement (casserait le
     gdal_contour systeme utilise par courbes.py, qui trouve deja tout seul
-    son propre GDAL_DATA) : uniquement pour ce sous-processus roofer."""
+    son propre GDAL_DATA) : uniquement pour ce sous-processus roofer. Publique
+    (pas de prefixe `_`) : reutilisee telle quelle par roofer_compare.py."""
     share_gdal = Path(bin_path).resolve().parent.parent / "share" / "gdal"
     return str(share_gdal) if share_gdal.is_dir() else None
+
+
+def prepare_out_dir(out_dir: Path) -> None:
+    """Vide out_dir (sinon un .city.jsonl d'une execution precedente, sur une
+    autre bbox, serait repris a tort par un glob() ulterieur) puis le
+    recree. Peut lever OSError si rmtree n'a pas tout supprime (permissions,
+    fichier tenu ouvert) -- a l'appelant de decider du repli (toit pyramidal
+    ici ; SystemExit explicite cote roofer_compare.py, outil de diagnostic)."""
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
+
+
+def cleabs_for(rid: str, i: int, n_polys: int) -> str:
+    """Identifiant cleabs pour le i-eme polygone d'un batiment (n_polys
+    parties disjointes au total) : suffixe uniquement si MultiPolygon (sinon
+    inchange, cas majoritaire). `write_footprint_gpkg` et l'appelant de
+    `build_roof` (bati.py) DOIVENT utiliser le meme identifiant pour un meme
+    polygone -- sinon toit duplique/mal place sur les batiments MultiPolygon
+    (cf. issue #35)."""
+    return rid if n_polys == 1 else f"{rid}_{i}"
 
 
 def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, log=print):
@@ -85,23 +106,14 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
     if not laz_paths:
         log("  toit roofer : aucune dalle LiDAR HD -> repli pyramidal")
         return None
-    # out_dir vide avant l'appel : un fichier .city.jsonl laisse par une
-    # execution precedente (autre bbox, autre lot de batiments) serait sinon
-    # repris a tort par le glob() ci-dessous (constate : sortie obsolete
-    # d'un ancien run "propriete seule" relue a la place de la sortie fraiche).
-    shutil.rmtree(out_dir, ignore_errors=True)
     try:
-        out_dir.mkdir(parents=True)
+        prepare_out_dir(out_dir)
     except OSError as e:
-        # rmtree ignore_errors=True peut laisser out_dir non vide (permissions,
-        # fichier tenu ouvert) -> mkdir() sans exist_ok leverait FileExistsError,
-        # exception non interceptee qui casserait tout le pipeline (meme
-        # invariant que le parsing CityJSON plus bas).
         log(f"  toit roofer : dossier de sortie inutilisable ({type(e).__name__}: {e}) -> repli pyramidal")
         return None
     cmd = [bin_path, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
     env = os.environ.copy()
-    gdal_data = _roofer_gdal_data(bin_path)
+    gdal_data = roofer_gdal_data(bin_path)
     if gdal_data:
         env["GDAL_DATA"] = gdal_data
     try:
@@ -155,13 +167,13 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     format d'entree attendu par roofer. `prop_bldgs` = la liste deja
     construite par bati.py : (polys, rings_cm, haut, alt_sol, alt_toit, rid).
     Un batiment MultiPolygon (parties disjointes) recoit un cleabs suffixe
-    par polygone (`{rid}_{i}`) -- sinon roofer produit un CityObject par
+    par polygone (cf. `cleabs_for`) -- sinon roofer produit un CityObject par
     polygone mais tous portant le meme cleabs, et `_find_roof_geometry` ne
     peut renvoyer que le premier trouve pour les parties suivantes (toit
-    disjoint) -- cf. `build_roof`, appele avec le meme suffixe."""
+    disjoint) -- cf. `build_roof`, appele avec le meme identifiant."""
     import geopandas as gpd
 
-    rows = [{"cleabs": rid if len(polys) == 1 else f"{rid}_{i}", "geometry": poly}
+    rows = [{"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly}
             for polys, _rings, _h, _as, _at, rid in prop_bldgs
             for i, poly in enumerate(polys)]
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
