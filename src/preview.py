@@ -275,24 +275,26 @@ def _ensemble_camera(props, prop, max_standoff):
 
 
 def _viewpoints():
-    """[(label, (x, y, z, yaw, pitch[, fov])), ...] en repere plan SH3D (cm / rad)."""
+    """[(label, (x, y, z, yaw, pitch[, fov])), ...] en repere plan SH3D (cm / rad).
+
+    Vue d'ensemble uniquement (docs/PIPELINE.md #12) : les vues par batiment
+    (_camera_for_building, conservee ci-dessus pour reference/reprise future,
+    cf. meme logique que roof_lidar.py) visent geometriquement juste --
+    verifie par calcul direct, yaw = azimut camera->cible a 0.0 deg pres sur
+    plusieurs batiments -- mais le rendu SunFlow reste par endroits quasi vide
+    (ciel/sol) sans obstacle ni relief pouvant l'expliquer, y compris a
+    seulement 18 m d'un batiment volumineux (bug non identifie malgre
+    investigation ciblee cette session). Seule la vue d'ensemble a ete
+    validee fiable par rendu reel -> seule publiee pour l'instant."""
     bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
     props = [b for b in bat if b["classe"] == "propriete"]
     payload = json.loads((cg.DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
     prop = next((p for p in payload["parcels"] if p["is_property"]), None)
-    tx, ty = prop["centroid_cm"] if prop else (0.0, 0.0)
 
-    obstacles = _obstacles(bat)
     max_standoff = _terrain_max_standoff()
-    building_max_standoff = min(max_standoff, RELIABLE_STANDOFF_CM)
-
-    views = []
-    for i, b in enumerate(props):
-        cam = _camera_for_building(b, tx, ty, obstacles, building_max_standoff)
-        views.append((f"bati{i}_{b['id'][-4:]}", cam))
-    if props:
-        views.append(("ensemble", _ensemble_camera(props, prop, max_standoff)))
-    return views
+    if not props:
+        return []
+    return [("ensemble", _ensemble_camera(props, prop, max_standoff))]
 
 
 def main() -> None:
