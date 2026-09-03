@@ -183,25 +183,27 @@ def main() -> None:
                              pp["x"], pp["y"], pp["elevation"], pp["width"], pp["depth"],
                              pp["height"], creator="IGN LIDAR HD", extra=" deformable='false'"))
 
-    veg_pieces = []
+    hedge_pieces = []
     if (GEO / "haies.obj").exists():
         hp = json.loads((GEO / "haies_place.json").read_text(encoding="utf-8"))
-        veg_pieces.append(_piece("Vegetation", "Haies (MNH LIDAR HD)", "h/haies.obj",
+        hedge_pieces.append(_piece("Vegetation", "Haies (MNH LIDAR HD)", "h/haies.obj",
                              (GEO / "haies.obj").stat().st_size, hp["x"], hp["y"],
                              hp["elevation"], hp["width"], hp["depth"], hp["height"],
                              creator="IGN LIDAR HD", extra=" deformable='false'"))
 
+    tree_pieces = []
     veg = json.loads((GEO / "vegetation_arbres.json").read_text(encoding="utf-8"))
     tsz = len(tree_obj)
     for pl, rz in zip(veg["place"]["commands"], veg["resize"]):
         p = pl["params"]
-        veg_pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
+        tree_pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
                              p["x"], p["y"], p["elevation"],
                              rz["width"], rz["depth"], rz["height"],
                              catalog="OlaKristianHoff#tree", creator="Ola-Kristian Hoff",
                              extra=" movable='false' license='Free Art / CC-BY'"))
 
-    pieces.append(_furniture_group("Vegetation", "Végétation", veg_pieces))
+    pieces.append(_furniture_group("Vegetation", "Arbres", tree_pieces))
+    pieces.append(_furniture_group("Vegetation", "Haies", hedge_pieces))
 
     # ---- rooms ----
     rooms = []
