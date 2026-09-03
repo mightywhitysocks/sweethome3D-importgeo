@@ -90,7 +90,7 @@ def main() -> None:
         bat.append({
             "id": rid, "classe": classe, "hauteur": haut,
             "alt_sol": alt_sol, "alt_toit": alt_toit,
-            "etages": row.get("nombre_d_etages"),
+            "etages": _fnum(row.get("nombre_d_etages")),
             "mur": row.get("materiaux_des_murs"),
             "toit": row.get("materiaux_de_la_toiture"),
             "nature": row.get("nature"),
@@ -211,7 +211,9 @@ def _propriete_ref(props) -> None:
         pts = [p for r in b["rings_cm"] for p in r]
         cx = sum(p[0] for p in pts) / len(pts)
         cy = sum(p[1] for p in pts) / len(pts)
-        txt = f"bati {b['id'][-4:]}\\nh {b['hauteur']} m"
+        txt = f"bati {b['id'][-4:]}"
+        if b["hauteur"]:
+            txt += f"\\nh {b['hauteur']} m"
         if b["etages"]:
             txt += f" | {b['etages']} niv"
         if b["alt_toit"]:
