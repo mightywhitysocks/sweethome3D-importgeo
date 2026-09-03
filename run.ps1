@@ -87,15 +87,28 @@ if (-not $condaRoot) { throw "conda introuvable - installe Anaconda ou Miniconda
 $conda = Join-Path $condaRoot 'Scripts\conda.exe'
 
 $envPy = Join-Path $condaRoot "envs\$CondaEnv\python.exe"
+# sentinelle ecrite uniquement apres un `conda env create` reussi : sans elle,
+# un env dont la creation a echoue en cours de route (coupure reseau) serait
+# pris pour complet aux lancements suivants (python.exe present, paquets
+# manquants/partiels -> ImportError confus loin dans src/*.py). Ne s'applique
+# qu'a l'env 'sitegeo' auto-gere par ce script -- un env conda different,
+# gere manuellement, n'est jamais recree ici.
+$depsOk = Join-Path $condaRoot "envs\$CondaEnv\.deps-ok"
 if ($Fresh -and $CondaEnv -eq 'sitegeo' -and (Test-Path (Split-Path $envPy))) {
   Write-Host ">> suppression de l'env sitegeo" -ForegroundColor Yellow
   & $conda env remove -n sitegeo -y | Out-Null
 }
-if (-not (Test-Path $envPy)) {
-  if ($CondaEnv -ne 'sitegeo') { throw "env conda '$CondaEnv' introuvable : $envPy" }
+if ($CondaEnv -ne 'sitegeo') {
+  if (-not (Test-Path $envPy)) { throw "env conda '$CondaEnv' introuvable : $envPy" }
+} elseif (-not (Test-Path $envPy) -or -not (Test-Path $depsOk)) {
+  if (Test-Path $envPy) {
+    Write-Host ">> env sitegeo incomplet (creation precedente interrompue) -> recreation" -ForegroundColor Yellow
+    & $conda env remove -n sitegeo -y | Out-Null
+  }
   Write-Host ">> creation de l'env sitegeo depuis config\environment.yml (long...)" -ForegroundColor Cyan
   & $conda env create -f (Join-Path $PSScriptRoot 'config\environment.yml')
   if (-not (Test-Path $envPy)) { throw "echec de la creation de l'env." }
+  New-Item -ItemType File -Path $depsOk -Force | Out-Null
 }
 
 # --- etapes ---
