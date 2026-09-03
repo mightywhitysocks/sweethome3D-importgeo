@@ -61,7 +61,7 @@ def main() -> None:
         T = r.transform
         H, W = Z.shape
     subprocess.run(
-        [*argv, "-a", "alt", "-i", str(EQUI), "-nodata", str(nodata), "-f", "GeoJSON",
+        [*argv, "-a", "alt", "-i", str(EQUI), "-snodata", str(nodata), "-f", "GeoJSON",
          str(GEO / "mnt.tif"), str(gj)],
         check=True, env=env)
 
