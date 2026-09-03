@@ -53,6 +53,16 @@ import sitegeo as cg
 CLEAN_TOLERANCE_CM = 1e-2         # fusion des sommets dupliques entre faces adjacentes du Solid
 ROOFER_TIMEOUT_S = 600
 
+LIDAR_CLASS_DIVERS_BATI_IGN = 67  # classe IGN hors nomenclature ASPRS ("Divers - batis"),
+                                   # invisible pour --bld-class de roofer (defaut 6)
+LIDAR_CLASS_BATIMENT = 6
+
+# Memes noms de colonne BD TOPO que l'exemple officiel IGN
+# ignfab/roofer-with-ignf-datasets (scripts/run_workflow.sh, appel roofer) :
+# --h-terrain-attribute altitude_minimale_sol --h-roof-attribute altitude_maximale_toit.
+H_TERRAIN_FIELD = "altitude_minimale_sol"
+H_ROOF_FIELD = "altitude_maximale_toit"
+
 
 def find_roofer_bin() -> str | None:
     """Meme esprit que `cg.find_sweethome3d_jar` : None si absent, jamais
@@ -111,7 +121,9 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
     except OSError as e:
         log(f"  toit roofer : dossier de sortie inutilisable ({type(e).__name__}: {e}) -> repli pyramidal")
         return None
-    cmd = [bin_path, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
+    cmd = [bin_path, "--lod22",
+           "--h-terrain-attribute", H_TERRAIN_FIELD, "--h-roof-attribute", H_ROOF_FIELD,
+           *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
     env = os.environ.copy()
     gdal_data = roofer_gdal_data(bin_path)
     if gdal_data:
@@ -149,17 +161,88 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
     return {"records": records, "scale": scale, "translate": translate}
 
 
-def lidar_tile_paths(bbox_l93, margin_m: float = 5.0) -> list[Path]:
-    """Dalles LAZ IGN couvrant bbox_l93+marge -- force le telechargement/
-    cache (cg.lidar_points_l93, effet de bord) puis retrouve les chemins de
-    dalles concernees via `cg.lidar_tile_index` (meme requete WFS, mise en
-    cache disque -- cf. `cg._cached`), pour ne donner a roofer QUE les
-    dalles pertinentes (pas tout data/lidar_cache/, qui peut contenir des
-    dalles d'executions anterieures sur une autre zone)."""
+def _remap67_path(src: Path) -> Path:
+    """Chemin de la copie remappee (67 -> 6) d'une dalle brute, dans un
+    sous-dossier dedie du cache LiDAR partage -- jamais le fichier source lui
+    meme (cg.lidar_points_l93 le relit tel quel, classe 6 stricte, pour ses
+    propres besoins)."""
+    return cg.LIDAR_CACHE / "roofer_remap67to6" / src.name
+
+
+def _remap67(src: Path, dst: Path) -> None:
+    """Copie `src` -> `dst` (pur laspy/numpy, pas de dependance PDAL -- deja
+    ecartee, cf. config/environment.yml) avec les points classes 67 (IGN
+    "Divers - batis", hors nomenclature ASPRS) remappes en 6 (batiment
+    ASPRS) : roofer ne regarde que --bld-class/--grnd-class (defaut 6/2), les
+    points 67 lui sont sinon invisibles -- jusqu'a 55 % de l'emprise BD TOPO
+    non couverte par les pans reconstruits, constate sur 18 batiments reels
+    (cf. CLAUDE.md). Reproduit le remap PDAL `filters.assign` 67 -> 6
+    documente par l'exemple officiel IGN ignfab/roofer-with-ignf-datasets."""
+    import laspy
+
+    las = laspy.read(src)
+    c = np.asarray(las.classification)
+    mask = c == LIDAR_CLASS_DIVERS_BATI_IGN
+    if mask.any():
+        c = c.copy()
+        c[mask] = LIDAR_CLASS_BATIMENT
+        las.classification = c
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(".part")
+    las.write(tmp)
+    tmp.rename(dst)
+
+
+def lidar_tile_paths(bbox_l93, margin_m: float = 5.0, *, log=print) -> list[Path]:
+    """Dalles LAZ IGN couvrant bbox_l93+marge, classe 67 remappee en 6 (cf.
+    `_remap67`) -- force le telechargement/cache (cg.lidar_points_l93, effet
+    de bord) puis retrouve les chemins de dalles concernees via
+    `cg.lidar_tile_index` (meme requete WFS, mise en cache disque -- cf.
+    `cg._cached`), pour ne donner a roofer QUE les dalles pertinentes (pas
+    tout data/lidar_cache/, qui peut contenir des dalles d'executions
+    anterieures sur une autre zone). Le remap est lui-meme mis en cache
+    disque (`_remap67_path`, jamais invalide automatiquement comme le reste
+    de `data/`, cf. `rm -rf data/net_cache`/`data/lidar_cache` documente dans
+    CLAUDE.md) -- pas refait a chaque run pour la meme dalle. Une dalle dont
+    le remap echoue (lecture LAZ corrompue, backend LAZ absent) est fournie
+    a roofer SANS remap plutot que d'etre ecartee -- degrade la couverture
+    (repli pyramidal batiment par batiment cote appelant si besoin), jamais
+    d'exception qui remonte."""
     cg.lidar_points_l93(bbox_l93, margin_m=margin_m)  # effet de bord : peuple le cache LAZ
     tiles = cg.lidar_tile_index(bbox_l93, margin_m=margin_m)
-    return [cg.LIDAR_CACHE / Path(row["url"]).name
-            for _, row in tiles.iterrows() if row.get("url")]
+    paths = []
+    for _, row in tiles.iterrows():
+        if not row.get("url"):
+            continue
+        src = cg.LIDAR_CACHE / Path(row["url"]).name
+        dst = _remap67_path(src)
+        if not dst.exists():
+            try:
+                _remap67(src, dst)
+            except Exception as e:                                     # noqa: BLE001
+                log(f"  toit roofer : remap classe 67->6 echoue sur {src.name} "
+                    f"({type(e).__name__}: {e}) -> dalle fournie sans remap")
+                paths.append(src)
+                continue
+        paths.append(dst)
+    return paths
+
+
+def _complete_altitudes(alt_sol, alt_toit, haut):
+    """Cascade de completion (toit manquant -> sol + hauteur ; sol manquant ->
+    toit - hauteur), reproduisant -- avec les 3 seuls champs BD TOPO deja
+    extraits par bati.py (pas les 4 colonnes min/max completes du script de
+    reference) -- la logique documentee par l'exemple officiel IGN
+    ignfab/roofer-with-ignf-datasets (scripts/set_building_attributes.sh).
+    Renvoie (alt_sol, alt_toit), inchanges si `haut` ou les deux autres sont
+    deja None (aucune reconstruction possible -- reste NULL dans le GPKG,
+    ce que `--h-terrain-attribute`/`--h-roof-attribute` gerent nativement,
+    cf. roofer --help-all)."""
+    if alt_toit is None and alt_sol is not None and haut is not None:
+        alt_toit = alt_sol + haut
+    if alt_sol is None and alt_toit is not None and haut is not None:
+        alt_sol = alt_toit - haut
+    return alt_sol, alt_toit
 
 
 def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
@@ -170,12 +253,23 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     par polygone (cf. `cleabs_for`) -- sinon roofer produit un CityObject par
     polygone mais tous portant le meme cleabs, et `_find_roof_geometry` ne
     peut renvoyer que le premier trouve pour les parties suivantes (toit
-    disjoint) -- cf. `build_roof`, appele avec le meme identifiant."""
+    disjoint) -- cf. `build_roof`, appele avec le meme identifiant.
+
+    Ecrit aussi `H_TERRAIN_FIELD`/`H_ROOF_FIELD` (altitudes BD TOPO,
+    completees autant que possible par `_complete_altitudes`) : repli
+    d'altitude que roofer utilise lui-meme (`--h-terrain-attribute`/
+    `--h-roof-attribute`, cf. `run_roofer`) quand sa couverture LiDAR est
+    insuffisante pour deriver l'altitude sol/toit d'un batiment depuis le
+    nuage -- jamais une reconstruction geometrique cote projet, cf.
+    CLAUDE.md."""
     import geopandas as gpd
 
-    rows = [{"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly}
-            for polys, _rings, _h, _as, _at, rid in prop_bldgs
-            for i, poly in enumerate(polys)]
+    rows = []
+    for polys, _rings, haut, alt_sol, alt_toit, rid in prop_bldgs:
+        alt_sol_c, alt_toit_c = _complete_altitudes(alt_sol, alt_toit, haut)
+        for i, poly in enumerate(polys):
+            rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly,
+                         H_TERRAIN_FIELD: alt_sol_c, H_ROOF_FIELD: alt_toit_c})
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
     gdf.to_file(path, driver="GPKG")
 
