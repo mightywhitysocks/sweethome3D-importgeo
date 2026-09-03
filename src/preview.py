@@ -17,7 +17,8 @@ bibliotheque de "meilleur point de vue" (viewpoint entropy et consorts :
 disproportionne, pense pour des scenes 3D denses avec rendu offscreen).
 
 Optionnel : ne fait rien si le JDK ou les jars de rendu manquent
-(cf. sitegeo.render_photo). Prerequis : le pipeline a tourne (`.\run.ps1`).
+(cf. sitegeo.render_photo). Prerequis : le pipeline a tourne (`./run.sh`,
+cf. CLAUDE.md section Environnement).
 
   python src/preview.py             # 1024x640, qualite rapide
   python src/preview.py 1280 800    # taille au choix
