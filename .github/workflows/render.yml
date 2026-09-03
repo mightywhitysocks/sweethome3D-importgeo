@@ -1,0 +1,158 @@
+# Rendu photo (SunFlow, src/preview.py) a partir du DERNIER artefact "Plan 3D"
+# deja publie par generation.yml -- ne relance jamais le pipeline IGN/LiDAR/
+# roofer, juste le rendu sur ce qui a deja ete genere. A la demande
+# uniquement.
+#
+# Prerequis : au moins un run reussi de generation.yml ayant publie l'artefact
+# "Plan 3D" (Plan 3D.sh3d + data/bati.json + data/sh3d_payload.json +
+# data/terrain_grid.npz, cf. generation.yml) et une image CI deja construite
+# (build-image.yml).
+#
+# Contrairement a generation.yml, AUCUN secret de site necessaire ici :
+# config/site.local.toml n'est requis que pour satisfaire le parsing de
+# sitegeo.py au chargement (INSEE/section/parcelles) -- des valeurs fictives
+# suffisent, src/preview.py ne relit ni le cadastre ni aucune donnee IGN,
+# seulement les fichiers deja publies par generation.yml.
+name: Rendu
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID de generation.yml a utiliser (vide = dernier run reussi)"
+        required: false
+        type: string
+      quality:
+        description: "Qualite SunFlow"
+        required: false
+        type: choice
+        options: [low, high]
+        default: low
+      width:
+        description: "Largeur (px)"
+        required: false
+        type: string
+        default: "1024"
+      height:
+        description: "Hauteur (px)"
+        required: false
+        type: string
+        default: "640"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  # cf. generation.yml : meme calcul (minuscules requises par GHCR/OCI),
+  # duplique ici car `container:` du job render est evalue avant toute step.
+  image-name:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.compute.outputs.image }}
+    steps:
+      - name: Minuscules (requis par OCI/GHCR)
+        id: compute
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
+  find-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      - name: Run source (input, ou dernier run reussi de generation.yml)
+        id: find
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const input = ${{ toJSON(inputs.run_id) }};
+            if (input) {
+              core.setOutput('run_id', input);
+              return;
+            }
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'generation.yml',
+              status: 'success',
+              per_page: 1,
+            });
+            if (data.workflow_runs.length === 0) {
+              core.setFailed("Aucun run reussi de generation.yml -- lancez-le d'abord.");
+              return;
+            }
+            core.setOutput('run_id', String(data.workflow_runs[0].id));
+
+  render:
+    needs: [image-name, find-run]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: ${{ needs.image-name.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      # xvfb-run absent de l'image CI (generation.yml n'en a jamais eu besoin :
+      # verif.py --render y est desactive faute de jars de rendu embarques
+      # dans l'image). sitegeo.render_photo() l'exige sous Linux (Java3D veut
+      # un display meme en noop).
+      - name: Installer xvfb
+        run: apt-get update && apt-get install -y --no-install-recommends xvfb
+
+      - name: Télécharger l'artefact "Plan 3D" du run source
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: "Plan 3D"
+          path: _plan3d
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.find-run.outputs.run_id }}
+
+      - name: Placer le .sh3d et les données terrain/bâti
+        run: |
+          mkdir -p data
+          mv "_plan3d/Plan 3D.sh3d" "./Plan 3D.sh3d"
+          mv _plan3d/data/bati.json data/bati.json
+          mv _plan3d/data/sh3d_payload.json data/sh3d_payload.json
+          mv _plan3d/data/terrain_grid.npz data/terrain_grid.npz
+          rm -rf _plan3d
+
+      # Valeurs fictives : le rendu ne relit ni le cadastre ni aucune donnee
+      # IGN (seulement le .sh3d + JSON/npz deja publies), donc n'importe
+      # quelle parcelle syntaxiquement valide suffit a satisfaire
+      # sitegeo._load_site() au chargement du module.
+      - name: Écrire config/site.local.toml (valeurs fictives, [tools] = chemins CI)
+        run: |
+          cat > config/site.local.toml <<'TOML'
+          [parcelle]
+          insee           = "00000"
+          section         = "AA"
+          parcels         = ["0001"]
+          property_parcel = "0001"
+
+          [tools]
+          sweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"
+          render_libs_dir = "/opt/sweethome3d/lib"
+          TOML
+
+      - name: src/preview.py (1 vue par bâtiment propriété + vue d'ensemble)
+        run: python3 src/preview.py "${{ inputs.width }}" "${{ inputs.height }}" "${{ inputs.quality }}"
+
+      - name: Publier les rendus
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "Rendu preview"
+          path: "data/verif/preview_*.png"
+          if-no-files-found: error
+          # Meme politique que Plan 3D (generation.yml) : ces images montrent
+          # l'apparence exacte du site.
+          retention-days: 7
