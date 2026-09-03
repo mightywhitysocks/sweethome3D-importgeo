@@ -20,6 +20,7 @@ Usage :
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import shutil
 import subprocess
@@ -29,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 import roof_lidar
+import roofer_roof
 import sitegeo as cg
 
 ROOFER_BIN = shutil.which("roofer") or str(Path.home() / ".local" / "bin" / "roofer")
@@ -107,9 +109,19 @@ def _lidar_tile_paths(bbox_l93, margin_m: float = 5.0) -> list[Path]:
 
 
 def _run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path):
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # memes garde-fous que roofer_roof.run_roofer (pipeline principal) : dossier
+    # de sortie vide avant l'appel (sinon un .city.jsonl d'une comparaison
+    # precedente, sur une autre bbox, serait repris a tort par le glob() plus
+    # bas) et GDAL_DATA du bundle roofer (sinon le binaire ne retrouve pas ses
+    # donnees GDAL a l'execution -- cf. roofer_roof._roofer_gdal_data).
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
     cmd = [ROOFER_BIN, "--lod22", *[str(p) for p in laz_paths], str(footprint_gpkg), str(out_dir)]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    env = os.environ.copy()
+    gdal_data = roofer_roof._roofer_gdal_data(ROOFER_BIN)
+    if gdal_data:
+        env["GDAL_DATA"] = gdal_data
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     print(r.stdout)
     if r.returncode != 0:
         print(r.stderr, file=sys.stderr)
