@@ -285,10 +285,14 @@ def _build_roof_impl(roofer_data, cleabs, ring_cm, base_cm, plan_origin_l93,
     mesh = mesh.compute_normals(auto_orient_normals=True, consistent_normals=True,
                                 non_manifold_traversal=False)
 
-    groups = []
     wall_mask = np.isin(mesh.cell_data["role"], ["GroundSurface", "WallSurface"])
-    if wall_mask.any():
-        groups.append(("bati_mur", mesh.extract_cells(wall_mask).extract_surface(algorithm="dataset_surface"), "mur"))
+    if not wall_mask.any():
+        # semantics avec RoofSurface mais sans GroundSurface/WallSurface (sortie
+        # roofer atypique) : jamais un toit flottant sans mur -- meme traitement
+        # d'echec que "aucun pan de toit exploitable" plus bas.
+        log("  toit roofer : solide sans mur (GroundSurface/WallSurface) -> repli pyramidal")
+        return None
+    groups = [("bati_mur", mesh.extract_cells(wall_mask).extract_surface(algorithm="dataset_surface"), "mur")]
 
     roof_faces_by_idx: dict[int, list] = {}
     for f in faces:
