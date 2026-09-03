@@ -157,16 +157,36 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
     pouvant l'expliquer — comportement non documenté du moteur de rendu
     SunFlow/`PhotoRenderer` (jar tiers, pas de source correspondant
     exactement au binaire utilisé). **Le même bug touche aussi la vue
-    d'ensemble** : une variante testée à yaw=+90° (même distance/pitch que
-    la vue large déjà validée, azimut seul different) a rendu une image
-    quasi vide, alors qu'un balayage de plusieurs azimuts sur le même site a
-    trouvé des angles propres (dont −45°, retenu pour `ensemble_laterale`).
-    Aucune règle générale n'explique quels azimuts sont sûrs -- `preview.py`
-    filtre donc désormais automatiquement (`_looks_degraded`, seuil
-    empirique sur la fraction de pixels quasi blancs) toute vue rendue et
-    écarte celles qui ressortent quasi vides, plutôt que de supposer qu'un
-    angle validé sur un site le reste sur un autre. Cf. `## Écarts assumés`
-    ci-dessous.
+    d'ensemble** selon l'azimut caméra, indépendamment du FOV : reproduit sur
+    une scène synthétique dédiée (dalle + cube isolés, sans variable de
+    matériau/couleur/relief) à plusieurs valeurs de FOV, et sur les deux
+    moteurs de rendu embarqués (`PhotoRenderer`/SunFlow et
+    `YafarayRenderer`, deux codebases indépendantes) — écarte une cause liée
+    au soleil, au terrain, à la végétation, à un bâtiment voisin, au winding
+    du maillage ou à un FOV mal transmis ; cause exacte non identifiée
+    (moteurs tiers, boîte noire). `preview.py` filtre donc automatiquement
+    (`_looks_degraded`, seuil empirique sur la fraction de pixels quasi
+    blancs) toute vue rendue et écarte celles qui ressortent quasi vides,
+    plutôt que de supposer qu'un angle validé sur un site le reste sur un
+    autre.
+    **FOV corrigé séparément** : `FOV_RENDER_CORRECTION = 4.0` (un facteur de
+    correction appliqué au FOV transmis au renderer) reposait sur une mesure
+    non re-vérifiée d'une session antérieure ; décompilation du
+    `PhotoRenderer`/`YafarayRenderer`/`PinholeLens` réellement chargés et
+    mesure directe sur un rendu réel confirment que `fieldOfView` est
+    transmis et appliqué tel quel, sans facteur caché. Constante supprimée ;
+    `DEFAULT_FOV` recalibré à 2.0 rad (grand-angle) pour rester sous le
+    plafond de standoff (`_terrain_max_standoff`) sur le site de test — même
+    valeur réelle que l'ancien code transmettait par accident, donc mêmes
+    rendus déjà validés visuellement. Un re-balayage complet des azimuts sur
+    la vue d'ensemble du site de test, avec ce FOV corrigé, ne reproduit plus
+    aucune vue dégradée (auparavant, +90° dégradait à distance/pitch
+    identiques à la vue large) : le grand-angle semble réduire, sur ce site
+    et à ce cadrage, la probabilité pratique de tomber dans une zone
+    d'azimut sensible — sans que cela change le diagnostic du bug lui-même
+    (confirmé indépendant du FOV sur la scène synthétique). `_looks_degraded`
+    reste donc actif comme filet de sécurité, pas retiré. Cf.
+    `## Écarts assumés` ci-dessous.
 
 ## Écarts assumés
 
@@ -174,7 +194,7 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
 
 | # | Limite concernée | Contexte | Choix assumé |
 |---|---|---|---|
-| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain) : les 5 hypothèses techniques identifiées pour les vues par bâtiment ont toutes été infirmées. Le repli standoff (18 m) s'est ensuite révélé insuffisant, puis le même bug a été retrouvé sur la vue d'ensemble elle-même selon l'azimut (yaw=+90° dégradé, −45° propre, même distance/pitch) -- aucune règle générale identifiée, la cause exacte reste dans le moteur de rendu SunFlow (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale -- angle latéral choisi après balayage empirique sur le site testé, pas une garantie universelle), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur. |
+| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain, du FOV transmis) : toutes les hypothèses techniques identifiées ont été infirmées, y compris après correction du bug FOV séparé (`FOV_RENDER_CORRECTION` supprimé) -- reproduit à l'identique sur une scène synthétique dédiée, à plusieurs FOV, sur deux moteurs de rendu indépendants (SunFlow et YafaRay). Sur le site de test réel, un re-balayage complet des azimuts avec le FOV corrigé ne reproduit plus la dégradation observée auparavant à yaw=+90° -- possible effet de bord du grand-angle plutôt qu'une correction du bug lui-même (toujours confirmé sur la scène synthétique). Aucune règle générale n'explique quels azimuts/FOV/sites restent sûrs, la cause exacte reste dans les moteurs de rendu tiers (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur, y compris avec le FOV corrigé. |
 
 Le compromis retenu privilégie l'absence d'une vue à une vue ponctuellement
 vide ou inexploitable, sur toutes les vues caméra (pas seulement celles par

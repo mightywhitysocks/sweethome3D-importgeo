@@ -38,36 +38,50 @@ import sitegeo as cg
 
 CAM_UP_CM = 250.0            # camera au-dessus du sol (vue "1er etage", moins rasante)
 
-# Calibration empirique du FOV (rendu SunFlow reel, pas theorique -- la valeur
-# documentee "1.0995575 rad ~ 63 deg" de RenderPhoto.java/home_template.xml ne
-# correspond PAS au FOV reellement observe dans les rendus) :
-#  1. le FOV reel applique par PhotoRenderer est ~4x plus etroit que le
-#     parametre `fieldOfView` transmis -- mesure par angle exact des sommets
-#     d'un batiment reel vu a deux distances/aspect ratios differents (~15.7
-#     deg reel pour un parametre nominal de 63 deg, confirme lineaire : un
-#     parametre 4x plus grand redonne un FOV ~4x plus large).
-#  2. corollaire critique : `fieldOfView` > pi fait basculer `tan(fov/2)` en
-#     negatif (fov/2 > 90 deg) -- confirme reproduire une image RETOURNEE
-#     (haut/bas inverses) au rendu, quels que soient position/yaw/pitch. Donc
-#     le FOV REEL praticable (apres le x4 du point 1) est structurellement
-#     plafonne a environ pi/4 (~45 deg) pour rester strictement sous ce seuil,
-#     et en pratique il faut rester notablement en dessous (distorsion
-#     fisheye deja nette a fov transmis=3.0 rad, propre jusqu'a 2.0 teste) --
-#     bien plus etroit que les 63 deg nominaux du template SH3D.
-# Cause exacte non identifiee (SunFlow ou Camera SH3D, boite noire -- jar
-# tiers, pas de source lisible ; peut-etre lie a
-# `environment.photoWidth/Height=400x400` du template). Jamais teste au-dela
-# d'un parametre transmis de 3.0 rad, ne pas extrapoler plus loin sans
-# revalider par un rendu reel (cf. skill /ecart si ce plafond doit un jour
-# etre documente comme limite connue du pipeline).
-FOV_RENDER_CORRECTION = 4.0
-DEFAULT_FOV = 0.5             # rad (~28.6 deg) REEL vise -- transmis x4 = 2.0 rad, deja
-                               # valide sans distorsion ni inversion.
+# FOV : `fieldOfView` est transmis et applique TEL QUEL par le renderer --
+# convention pinhole standard, verifie deux fois independamment :
+#  1. Decompilation bytecode (CFR) du PhotoRenderer.class et YafarayRenderer.class
+#     REELLEMENT charges par ce pipeline (pas un mirror externe) : les deux
+#     utilisent `camera.getFieldOfView()` directement (radians), aucune
+#     transformation intermediaire. `org.sunflow.core.camera.PinholeLens`
+#     (jar reellement charge) : `au = tan(toRadians(fov)/2)`, la formule
+#     manuel du moteur.
+#  2. Mesure directe sur un rendu reel : un cube de largeur angulaire connue
+#     (geometrie de la scene, calculee depuis la position camera) mesure a
+#     206 px sur 1024 -- 219 px predits avec le FOV transmis tel quel,
+#     876 px predits si un facteur cache de x4 s'appliquait. Aucune ambiguite.
+# Une session anterieure avait pose l'inverse (un facteur ~x4 mesure par
+# angle des sommets d'un batiment reel) et ne l'avait jamais redemontre --
+# cette mesure s'est revelee fausse (methode ou distance/reference erronee,
+# jamais identifie precisement) et etait reutilisee sans verification dans
+# tout le fichier (`DEFAULT_FOV * 4` transmis a chaque rendu). Corrige ici.
+#
+# Corollaire toujours valide en soi (teste independamment, fov transmis
+# directement, pas lie au x4 ci-dessus) : `fieldOfView` > pi fait basculer
+# `tan(fov/2)` en negatif et retourne l'image (haut/bas inverses). Sans
+# objet en pratique aux valeurs utilisees ici (~0.5 rad, tres loin de pi) --
+# a garder en tete seulement si `DEFAULT_FOV`/`ENSEMBLE_FOV` sont un jour
+# significativement agrandis.
+DEFAULT_FOV = 2.0             # rad (~114.6 deg, grand angle), transmis et applique tel
+                               # quel. Choisi empiriquement une fois le FOV_RENDER_
+                               # CORRECTION corrige : le site de test reel (proprietes
+                               # + batiments) a un rayon ~28 m, et _terrain_max_standoff
+                               # (45% du plus petit cote du terrain modelise) plafonne le
+                               # recul bien avant qu'un FOV etroit (~29 deg) puisse cadrer
+                               # pile -- il faut un grand angle pour rester dans l'emprise
+                               # du terrain sans rogner le sujet. 2.0 rad reste "libre"
+                               # (distance de cadrage sous le plafond terrain) sur le site
+                               # de test, avec de la marge -- meme valeur reelle que
+                               # l'ancien bug transmettait par accident, donc memes rendus
+                               # deja valides visuellement (PR #61), desormais delibere et
+                               # correctement documente plutot qu'un sous-produit d'un
+                               # calcul errone.
 MARGIN_FACTOR = 1.35         # standoff = distance de cadrage pile x1.35 -> un peu d'air
 MIN_STANDOFF_CM = 300.0      # jamais a moins de 3 m, meme d'un cabanon minuscule
-# Pas de plafond de standoff fixe : cf. _terrain_max_standoff (le FOV reel etant
-# etroit, un plafond en dur serait soit trop court sur un grand site, soit
-# pousserait la camera hors de l'emprise modelisee sur un petit site).
+# Pas de plafond de standoff fixe : cf. _terrain_max_standoff (la distance de
+# cadrage varie avec la taille du sujet, un plafond en dur serait soit trop
+# court sur un grand site, soit pousserait la camera hors de l'emprise
+# modelisee sur un petit site).
 STANDOFF_STEP_CM = 300.0     # pas de repli "reculer encore" si tous les angles restent bloques
 HEIGHT_DEFAULT_M = 6.0       # repli si `hauteur` BD TOPO est null (maison R+1 + toiture)
 ANGLE_STEP_DEG = 15.0        # pas de balayage angulaire (~24 candidats sur 360 deg)
@@ -76,8 +90,7 @@ PITCH_MIN, PITCH_MAX = -0.35, 0.75
 
 ENSEMBLE_MARGIN = 1.6        # vue d'ensemble : plus d'air (montrer le terrain autour)
 ENSEMBLE_PITCH = 0.75        # rad (~43 deg), entre observerCamera(0.135) et topCamera(0.945)
-ENSEMBLE_FOV = DEFAULT_FOV   # meme plafond calibre -- pas de FOV plus large disponible
-                              # (cf. corollaire ci-dessus, deja proche du plafond sur/pi)
+ENSEMBLE_FOV = DEFAULT_FOV   # meme FOV reel que les autres vues, pas de raison de varier
 ENSEMBLE_MIN_DIST_CM = 1500.0
 
 # Repli defensif documente (docs/PIPELINE.md, limitation #12) : au-dela
@@ -92,13 +105,13 @@ RELIABLE_STANDOFF_CM = 1800.0
 
 
 def _terrain_max_standoff():
-    """Distance de recul maximale sure : le FOV reel praticable etant etroit
-    (cf. FOV_RENDER_CORRECTION ci-dessus), les distances de cadrage calculees
-    peuvent largement depasser l'emprise du terrain modelise (`data/terrain_
-    grid.npz`) -- une camera hors de cette zone n'a rien a montrer (extrapolation
-    du MNT, generalement le vide/ciel). Plafonne a 45% de la plus petite
-    dimension du terrain, pour rester loin des bords quelle que soit la
-    direction de recul."""
+    """Distance de recul maximale sure : meme avec un FOV grand-angle
+    (cf. DEFAULT_FOV ci-dessus), un site etendu ou un batiment haut peut
+    demander une distance de cadrage qui depasse l'emprise du terrain
+    modelise (`data/terrain_grid.npz`) -- une camera hors de cette zone n'a
+    rien a montrer (extrapolation du MNT, generalement le vide/ciel).
+    Plafonne a 45% de la plus petite dimension du terrain, pour rester loin
+    des bords quelle que soit la direction de recul."""
     d = np.load(cg.DATA / "terrain_grid.npz")
     w = float(d["x_cm"].max() - d["x_cm"].min())
     h = float(d["y_cm"].max() - d["y_cm"].min())
@@ -245,7 +258,7 @@ def _camera_for_building(b, tx, ty, obstacles, max_standoff):
     z = cg.terrain_z_at(px, py) + CAM_UP_CM
     z_target_mid = cg.terrain_z_at(cx, cy) + height / 2.0
     pitch = _pitch_for(z, z_target_mid, dist)
-    return px, py, z, yaw, pitch, DEFAULT_FOV * FOV_RENDER_CORRECTION
+    return px, py, z, yaw, pitch, DEFAULT_FOV
 
 
 def _ensemble_camera(props, prop, max_standoff, *, margin=ENSEMBLE_MARGIN,
@@ -275,7 +288,7 @@ def _ensemble_camera(props, prop, max_standoff, *, margin=ENSEMBLE_MARGIN,
     # au nord, regarde vers le sud/le centre).
     px, py = bx - back * math.sin(yaw), by - back * math.cos(yaw)
     z = cg.terrain_z_at(bx, by) + up
-    return (px, py, z, yaw, pitch, ENSEMBLE_FOV * FOV_RENDER_CORRECTION)
+    return (px, py, z, yaw, pitch, ENSEMBLE_FOV)
 
 
 def _viewpoints():
@@ -300,16 +313,19 @@ def _viewpoints():
     max_standoff = _terrain_max_standoff()
     if not props:
         return []
-    # yaw=-pi/4 pour ensemble_laterale (pas +pi/2 initialement teste) : le
-    # bug directionnel ci-dessus touche aussi la vue d'ensemble, pas
-    # seulement les vues par batiment -- a distance/pitch IDENTIQUES a
-    # ensemble_large (seule variable = yaw), +pi/2 rendait une image
-    # degradee (ciel quasi pur) alors que -pi/4 rend correctement. Verifie
-    # par balayage empirique (rendu reel a plusieurs yaw) sur le site de
-    # test cette session, PAS une hypothese generale sur "quels azimuts
-    # marchent" -- si ce plafond devient insuffisant sur un autre site,
-    # refaire le meme balayage plutot que de supposer -pi/4 universellement
-    # sur.
+    # yaw=-pi/4 pour ensemble_laterale : donne un angle lateral/oblique
+    # distinct de ensemble_large (yaw=0) plutot qu'une raison de contourner
+    # un azimut degrade -- re-balaye apres la correction du FOV (grand-angle,
+    # cf. DEFAULT_FOV) sur le site de test : les 8 azimuts cardinaux/diagonaux
+    # (0/45/90/.../315 deg) rendent tous correctement (white_frac 0.26-0.53,
+    # bien sous le seuil `_looks_degraded`), y compris +pi/2 qui produisait
+    # une image quasi vide avant ce correctif. Le bug directionnel du
+    # renderer reste confirme independamment (scene synthetique, cf.
+    # docs/PIPELINE.md #12) -- il ne se manifeste simplement plus, sur CE
+    # site et a distance/pitch actuels, une fois le FOV reellement transmis
+    # large plutot qu'etroit. `_looks_degraded` est garde comme filet de
+    # securite (pas retire), au cas ou un autre site/cadrage retombe dans une
+    # zone sensible.
     return [
         ("ensemble_large", _ensemble_camera(props, prop, max_standoff)),
         ("ensemble_rapprochee", _ensemble_camera(
