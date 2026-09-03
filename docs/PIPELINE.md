@@ -146,3 +146,24 @@ lancement, partagé par `verif.py --render` et `preview.py`.
     tournent aussi dans un venv pip (`config/requirements-venv.txt`) + JDK,
     y compris en session Claude Code distante (conteneur Linux), cf.
     `CLAUDE.md` section Environnement.
+12. **`preview.py` : standoff des vues par bâtiment plafonné à 18 m.**
+    Au-delà d'environ 20 m, certaines directions de visée produisent une
+    image vide (ciel/sol seul) sans obstacle ni relief détectable sur le
+    trajet caméra→bâtiment — comportement non documenté du moteur de rendu
+    SunFlow/`PhotoRenderer` (jar tiers, pas de source correspondant
+    exactement au binaire utilisé). Un cadrage plus serré que la marge
+    visée peut en résulter sur un grand bâtiment. Cf. `## Écarts assumés`
+    ci-dessous.
+
+## Écarts assumés
+
+1 écart assumé à ce jour.
+
+| # | Limite concernée | Contexte | Choix assumé |
+|---|---|---|---|
+| 1 | #12 (standoff `preview.py` plafonné) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, puis du winding/volume signé du maillage terrain) : les 5 hypothèses techniques identifiées ont toutes été infirmées, sans piste concrète restante pour expliquer l'échec selon la direction de visée. | Plutôt que de continuer une investigation sans échéance sur un renderer boîte noire, le standoff des vues par bâtiment est plafonné à une distance courte et prouvée fiable dans tous les tests (18 m), quel que soit le cadrage « idéal » calculé pour ce bâtiment. La vue d'ensemble de la parcelle, à distance et direction différentes, n'est pas concernée (déjà validée fiable par test réel). |
+
+Le compromis retenu privilégie un cadrage parfois plus serré (voire un
+bâtiment partiellement visible sur un grand volume) à une image totalement
+vide : mieux vaut un aperçu imparfait mais garanti qu'une vue exploitable
+seulement dans certaines directions du site.
