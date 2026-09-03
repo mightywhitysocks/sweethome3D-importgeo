@@ -236,6 +236,12 @@ _ENV_ROOT = ENV_ROOT          # compat
 os.environ.setdefault("GDAL_DATA", str(ENV_ROOT / "Library" / "share" / "gdal"))
 os.environ.setdefault("PROJ_LIB", str(ENV_ROOT / "Library" / "share" / "proj"))
 
+# Timeout HTTP GDAL (vsicurl) : sans lui, gpd.read_file() sur une URL (parcels_l93,
+# wfs_l93) peut bloquer indefiniment sur une connexion ouverte sans reponse -- deja
+# constate sur le Geoplateforme IGN (limite d'acces consecutifs, cf. CLAUDE.md).
+os.environ.setdefault("GDAL_HTTP_TIMEOUT", "60")
+os.environ.setdefault("GDAL_HTTP_CONNECTTIMEOUT", "10")
+
 
 # --------------------------------------------------------------------------- #
 # Repere plan SH3D
@@ -396,10 +402,12 @@ def wms_getmap(layers, bbox_l93, res_m: float = 0.5,
     def _fetch():
         from owslib.wms import WebMapService
 
-        wms = WebMapService(WMS_URL, version="1.3.0")
+        # timeout explicite (GetCapabilities a la construction + GetMap) plutot
+        # que de compter sur le defaut owslib (30s, implicite, non documente ici).
+        wms = WebMapService(WMS_URL, version="1.3.0", timeout=60)
         r = wms.getmap(layers=layer_names, srs="EPSG:2154",
                        bbox=(e0, n0, e1, n1), size=(w, h), format=fmt,
-                       transparent=False)
+                       transparent=False, timeout=60)
         return r.read()
 
     key = f"wms_{'_'.join(layer_names)}_{e0:.2f}_{n0:.2f}_{e1:.2f}_{n1:.2f}_{w}x{h}_{fmt.replace('/', '_')}"
