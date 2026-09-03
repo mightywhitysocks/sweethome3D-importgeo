@@ -109,11 +109,16 @@ def main() -> None:
         e0, n0, e1, n1 = cg.META.bbox_l93
         laz_paths = roofer_roof.lidar_tile_paths((e0, n0, e1, n1), margin_m=5.0)
         footprint_gpkg = GEO / "_roofer_footprint.gpkg"
-        roofer_roof.write_footprint_gpkg(
-            [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
-             for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
-            footprint_gpkg)
-        roofer_data = roofer_roof.run_roofer(footprint_gpkg, laz_paths, GEO / "_roofer_output")
+        try:
+            roofer_roof.write_footprint_gpkg(
+                [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
+                 for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
+                footprint_gpkg)
+        except Exception as e:                                          # noqa: BLE001
+            print(f"  toit roofer : ecriture du GeoPackage d'empreintes echouee "
+                  f"({type(e).__name__}: {e}) -> repli pyramidal pour tous les batiments")
+        else:
+            roofer_data = roofer_roof.run_roofer(footprint_gpkg, laz_paths, GEO / "_roofer_output")
 
     for classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs:
         dest = groups_prop if classe == "propriete" else groups

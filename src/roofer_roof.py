@@ -112,13 +112,17 @@ def run_roofer(footprint_gpkg: Path, laz_paths: list[Path], out_dir: Path, *, lo
 
     scale, translate = (1e-4, 1e-4, 1e-4), (0.0, 0.0, 0.0)
     records = []
-    for line in seq_files[0].read_text(encoding="utf-8").splitlines():
-        rec = json.loads(line)
-        t = rec.get("transform")
-        if t is not None:
-            scale, translate = t["scale"], t["translate"]
-        if rec.get("CityObjects"):
-            records.append(rec)
+    try:
+        for line in seq_files[0].read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            t = rec.get("transform")
+            if t is not None:
+                scale, translate = t["scale"], t["translate"]
+            if rec.get("CityObjects"):
+                records.append(rec)
+    except Exception as e:                                          # noqa: BLE001
+        log(f"  toit roofer : sortie CityJSON illisible ({type(e).__name__}: {e}) -> repli pyramidal")
+        return None
     if not records:
         log("  toit roofer : sortie CityJSON sans batiment -> repli pyramidal")
         return None
