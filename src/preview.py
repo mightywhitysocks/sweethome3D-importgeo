@@ -78,6 +78,16 @@ ENSEMBLE_FOV = DEFAULT_FOV   # meme plafond calibre -- pas de FOV plus large dis
                               # (cf. corollaire ci-dessus, deja proche du plafond sur/pi)
 ENSEMBLE_MIN_DIST_CM = 1500.0
 
+# Repli defensif documente (docs/PIPELINE.md, limitation #12) : au-dela
+# d'environ 20 m, certaines directions de visee produisent une image vide
+# (ciel/sol seul) sans obstacle ni relief detectable sur le trajet -- cause
+# non identifiee malgre une investigation ciblee (soleil, terrain, vegetation,
+# obstacle voisin, winding du maillage, tous ecartes ; cf. `/ecart`). Plafond
+# empirique choisi au milieu de la plage testee fiable (15-20 m) plutot que le
+# cadrage "pile" theorique -- s'applique seulement aux vues par batiment (la
+# vue d'ensemble, a distance/direction differentes, reste validee fiable).
+RELIABLE_STANDOFF_CM = 1800.0
+
 
 def _terrain_max_standoff():
     """Distance de recul maximale sure : le FOV reel praticable etant etroit
@@ -273,10 +283,11 @@ def _viewpoints():
 
     obstacles = _obstacles(bat)
     max_standoff = _terrain_max_standoff()
+    building_max_standoff = min(max_standoff, RELIABLE_STANDOFF_CM)
 
     views = []
     for i, b in enumerate(props):
-        cam = _camera_for_building(b, tx, ty, obstacles, max_standoff)
+        cam = _camera_for_building(b, tx, ty, obstacles, building_max_standoff)
         views.append((f"bati{i}_{b['id'][-4:]}", cam))
     if props:
         views.append(("ensemble", _ensemble_camera(props, prop, max_standoff)))
