@@ -231,6 +231,15 @@ script isolément (cf. Environnement) — pas la génération complète.
   réintroduit pas de trou (les arêtes de bord entre deux groupes restent
   géométriquement coïncidentes, cf. vérification empirique : 0 arête ouverte
   sur les 18 bâtiments reconstruits de cette session, groupes inclus).
+  **Deux garde-fous ajoutés lors d'une revue de code ultérieure** (issues
+  #35/#42) : un bâtiment `MultiPolygon` (parties disjointes) reçoit un
+  identifiant `cleabs` suffixé par polygone (`roofer_roof.cleabs_for`,
+  utilisé à la fois par `write_footprint_gpkg` et par l'appelant de
+  `build_roof` dans `bati.py`) -- sinon toutes les parties récupéraient à
+  tort le `Solid` de la première (même `cleabs` réutilisé) ; un `Solid` avec
+  des faces `RoofSurface` mais aucune `GroundSurface`/`WallSurface` (sortie
+  `roofer` atypique) est désormais traité comme un échec de reconstruction
+  (repli pyramidal) plutôt que de produire un toit flottant sans mur.
   **Bug confirmé (roofer 1.1.0-beta.1), n'affecte QUE `roofer_compare.py`**
   (attributs CityJSON `rf_h_*`, pas la géométrie du `Solid` que consomme
   `roofer_roof.py`) : `rf_h_ground` est exposé relatif à
