@@ -2,11 +2,13 @@
 vegetation.py : Phase 2, arbres + haies depuis le MNH LIDAR HD.
 
   A. arbres  : maxima locaux du MNH (scipy.maximum_filter), h >= H_ARBRE, espaces
-     d'au moins MIN_DIST, dans (parcelles + 8 m), hors emprises bati.
+     d'au moins MIN_DIST, sur toute l'emprise terrain (zone = META.bbox_l93,
+     meme emprise que le bati voisinage), hors emprises bati.
      + lisieres boisees larges -> ligne d'arbres dense le long du spine.
-  B. haies taillees : vegetation basse allongee et etroite le long de la limite
-     de propriete -> squelette (skimage) -> spine (networkx) -> PRISME OBJ vert
-     mat ferme (winding correct, jamais de cull).
+  B. haies taillees : vegetation basse allongee et etroite, meme emprise
+     que les arbres (pas seulement autour de la propriete) -> squelette
+     (skimage) -> spine (networkx) -> PRISME OBJ vert mat ferme (winding
+     correct, jamais de cull).
 
 Toutes les elevations sont prises sur la SURFACE du maillage terrain
 (`sitegeo.terrain_z_at`) -> les objets affleurent le sol visible.
@@ -30,11 +32,6 @@ H_ARBRE = 3.5          # m : cime = arbre
 H_VEG = 1.5            # m : seuil vegetation
 MIN_DIST = 4.5         # m entre cimes
 LINE_SPACING = 5.0     # m entre arbres d'une lisiere
-HEDGE_BUF_M = 15.0     # ceinture autour de la parcelle propriete -- deliberement locale
-                       # (une haie taillee marque une limite de parcelle precise, pas
-                       # une ligne arbitraire ailleurs dans le voisinage) ; contrairement
-                       # aux arbres isoles/lisieres (zone), pas etendue a toute la bbox
-                       # terrain (evalue et tranche pour l'issue #46).
 
 TREE_CAT = "OlaKristianHoff#tree"        # gabarit 600 x 640 x 800 cm
 TREE_W0, TREE_D0, TREE_H0 = 600.0, 640.0, 800.0
@@ -62,11 +59,10 @@ def main() -> None:
                             if len(ring) >= 3])
     # meme emprise que le bati voisinage (bati.py : cg.wfs_l93 sur META.bbox_wgs84,
     # equivalent a META.bbox_l93 ici) -- pas les seules parcelles listees dans
-    # site.local.toml, sinon la vegetation modelisee en 3D ne couvre qu'une
-    # fraction de ce que montrent deja le fond ortho/terrain sur le reste de la
-    # bbox (issue #46).
+    # site.local.toml, sinon la vegetation modelisee en 3D (arbres ET haies,
+    # meme traitement pour les deux) ne couvre qu'une fraction de ce que
+    # montrent deja le fond ortho/terrain sur le reste de la bbox (issue #46).
     zone = box(*cg.META.bbox_l93)
-    poly_prop = cg.property_polygon_l93()
     bati_mask = rasterize([(bati_l93.buffer(2.0), 1)], out_shape=MNH.shape,
                           transform=T, fill=0).astype(bool)
 
@@ -87,8 +83,8 @@ def main() -> None:
         x, y = cg.to_plan_cm(E, N)
         trees.append((float(x), float(y), cg.terrain_z_at(x, y), float(MNH[r_, c_])))
 
-    # ---------- B. HAIES / LISIERES (ceinture de la parcelle propriete) ----------
-    zmask = rasterize([(poly_prop.buffer(HEDGE_BUF_M), 1)], out_shape=MNH.shape,
+    # ---------- B. HAIES / LISIERES (meme emprise que les arbres, cf. zone) ----------
+    zmask = rasterize([(zone, 1)], out_shape=MNH.shape,
                       transform=T, fill=0).astype(bool)
     veg = binary_closing((MNH >= H_VEG) & zmask & ~bati_mask, np.ones((3, 3)))
     lab, nlab = ndlabel(veg, np.ones((3, 3)))
