@@ -48,19 +48,44 @@ extraire_motifs_confidentiels() {
 # connu localement ; renvoie 1 sinon. Silencieux quand aucun motif n'est
 # disponible (rien à vérifier pour l'instant).
 #
-# Chaque motif est borné par \b (limite de mot) : un motif court comme une
-# section cadastrale à 2 lettres matchait sinon en sous-chaîne dans des mots
+# Chaque motif est borné par \b (limite de mot) côté où il commence/finit
+# par un caractère de mot ([A-Za-z0-9_]) : un motif court comme une section
+# cadastrale à 2 lettres matchait sinon en sous-chaîne dans des mots
 # anglais/français courants (ex. une section fictive "AB" matcherait dans
 # "syllabe") -- constaté en usage réel avec une vraie section, faux positif
 # qui bloquait des commits légitimes sans aucune donnée de site. \b
 # n'affaiblit pas la détection : le motif reste trouvé partout où il
 # apparaît comme token isolé.
+#
+# Ancrage conditionnel (pas systématique) car `\b` ne matche jamais entre
+# deux caractères non-mot : un `site_name` en texte libre peut commencer ou
+# finir par un caractère non alphanumérique (ex. "Ferme (Bois-Clair)" finit
+# par `)`) -- un `\b` systématique en fin de motif y serait une position qui
+# ne matche jamais, et le motif ne serait donc jamais détecté.
+#
+# Chaque motif est aussi échappé (métacaractères ERE) avant d'être inséré
+# dans le motif_regex : un `site_name` contenant un caractère spécial ERE
+# ("Ferme (Bois-Clair)" par ex.) rendait sinon l'alternation invalide ;
+# `grep -qiE` échoue alors avec une erreur de syntaxe (code retour non nul)
+# au lieu de "pas de motif trouvé" -- code retour non nul que
+# contient_fuite_confidentielle renvoyait tel quel, traité par l'appelant
+# comme "pas de fuite" : un commit contenant le vrai nom de site passait
+# silencieusement.
 contient_fuite_confidentielle() {
     local contenu="$1"
     local motifs
     motifs="$(extraire_motifs_confidentiels)"
     [[ -z "$motifs" ]] && return 1
     local motif_regex
-    motif_regex="$(sed 's/^/\\b/; s/$/\\b/' <<< "$motifs" | paste -sd'|')"
+    motif_regex="$(
+        local m esc pre post
+        while IFS= read -r m; do
+            [[ -z "$m" ]] && continue
+            esc="$(sed -e 's/\\/\\\\/g' -e 's/[.[*^$()+?{}|]/\\&/g' <<< "$m")"
+            pre='\b'; [[ "$m" =~ ^[A-Za-z0-9_] ]] || pre=''
+            post='\b'; [[ "$m" =~ [A-Za-z0-9_]$ ]] || post=''
+            printf '%s%s%s\n' "$pre" "$esc" "$post"
+        done <<< "$motifs" | paste -sd'|'
+    )"
     grep -qiE "$motif_regex" <<< "$contenu"
 }
