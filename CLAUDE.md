@@ -315,14 +315,48 @@ script isolément (cf. Environnement) — pas la génération complète.
     confidentialité) : reprendre la comparaison emprise BD TOPO vs pans
     reconstruits sur le même jeu de 18 bâtiments qui a servi au diagnostic
     d'origine, lors d'un prochain run complet sur le site.
-  - **Piste écartée pour l'instant, documentée seulement** (issue #24) : le
-    téléchargement de dalle LAZ entière (`cg.lidar_points_l93`) pourrait
-    être remplacé par un crop streamé (`readers.copc` PDAL, comme dans
-    `roofer-with-ignf-datasets`), potentiellement lié aux
-    `ConnectionResetError` déjà documentées (cf. "Cache disque WFS/WMS"
-    ci-dessus). Nouvelle dépendance PDAL (le projet a explicitement choisi
-    de s'en passer, `config/environment.yml`) + refonte du cache LiDAR :
-    hors périmètre, pas engagé.
+- **Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
+  dans le dépôt comme filet de comparaison**, pas de purge pour l'instant.
+  Les deux fixes de couverture `roofer` ci-dessus sont désormais appliqués
+  (remap classe 67, attributs d'altitude), mais -- comme noté juste au-dessus
+  -- pas encore revalidés sur données réelles faute de site configuré dans
+  la session qui les a écrits. Tant que cette revalidation (même jeu de 18
+  bâtiments que le diagnostic d'origine) n'a pas eu lieu, purger le filet de
+  comparaison serait prématuré : revisiter cette décision une fois la
+  revalidation faite.
+- **Investigué et écarté pour l'instant (issue #24) : crop LiDAR streamé
+  (COPC) en remplacement du téléchargement de dalle entière.** Les dalles
+  LiDAR HD IGN sont bien diffusées au format COPC (`.copc.laz`, confirmé en
+  inspectant `ignfab/roofer-with-ignf-datasets` : `readers.copc` PDAL ciblé
+  sur la même colonne `url` que celle que `cg.lidar_tile_index` lit déjà) --
+  un crop spatial est donc structurellement possible côté serveur. Mais :
+  - `copclib` (bindings Python du moteur COPC, wheels manylinux précompilées
+    sur PyPI pour CPython 3.9-3.13 -- pas de sudo/conda requis, contrairement
+    à PDAL) ne résout PAS le problème réseau visé ici : son unique classe
+    exposée en Python, `FileReader(path)`, ne lit qu'un fichier LOCAL déjà
+    complet -- le constructeur C++ générique sur `std::istream*` (qui
+    permettrait en théorie un flux HTTP custom) n'est pas exposé côté
+    bindings Python (vérifié dans `python/bindings.cpp` du dépôt
+    `RockRobotic/copc-lib`). L'installer n'évite donc pas de télécharger la
+    dalle entière au préalable.
+  - Un vrai crop réseau demanderait un client Range-HTTP maison (parser les
+    VLR COPC info/hiérarchie via `requests`, ne récupérer que les chunks des
+    nœuds octree qui intersectent la bbox, reconstruire un fichier COPC
+    local partiel/sparse pour le passer ensuite à `copclib.FileReader`) :
+    faisable en pur Python (aucune nouvelle dépendance native), mais un
+    travail d'implémentation substantiel et une nouvelle surface de bugs,
+    pour un gain (moins de `ConnectionResetError`) documenté comme
+    "potentiellement lié", jamais mesuré.
+  - Le mécanisme de résilience existant (cache disque permanent
+    `data/net_cache`/`data/lidar_cache`, jamais retéléchargé une fois en
+    cache ; boucle réessayer/sauter/arrêter de `run.sh`/`run.ps1` en cas
+    d'échec réseau) couvre déjà le problème en pratique.
+  - PDAL natif reste écarté pour la raison d'origine (dépendance système,
+    deux échecs déjà documentés sur ce même obstacle d'installation :
+    `ign-pdal-tools`, Entwine).
+  - Décision : ne pas engager ce travail maintenant. À reconsidérer
+    seulement si les erreurs réseau redeviennent un blocage récurrent réel
+    (pas seulement théorique) en usage normal du pipeline.
 
 ## git
 
