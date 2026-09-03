@@ -72,9 +72,10 @@ Cadastre / Terrain / Bâti voisinage / Bâti propriété / Végétation.
 smoke-test visuel (textures, calques, géométrie) sans ouvrir l'appli.
 `RenderPhoto` accepte un point de vue optionnel `x y z yaw pitch` (repère plan,
 cm / rad) et `-Drender.quality=low|high`. `python src/preview.py` s'en sert pour
-un aperçu depuis chaque bâtiment de la propriété plus une vue d'ensemble aérienne
-(`data/verif/preview_*.png`). `sitegeo.render_photo()` factorise compilation et
-lancement, partagé par `verif.py --render` et `preview.py`.
+trois vues d'ensemble aériennes de la parcelle -- large, rapprochée, latérale
+(`data/verif/preview_ensemble_*.png`), cf. limitation #12 pour le détail et
+les vues par bâtiment (désactivées). `sitegeo.render_photo()` factorise
+compilation et lancement, partagé par `verif.py --render` et `preview.py`.
 
 - Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
   suggère la doc communautaire du même nom) : c'est un petit helper source,
@@ -146,15 +147,25 @@ lancement, partagé par `verif.py --render` et `preview.py`.
     tournent aussi dans un venv pip (`config/requirements-venv.txt`) + JDK,
     y compris en session Claude Code distante (conteneur Linux), cf.
     `CLAUDE.md` section Environnement.
-12. **`preview.py` : vues caméra par bâtiment désactivées, seule la vue
-    d'ensemble de la parcelle est générée.** Un plafond de standoff (18 m)
-    avait d'abord été tenté (repli défensif), mais s'est révélé insuffisant :
-    même à cette distance courte, avec un cadrage géométriquement correct
-    (yaw = azimut caméra→bâtiment vérifié par calcul direct, écart nul), le
-    rendu SunFlow reste par endroits quasi vide (ciel/sol seul) sans
-    obstacle ni relief pouvant l'expliquer — comportement non documenté du
-    moteur de rendu SunFlow/`PhotoRenderer` (jar tiers, pas de source
-    correspondant exactement au binaire utilisé). Cf. `## Écarts assumés`
+12. **`preview.py` : vues caméra par bâtiment désactivées ; le rendu SunFlow
+    peut aussi dégrader une vue d'ensemble selon l'azimut.** Un plafond de
+    standoff (18 m) avait d'abord été tenté comme repli défensif pour les
+    vues par bâtiment, mais s'est révélé insuffisant : même à cette distance
+    courte, avec un cadrage géométriquement correct (yaw = azimut
+    caméra→bâtiment vérifié par calcul direct, écart nul), le rendu SunFlow
+    reste par endroits quasi vide (ciel/sol seul) sans obstacle ni relief
+    pouvant l'expliquer — comportement non documenté du moteur de rendu
+    SunFlow/`PhotoRenderer` (jar tiers, pas de source correspondant
+    exactement au binaire utilisé). **Le même bug touche aussi la vue
+    d'ensemble** : une variante testée à yaw=+90° (même distance/pitch que
+    la vue large déjà validée, azimut seul different) a rendu une image
+    quasi vide, alors qu'un balayage de plusieurs azimuts sur le même site a
+    trouvé des angles propres (dont −45°, retenu pour `ensemble_laterale`).
+    Aucune règle générale n'explique quels azimuts sont sûrs -- `preview.py`
+    filtre donc désormais automatiquement (`_looks_degraded`, seuil
+    empirique sur la fraction de pixels quasi blancs) toute vue rendue et
+    écarte celles qui ressortent quasi vides, plutôt que de supposer qu'un
+    angle validé sur un site le reste sur un autre. Cf. `## Écarts assumés`
     ci-dessous.
 
 ## Écarts assumés
@@ -163,8 +174,9 @@ lancement, partagé par `verif.py --render` et `preview.py`.
 
 | # | Limite concernée | Contexte | Choix assumé |
 |---|---|---|---|
-| 1 | #12 (vues par bâtiment de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain) : les 5 hypothèses techniques identifiées ont toutes été infirmées. Un premier repli (standoff plafonné à 18 m) a ensuite été testé en conditions réelles (pipeline complet + rendu CI) et s'est révélé insuffisant : au moins un bâtiment restait quasi invisible malgré un cadrage géométriquement vérifié correct. | Plutôt que de publier des images par bâtiment ponctuellement inutilisables sans garantie, `_viewpoints()` ne génère plus que la vue d'ensemble de la parcelle (seule validée fiable par rendu réel, y compris sur pipeline complet). Le code de calcul des vues par bâtiment (`_camera_for_building` et fonctions associées) est conservé dans `preview.py` pour référence/reprise future, mais n'est plus appelé. |
+| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain) : les 5 hypothèses techniques identifiées pour les vues par bâtiment ont toutes été infirmées. Le repli standoff (18 m) s'est ensuite révélé insuffisant, puis le même bug a été retrouvé sur la vue d'ensemble elle-même selon l'azimut (yaw=+90° dégradé, −45° propre, même distance/pitch) -- aucune règle générale identifiée, la cause exacte reste dans le moteur de rendu SunFlow (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale -- angle latéral choisi après balayage empirique sur le site testé, pas une garantie universelle), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur. |
 
-Le compromis retenu privilégie l'absence de vue par bâtiment à une vue
-ponctuellement vide ou inexploitable : seule la vue d'ensemble, dont la
-fiabilité est démontrée, est publiée pour l'instant.
+Le compromis retenu privilégie l'absence d'une vue à une vue ponctuellement
+vide ou inexploitable, sur toutes les vues caméra (pas seulement celles par
+bâtiment) : mieux vaut publier 1 ou 2 vues d'ensemble fiables que 3 dont une
+inutilisable sans que rien ne le signale.
