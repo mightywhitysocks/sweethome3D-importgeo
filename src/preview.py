@@ -7,7 +7,8 @@ centre de l'emprise, hauteur d'oeil, visant le centre de la parcelle) + une vue
 d'ensemble. Sorties : `data/verif/preview_*.png`.
 
 Optionnel : ne fait rien si le JDK ou les jars de rendu manquent
-(cf. sitegeo.render_photo). Prerequis : le pipeline a tourne (`.\run.ps1`).
+(cf. sitegeo.render_photo). Prerequis : le pipeline a tourne (`./run.sh`,
+cf. CLAUDE.md section Environnement).
 
   python src/preview.py             # 1024x640, qualite rapide
   python src/preview.py 1280 800    # taille au choix
@@ -53,11 +54,19 @@ def _viewpoints():
         radius = max((math.hypot(x - cx, y - cy) for ring in b["rings_cm"] for x, y in ring),
                      default=0.0)
         standoff = radius + 100.0
-        while standoff <= radius + STANDOFF_MAX_CM:
+        cap = radius + STANDOFF_MAX_CM
+        while standoff < cap:
             px, py = cx + standoff * math.sin(yaw), cy + standoff * math.cos(yaw)
             if not any(fp.contains(Point(px, py)) for fp in footprints):
                 break
             standoff += STANDOFF_STEP_CM
+        else:
+            # garde-fou : tous les points candidats jusqu'au plafond tombent
+            # dans l'emprise d'un batiment -> on rend quand meme avec le point
+            # clampe exactement au plafond (jamais un point rejete a un recul
+            # moindre) -- mieux qu'une boucle infinie.
+            standoff = cap
+            px, py = cx + standoff * math.sin(yaw), cy + standoff * math.cos(yaw)
         z = cg.terrain_z_at(px, py) + CAM_UP_CM
         views.append((f"bati{i}_{b['id'][-4:]}", (px, py, z, yaw, PITCH)))
     if props:

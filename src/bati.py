@@ -34,7 +34,6 @@ ROOF_RISE_MAX = 350.0        # cm : hauteur de comble max
 COL_MUR = (0.79, 0.74, 0.65)
 ROOF_MTL = {"tuile": (0.545, 0.227, 0.169), "ardoise": (0.243, 0.259, 0.282),
             "fibro": (0.471, 0.486, 0.510)}
-_ROOF_KEY = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise", (120, 124, 130): "fibro"}
 
 
 def _fnum(v):
@@ -90,7 +89,7 @@ def main() -> None:
         bat.append({
             "id": rid, "classe": classe, "hauteur": haut,
             "alt_sol": alt_sol, "alt_toit": alt_toit,
-            "etages": row.get("nombre_d_etages"),
+            "etages": _fnum(row.get("nombre_d_etages")),
             "mur": row.get("materiaux_des_murs"),
             "toit": row.get("materiaux_de_la_toiture"),
             "nature": row.get("nature"),
@@ -109,20 +108,30 @@ def main() -> None:
         e0, n0, e1, n1 = cg.META.bbox_l93
         laz_paths = roofer_roof.lidar_tile_paths((e0, n0, e1, n1), margin_m=5.0)
         footprint_gpkg = GEO / "_roofer_footprint.gpkg"
-        roofer_roof.write_footprint_gpkg(
-            [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
-             for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
-            footprint_gpkg)
-        roofer_data = roofer_roof.run_roofer(footprint_gpkg, laz_paths, GEO / "_roofer_output")
+        try:
+            roofer_roof.write_footprint_gpkg(
+                [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
+                 for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
+                footprint_gpkg)
+        except Exception as e:                                          # noqa: BLE001
+            print(f"  toit roofer : ecriture du GeoPackage d'empreintes echouee "
+                  f"({type(e).__name__}: {e}) -> repli pyramidal pour tous les batiments")
+        else:
+            roofer_data = roofer_roof.run_roofer(footprint_gpkg, laz_paths, GEO / "_roofer_output")
 
     for classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs:
         dest = groups_prop if classe == "propriete" else groups
-        for poly, ring in zip(polys, rings_cm):
+        for i, (poly, ring) in enumerate(zip(polys, rings_cm)):
             if poly.area < 4 or len(ring) < 3:
                 continue
             base = min(cg.terrain_z_at(x, y) for x, y in ring) - 3.0
+            # meme identifiant que write_footprint_gpkg (roofer_roof.cleabs_for)
+            # pour un batiment MultiPolygon (parties disjointes) : sinon
+            # roofer_roof.build_roof recupererait le toit de la 1ere partie
+            # pour toutes les suivantes (cf. issue #35).
+            cleabs = roofer_roof.cleabs_for(rid, i, len(polys))
             mesh_groups = roofer_roof.build_roof(
-                roofer_data, rid, ring, base, plan_origin_l93, z_min, ortho, obb)
+                roofer_data, cleabs, ring, base, plan_origin_l93, z_min, ortho, obb)
             if mesh_groups is not None:
                 if classe == "propriete":
                     n_prop_roofer += 1
@@ -138,7 +147,7 @@ def main() -> None:
                 _, _, mur_mesh, toit_mesh = _pyramidal_mesh(poly, ring, haut, alt_toit, z_min)
                 dest["mur"].append(mur_mesh)
                 rc = cg.roof_color_from_ortho(poly, ortho, obb)
-                key = _ROOF_KEY.get(tuple(rc), "ardoise")
+                key = cg.ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
                 dest.setdefault(key, []).append(toit_mesh)
 
     (GEO / "bati.json").write_text(json.dumps(
@@ -202,9 +211,11 @@ def _propriete_ref(props) -> None:
         pts = [p for r in b["rings_cm"] for p in r]
         cx = sum(p[0] for p in pts) / len(pts)
         cy = sum(p[1] for p in pts) / len(pts)
-        txt = f"bati {b['id'][-4:]}\\nh {b['hauteur']} m"
+        txt = f"bati {b['id'][-4:]}"
+        if b["hauteur"]:
+            txt += f"\\nh {b['hauteur']} m"
         if b["etages"]:
-            txt += f" | {b['etages']} niv"
+            txt += f" | {int(b['etages'])} niv"
         if b["alt_toit"]:
             txt += f"\\ntoit {b['alt_toit']} m NGF"
         cmds.append({"action": "add_label", "params": {

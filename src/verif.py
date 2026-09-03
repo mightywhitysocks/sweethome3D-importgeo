@@ -5,10 +5,13 @@ verif.py : controle complet du pipeline (lecture seule).
   2. Topologie : pas de recouvrement, emprise dans la bbox du fond
   3. Fond : georeferencement de data/ortho.tif (CRS L93, bbox, resolution)
   4. Repere : origin_l93 == coin NO bbox, marge
-  5. .sh3d : niveau 'Cadastre', pieces parcelle, image de fond
-  6. Calage <backgroundImage> : echelle < 0,05 % et origine < 5 cm
-  7. (option --overlay) data/verif/verif_overlay.png : parcelles sur l'ortho
-  8. (option --render) data/verif/render_photo.png : rendu photo headless (SunFlow),
+  5. Maillages fermes (terrain.obj, haies.obj) : 0 arete ouverte, volume signe
+     positif -- winding OBJ documente dans CLAUDE.md (write_obj ecrit y-up,
+     faces `f c b a`).
+  6. .sh3d : niveau 'Cadastre', pieces parcelle, image de fond
+  7. Calage <backgroundImage> : echelle < 0,05 % et origine < 5 cm
+  8. (option --overlay) data/verif/verif_overlay.png : parcelles sur l'ortho
+  9. (option --render) data/verif/render_photo.png : rendu photo headless (SunFlow),
      smoke-test visuel du .sh3d ; voir _render_photo() et java/RenderPhoto.java.
      Optionnel : ignore si les jars de rendu ([tools].render_libs_dir) sont absents,
      n'affecte pas le code retour de verif.py.
@@ -26,6 +29,7 @@ from math import hypot
 
 import sitegeo as cg          # noqa: E402  (regle GDAL_DATA/PROJ_LIB en premier)
 
+import numpy as np
 import rasterio
 from PIL import Image
 from shapely.geometry import Point
@@ -134,10 +138,15 @@ def main() -> None:
     check("origin_l93 == coin NO bbox", abs(E0 - e0) < 1e-6 and abs(N1 - n1) < 1e-6)
     check(f"marge meta == {cg.MARGE_M} m", cg.META.marge_m == cg.MARGE_M)
 
+    print("\n=== 5. Maillages fermes (winding OBJ) ===")
+    _check_closed_mesh(GEO / "terrain.obj", "terrain.obj")
+    if (GEO / "haies.obj").exists():
+        _check_closed_mesh(GEO / "haies.obj", "haies.obj")
+
     if not SH3D.exists():
-        print("\n(.sh3d absent, etapes 5/6 sautees)")
+        print("\n(.sh3d absent, etapes 6/7 sautees)")
     else:
-        print("\n=== 5. .sh3d ===")
+        print("\n=== 6. .sh3d ===")
         with zipfile.ZipFile(SH3D) as z:
             names = z.namelist()
             check("image de fond presente", any(n.isdigit() for n in names))
@@ -148,7 +157,7 @@ def main() -> None:
                 check(f"piece '{cg.SECTION} {num}' presente",
                       f"{cg.SECTION} {num}" in raw)
 
-            print("\n=== 6. Calage <backgroundImage> ===")
+            print("\n=== 7. Calage <backgroundImage> ===")
             bg = (_bg_from_xml(z.read("Home.xml").decode("utf-8", "replace"))
                   if "Home.xml" in names else None)
             if bg is None and "Home" in names:
@@ -182,6 +191,42 @@ def main() -> None:
     sys.exit(0 if _OK[0] else 1)
 
 
+def _signed_volume(mesh) -> float:
+    """Volume signe (formule du theoreme de la divergence, `sum(v0 . (v1 x v2)) / 6`
+    sur les triangles) : NEGATIF si le winding est globalement inverse. A la
+    difference de `mesh.volume` (vtkMassProperties), qui renvoie une magnitude
+    insensible a l'orientation des faces -- verifie empiriquement : un maillage
+    dont toutes les faces sont inversees (`flip_faces`) donne le MEME
+    `mesh.volume` positif que l'original, donc `mesh.volume > 0` ne peut
+    jamais detecter l'erreur de winding vise ici."""
+    m = mesh.triangulate()
+    pts = m.points
+    f = m.faces.reshape(-1, 4)[:, 1:4]
+    v0, v1, v2 = pts[f[:, 0]], pts[f[:, 1]], pts[f[:, 2]]
+    return float(np.sum(np.einsum("ij,ij->i", v0, np.cross(v1, v2))) / 6.0)
+
+
+def _check_closed_mesh(path, label) -> None:
+    """Winding OBJ documente dans CLAUDE.md : `write_obj` ecrit y-up (reflexion)
+    -> faces emises `f c b a` pour ne pas etre cullees ; controle = mesh ferme
+    (0 arete ouverte) + volume signe positif (cf. `_signed_volume`, sinon
+    winding invalide).
+    Applique uniquement aux OBJ garantis fermes par construction (terrain,
+    haies -- prismes clos `cg.polygon_prism`) : `bati_propriete.obj` /
+    `bati_voisinage.obj` melangent volontairement, dans un meme groupe
+    materiau, des solides fermes (repli pyramidal) et des surfaces ouvertes
+    (pans de toit / coque mur sans toit d'un batiment reconstruit par
+    `roofer`, cf. `roofer_roof.py`) -- un controle de fermeture generique y
+    donnerait de faux echecs des qu'un batiment est reconstruit par roofer."""
+    import pyvista as pv
+
+    mesh = pv.read(path)
+    check(f"{label} : maillage ferme (0 arete ouverte)", mesh.n_open_edges == 0,
+          f"{mesh.n_open_edges} arete(s) ouverte(s)")
+    vol = _signed_volume(mesh)
+    check(f"{label} : volume signe positif (winding correct)", vol > 0, f"{vol:.1f}")
+
+
 def _overlay(payload) -> None:
     from PIL import ImageDraw
     src = GEO / "fond_cadastre_ortho.png"
@@ -208,7 +253,7 @@ def _render_photo() -> None:
     """Smoke-test visuel du .sh3d : rendu SunFlow headless (cg.render_photo).
     Optionnel -- n'affecte pas le code retour. Pour des apercus depuis les
     batiments de la propriete : `python src/preview.py`."""
-    print("\n=== 8. Rendu photo headless (optionnel) ===")
+    print("\n=== 9. Rendu photo headless (optionnel) ===")
     out = cg.render_photo(cg.VERIF / "render_photo.png")
     if out:
         print(f"  {out} ({out.stat().st_size // 1024} Ko)")

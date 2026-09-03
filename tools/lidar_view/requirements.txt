@@ -1,4 +1,8 @@
-laspy[lazrs]
-plotly
-numpy
-requests
+# Outil autonome (visualisation LiDAR), hors pipeline principal -- versions
+# pinnees par coherence avec config/requirements-venv.txt (meme discipline de
+# versionnage que le reste du depot), pas necessairement identiques.
+laspy~=2.7.0
+lazrs~=0.8.2
+plotly~=7.0.0
+numpy~=2.5.2
+requests~=2.34.2

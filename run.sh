@@ -100,15 +100,26 @@ fi
 # --- venv ---
 venv_dir="$script_dir/.venv"
 venv_py="$venv_dir/bin/python"
+# sentinelle ecrite uniquement apres un `pip install` reussi : sans elle, un
+# .venv dont la creation a reussi mais dont l'installation des paquets a
+# echoue (coupure reseau, mauvaise version de Python) serait pris pour un
+# environnement complet aux lancements suivants (binaire python present,
+# paquets manquants/partiels -> ImportError confus loin dans src/*.py).
+deps_ok="$venv_dir/.deps-ok"
 if [ "$fresh" -eq 1 ] && [ -d "$venv_dir" ]; then
   echo ">> suppression de .venv"
   rm -rf "$venv_dir"
 fi
-if [ ! -x "$venv_py" ]; then
-  echo ">> creation de .venv depuis config/requirements-venv.txt (long...)"
-  python3 -m venv "$venv_dir" || { echo "echec de la creation de .venv (python3 >= 3.12 requis)." >&2; exit 1; }
+if [ ! -x "$venv_py" ] || [ ! -f "$deps_ok" ]; then
+  if [ ! -x "$venv_py" ]; then
+    echo ">> creation de .venv depuis config/requirements-venv.txt (long...)"
+    python3 -m venv "$venv_dir" || { echo "echec de la creation de .venv (python3 >= 3.12 requis)." >&2; exit 1; }
+  else
+    echo ">> .venv incomplet (installation precedente interrompue) -> reinstallation des dependances"
+  fi
   "$venv_py" -m pip install --quiet --upgrade pip || { echo "echec de la mise a jour de pip." >&2; exit 1; }
   "$venv_py" -m pip install -r "$config_dir/requirements-venv.txt" || { echo "echec de l'installation de config/requirements-venv.txt." >&2; exit 1; }
+  touch "$deps_ok"
 fi
 
 # --- etapes ---

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['Dockerfile']
+    paths: ['Dockerfile', 'config/requirements-venv.txt']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,6 +40,14 @@ jobs:
       - name: Minuscules (requis par OCI/GHCR)
         id: image
         run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
+      # Requis par cache-to/cache-from: type=gha ci-dessous : sur un runner
+      # GitHub-hosted standard, docker/build-push-action utilise par defaut le
+      # driver "docker", qui ne supporte pas l'export de cache GHA -- sans ce
+      # step, le build peut echouer purement et simplement plutot que
+      # simplement ne pas mettre en cache.
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       # Cache de build GitHub Actions : ne change rien sur un premier build a
       # froid (rien a reutiliser), mais accelere fortement les rebuilds

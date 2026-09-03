@@ -904,7 +904,6 @@ def _mesh_groups(active, full_polys, plane_z_at, base_m, plan_origin_l93,
         pan_mesh = cg.solidify(pan_surf, depth_cm=PAN_SOLIDIFY_DEPTH_CM)
         poly_l93 = Polygon([to_l93(x, y) for x, y in coords])
         rc = cg.roof_color_from_ortho(poly_l93, ortho_arr, ortho_bbox_l93)
-        key = {(139, 58, 43): "tuile", (62, 66, 72): "ardoise",
-              (120, 124, 130): "fibro"}.get(tuple(rc), "ardoise")
+        key = cg.ROOF_COLOR_KEY.get(tuple(rc), "ardoise")
         groups.append((f"bati_propriete_toit_{pid}", pan_mesh, key))
     return groups
