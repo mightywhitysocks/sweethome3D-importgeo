@@ -28,3 +28,6 @@ Thumbs.db
 # --- Claude Code : .claude/ est versionne (harnais partage du depot),
 # seuls les reglages locaux/personnels sont ignores ---
 .claude/settings.local.json
+# espace de travail jetable d'un agent isole (isolation: "worktree"), jamais
+# du contenu du depot -- recree a chaque session
+.claude/worktrees/
