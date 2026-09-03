@@ -31,6 +31,7 @@ import math
 import sys
 
 import numpy as np
+from PIL import Image
 from shapely.geometry import LineString, MultiPoint, Point
 
 import sitegeo as cg
@@ -247,12 +248,15 @@ def _camera_for_building(b, tx, ty, obstacles, max_standoff):
     return px, py, z, yaw, pitch, DEFAULT_FOV * FOV_RENDER_CORRECTION
 
 
-def _ensemble_camera(props, prop, max_standoff):
+def _ensemble_camera(props, prop, max_standoff, *, margin=ENSEMBLE_MARGIN,
+                      pitch=ENSEMBLE_PITCH, yaw=0.0):
     """Vue d'ensemble : cadre le centre de bbox (pas le centroide -- robuste
     sur parcelle concave/en L) de l'union des empreintes batiments-propriete
     et du contour de la parcelle propriete, distance derivee du FOV comme
     pour les batiments -> s'adapte a la taille reelle du site. `max_standoff`
-    cf. _terrain_max_standoff."""
+    cf. _terrain_max_standoff. `margin`/`pitch`/`yaw` parametrables (defaut =
+    vue large validee) pour decliner plusieurs variantes depuis _viewpoints
+    (distance/hauteur/angle differents) sans dupliquer ce calcul."""
     pts = [pt for b in props for ring in b["rings_cm"] for pt in ring]
     if prop:
         pts += [pt for ring in prop["rings_cm"] for pt in ring]
@@ -262,22 +266,22 @@ def _ensemble_camera(props, prop, max_standoff):
     radius = 0.5 * math.hypot(max(xs) - min(xs), max(ys) - min(ys))
     height = max((_height_cm(b) for b in props), default=HEIGHT_DEFAULT_M * 100.0)
 
-    dist = _frame_distance(radius, height, ENSEMBLE_FOV, ENSEMBLE_MARGIN)
+    dist = _frame_distance(radius, height, ENSEMBLE_FOV, margin)
     dist = max(ENSEMBLE_MIN_DIST_CM, min(max_standoff, dist))
-    back, up = dist * math.cos(ENSEMBLE_PITCH), dist * math.sin(ENSEMBLE_PITCH)
+    back, up = dist * math.cos(pitch), dist * math.sin(pitch)
 
     # meme correction de signe que _camera_for_building : position = cible -
     # standoff*direction_visee (yaw=0.0 = direction +Y/sud -> camera reculee
     # au nord, regarde vers le sud/le centre).
-    px, py = bx, by - back
+    px, py = bx - back * math.sin(yaw), by - back * math.cos(yaw)
     z = cg.terrain_z_at(bx, by) + up
-    return (px, py, z, 0.0, ENSEMBLE_PITCH, ENSEMBLE_FOV * FOV_RENDER_CORRECTION)
+    return (px, py, z, yaw, pitch, ENSEMBLE_FOV * FOV_RENDER_CORRECTION)
 
 
 def _viewpoints():
     """[(label, (x, y, z, yaw, pitch[, fov])), ...] en repere plan SH3D (cm / rad).
 
-    Vue d'ensemble uniquement (docs/PIPELINE.md #12) : les vues par batiment
+    Vues d'ensemble uniquement (docs/PIPELINE.md #12) : les vues par batiment
     (_camera_for_building, conservee ci-dessus pour reference/reprise future,
     cf. meme logique que roof_lidar.py) visent geometriquement juste --
     verifie par calcul direct, yaw = azimut camera->cible a 0.0 deg pres sur
@@ -285,7 +289,9 @@ def _viewpoints():
     (ciel/sol) sans obstacle ni relief pouvant l'expliquer, y compris a
     seulement 18 m d'un batiment volumineux (bug non identifie malgre
     investigation ciblee cette session). Seule la vue d'ensemble a ete
-    validee fiable par rendu reel -> seule publiee pour l'instant."""
+    validee fiable par rendu reel -> seules des variantes de cette meme vue
+    (distance/hauteur/angle differents, cf. _ensemble_camera) sont publiees
+    pour l'instant, jamais les vues par batiment."""
     bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
     props = [b for b in bat if b["classe"] == "propriete"]
     payload = json.loads((cg.DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
@@ -294,7 +300,42 @@ def _viewpoints():
     max_standoff = _terrain_max_standoff()
     if not props:
         return []
-    return [("ensemble", _ensemble_camera(props, prop, max_standoff))]
+    # yaw=-pi/4 pour ensemble_laterale (pas +pi/2 initialement teste) : le
+    # bug directionnel ci-dessus touche aussi la vue d'ensemble, pas
+    # seulement les vues par batiment -- a distance/pitch IDENTIQUES a
+    # ensemble_large (seule variable = yaw), +pi/2 rendait une image
+    # degradee (ciel quasi pur) alors que -pi/4 rend correctement. Verifie
+    # par balayage empirique (rendu reel a plusieurs yaw) sur le site de
+    # test cette session, PAS une hypothese generale sur "quels azimuts
+    # marchent" -- si ce plafond devient insuffisant sur un autre site,
+    # refaire le meme balayage plutot que de supposer -pi/4 universellement
+    # sur.
+    return [
+        ("ensemble_large", _ensemble_camera(props, prop, max_standoff)),
+        ("ensemble_rapprochee", _ensemble_camera(
+            props, prop, max_standoff, margin=1.15, pitch=0.5)),
+        ("ensemble_laterale", _ensemble_camera(
+            props, prop, max_standoff, yaw=-math.pi / 4.0)),
+    ]
+
+
+EMPTY_WHITE_THRESHOLD = 235   # niveau de gris au-dela duquel un pixel compte "ciel"
+EMPTY_WHITE_FRAC = 0.60       # fraction de pixels "ciel" au-dela de laquelle une vue
+                              # est jugee degradee (cf. _looks_degraded)
+
+
+def _looks_degraded(png_path) -> bool:
+    """Heuristique bon marche pour ne jamais publier une vue rendue quasi
+    vide par le bug directionnel SunFlow non resolu (docs/PIPELINE.md #12) :
+    fraction de pixels quasi blancs (ciel). Calibree empiriquement sur des
+    rendus reels de cette session (vue confirmee degradee ~0.65 de ciel,
+    vues propres entre 0.42 et 0.55) -- pas un detecteur precis, un filtre
+    pragmatique, necessaire depuis que la vue d'ensemble elle-meme s'est
+    revelee touchee par ce bug selon l'angle (pas seulement les vues par
+    batiment, cf. commentaire dans _viewpoints)."""
+    im = np.array(Image.open(png_path).convert("RGB"))
+    white_frac = float((im.mean(axis=2) > EMPTY_WHITE_THRESHOLD).mean())
+    return white_frac > EMPTY_WHITE_FRAC
 
 
 def main() -> None:
@@ -310,7 +351,12 @@ def main() -> None:
     for label, cam in views:
         out = cg.render_photo(cg.VERIF / f"preview_{label}.png",
                               camera=cam, size=(w, h), quality=quality)
-        print(f"  {label:16} -> {('OK  ' + out.name) if out else 'indisponible / echec'}")
+        if out and _looks_degraded(out):
+            out.unlink()
+            out = None
+            print(f"  {label:16} -> ecarte (vue quasi vide, bug directionnel connu)")
+        else:
+            print(f"  {label:16} -> {('OK  ' + out.name) if out else 'indisponible / echec'}")
         if out:
             done.append(out)
     print(f"\n>>> {len(done)}/{len(views)} apercus -> {cg.VERIF}")
