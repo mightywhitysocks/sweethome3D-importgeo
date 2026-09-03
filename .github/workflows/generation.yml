@@ -153,7 +153,17 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: "Plan 3D"
-          path: "Plan 3D.sh3d"
+          # data/bati.json, sh3d_payload.json, terrain_grid.npz : pas necessaires
+          # pour ouvrir/rendre le .sh3d, mais requis par src/preview.py (points de
+          # vue par batiment + cg.terrain_z_at) -- consommes par
+          # .github/workflows/render.yml sans reconsommer le reseau IGN/LiDAR/roofer.
+          # Ne change rien au niveau de sensibilite : deja la geometrie exacte du
+          # site, comme le .sh3d lui-meme.
+          path: |
+            Plan 3D.sh3d
+            data/bati.json
+            data/sh3d_payload.json
+            data/terrain_grid.npz
           if-no-files-found: error
           # Minimise la fenêtre de rétention d'un artefact contenant la
           # géométrie exacte du site, même sur une copie privée.
