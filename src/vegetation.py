@@ -30,7 +30,11 @@ H_ARBRE = 3.5          # m : cime = arbre
 H_VEG = 1.5            # m : seuil vegetation
 MIN_DIST = 4.5         # m entre cimes
 LINE_SPACING = 5.0     # m entre arbres d'une lisiere
-HEDGE_BUF_M = 15.0     # ceinture autour de la parcelle propriete
+HEDGE_BUF_M = 15.0     # ceinture autour de la parcelle propriete -- deliberement locale
+                       # (une haie taillee marque une limite de parcelle precise, pas
+                       # une ligne arbitraire ailleurs dans le voisinage) ; contrairement
+                       # aux arbres isoles/lisieres (zone), pas etendue a toute la bbox
+                       # terrain (evalue et tranche pour l'issue #46).
 
 TREE_CAT = "OlaKristianHoff#tree"        # gabarit 600 x 640 x 800 cm
 TREE_W0, TREE_D0, TREE_H0 = 600.0, 640.0, 800.0
@@ -41,7 +45,7 @@ def main() -> None:
     from scipy.ndimage import binary_closing, label as ndlabel, maximum_filter
     from skimage.morphology import skeletonize
     from rasterio.features import rasterize, shapes
-    from shapely.geometry import LineString, Point, shape
+    from shapely.geometry import LineString, Point, box, shape
     from shapely.ops import unary_union
     import pyvista as pv
 
@@ -56,7 +60,12 @@ def main() -> None:
     bati = json.loads((GEO / "bati.json").read_text(encoding="utf-8"))["batiments"]
     bati_l93 = unary_union([_ring_l93(ring) for b in bati for ring in b["rings_cm"]
                             if len(ring) >= 3])
-    zone = cg.parcels_union_l93().buffer(8.0)
+    # meme emprise que le bati voisinage (bati.py : cg.wfs_l93 sur META.bbox_wgs84,
+    # equivalent a META.bbox_l93 ici) -- pas les seules parcelles listees dans
+    # site.local.toml, sinon la vegetation modelisee en 3D ne couvre qu'une
+    # fraction de ce que montrent deja le fond ortho/terrain sur le reste de la
+    # bbox (issue #46).
+    zone = box(*cg.META.bbox_l93)
     poly_prop = cg.property_polygon_l93()
     bati_mask = rasterize([(bati_l93.buffer(2.0), 1)], out_shape=MNH.shape,
                           transform=T, fill=0).astype(bool)

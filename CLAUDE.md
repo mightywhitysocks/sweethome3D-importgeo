@@ -264,53 +264,65 @@ script isolément (cf. Environnement) — pas la génération complète.
   méthodes réussit là où l'autre échoue) -- pas de verdict tranché en faveur
   de l'une ou l'autre à ce stade, juste une confirmation que la comparaison
   est mécaniquement fiable.
-- **Piste identifiée, PAS implémentée : couverture LiDAR/BD TOPO incomplète
-  en entrée de `roofer`.** Diagnostic (comparaison emprise BD TOPO vs union
-  des pans reconstruits, 18 bâtiments) : écarts systémiques, jusqu'à 55 % de
-  l'emprise non couverte sur certains bâtiments. Deux causes racines
-  identifiées, alignées sur l'exemple officiel IGN
+- **Couverture LiDAR/BD TOPO incomplète en entrée de `roofer` : implémenté
+  (issues #22, #23).** Diagnostic d'origine (comparaison emprise BD TOPO vs
+  union des pans reconstruits, 18 bâtiments) : écarts systémiques, jusqu'à
+  55 % de l'emprise non couverte sur certains bâtiments. Deux causes racines,
+  alignées sur l'exemple officiel IGN
   [`ignfab/roofer-with-ignf-datasets`](https://github.com/ignfab/roofer-with-ignf-datasets)
-  (Docker-first, PDAL) et sur `roofer --help-all` (binaire installé dans
-  cette session, vérifié directement -- source la plus fiable) :
+  (Docker-first, PDAL) et sur `roofer --help-all` -- corrigées en préparant
+  l'entrée dans un format que `roofer` sait déjà consommer (paramètres CLI
+  existants), jamais par une reconstruction géométrique ou un calcul
+  d'altitude côté projet (cohérent avec le choix déjà fait de consommer le
+  `Solid` de `roofer` tel quel, cf. plus haut) :
   - **Classification LiDAR** : les dalles LAZ IGN brutes contiennent des
     points classés **67 (« Divers -- bâtis »)**, une classe IGN propre,
     hors nomenclature ASPRS. `roofer` ne regarde que `--bld-class`
     (défaut **6**) / `--grnd-class` (défaut **2**) -- les points 67 lui
-    sont donc invisibles. `roofer-with-ignf-datasets` documente
-    explicitement un remap PDAL (`filters.assign`) **67 -> 6** avant
-    l'appel, présenté comme nécessaire pour ne pas perdre ces points.
+    sont donc invisibles. `roofer_roof._remap67` (appelée par
+    `lidar_tile_paths`) remap ces points 67 -> 6, en pur laspy/numpy (pas de
+    dépendance PDAL, cf. `config/environment.yml`), sur une copie de chaque
+    dalle mise en cache disque dans `data/lidar_cache/roofer_remap67to6/`
+    (jamais le fichier source, partagé avec `cg.lidar_points_l93`) --
+    reproduit le remap PDAL `filters.assign` **67 -> 6** documenté par
+    `roofer-with-ignf-datasets`. Une dalle dont le remap échoue (LAZ
+    corrompu, backend LAZ absent) est fournie à `roofer` sans remap plutôt
+    qu'écartée -- dégrade la couverture, ne bloque jamais l'appel.
   - **Attributs de repli d'altitude** : `roofer_roof.write_footprint_gpkg`
-    n'écrit aujourd'hui que `cleabs` + géométrie, aucun attribut de
-    hauteur. Or `roofer` expose déjà ses propres paramètres de repli --
-    `--h-terrain-attribute <string>` et `--h-roof-attribute <string>`
-    (confirmés dans `roofer --help-all`), utilisés uniquement quand sa
-    couverture LiDAR est insuffisante pour dériver l'altitude sol/toit
-    d'un bâtiment depuis le nuage. `roofer-with-ignf-datasets` alimente ces
-    attributs par une cascade de complétion des colonnes BD TOPO
-    (`altitude_minimale_sol`/`altitude_maximale_toit`/`hauteur`, déjà
-    extraites telles quelles par `bati.py` -- mêmes champs que ceux
-    filtrés `NaN` par `_fnum`, cf. plus haut) -- jamais transmises à
-    `roofer` actuellement. Bonus repéré dans `roofer --help-all` : avec
-    `--clear-insufficient` (vrai par défaut), un bâtiment à couverture
-    insuffisante SANS `--h-roof-attribute` ne reçoit aucun modèle de
-    `roofer` (repli pyramidal maison) ; avec l'attribut fourni, `roofer`
-    produit lui-même une extrusion LoD1.1 -- un cas de plus couvert par
-    `roofer` plutôt que par le repli pyramidal du projet.
-  - Dans les deux cas, il s'agit de **préparer l'entrée dans un format que
-    `roofer` sait déjà consommer** (paramètres CLI existants), pas d'une
-    reconstruction géométrique ou d'un calcul d'altitude côté projet --
-    cohérent avec le choix déjà fait de consommer le `Solid` de `roofer`
-    tel quel (cf. plus haut).
-  - **Piste écartée pour l'instant, documentée seulement** : le
+    écrit désormais, en plus de `cleabs` + géométrie, les colonnes
+    `altitude_minimale_sol`/`altitude_maximale_toit` (mêmes noms que
+    `roofer-with-ignf-datasets`), complétées autant que possible par
+    `_complete_altitudes` (toit manquant -> sol + `hauteur` ; sol manquant
+    -> toit - `hauteur` -- cascade simplifiée aux 3 champs BD TOPO déjà
+    extraits par `bati.py`, pas les 4 colonnes min/max complètes du script
+    de référence `set_building_attributes.sh`). `roofer_roof.run_roofer`
+    transmet ces deux colonnes via `--h-terrain-attribute`/
+    `--h-roof-attribute` (confirmés dans `roofer --help-all`), utilisés par
+    `roofer` uniquement quand sa couverture LiDAR est insuffisante pour
+    dériver l'altitude sol/toit d'un bâtiment depuis le nuage. Bonus repéré
+    dans `roofer --help-all`, pas configuré explicitement (comportement par
+    défaut conservé) : avec `--clear-insufficient` (vrai par défaut), un
+    bâtiment à couverture insuffisante SANS `--h-roof-attribute` ne recevait
+    aucun modèle de `roofer` (repli pyramidal maison) ; avec l'attribut
+    désormais fourni, `roofer` produit lui-même une extrusion LoD1.1 -- un
+    cas de plus couvert par `roofer` plutôt que par le repli pyramidal du
+    projet.
+  - Validé mécaniquement (tests unitaires ciblés : remap sur une dalle LAS
+    synthétique avec points classés 67, cascade `_complete_altitudes` sur
+    les 4 combinaisons de valeurs manquantes, écriture GPKG des deux
+    colonnes) dans une session Claude Code distante. **Pas encore revalidé
+    sur données réelles** (pas de site configuré dans cette session,
+    confidentialité) : reprendre la comparaison emprise BD TOPO vs pans
+    reconstruits sur le même jeu de 18 bâtiments qui a servi au diagnostic
+    d'origine, lors d'un prochain run complet sur le site.
+  - **Piste écartée pour l'instant, documentée seulement** (issue #24) : le
     téléchargement de dalle LAZ entière (`cg.lidar_points_l93`) pourrait
     être remplacé par un crop streamé (`readers.copc` PDAL, comme dans
     `roofer-with-ignf-datasets`), potentiellement lié aux
     `ConnectionResetError` déjà documentées (cf. "Cache disque WFS/WMS"
     ci-dessus). Nouvelle dépendance PDAL (le projet a explicitement choisi
     de s'en passer, `config/environment.yml`) + refonte du cache LiDAR :
-    hors périmètre, pas engagé cette session.
-  - Aucun code n'a été modifié pour ce point : diagnostic + vérification
-    documentaire seulement, à reprendre pour une session ultérieure.
+    hors périmètre, pas engagé.
 
 ## git
 
