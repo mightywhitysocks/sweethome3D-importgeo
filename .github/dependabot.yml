@@ -1,0 +1,26 @@
+# Detection des montees de version disponibles (ouvre des PR, ne construit
+# et ne publie jamais rien automatiquement -- cf. CLAUDE.md section
+# Environnement, "Detection des montees de version").
+#
+# Perimetre couvert :
+# - pip (config/requirements-venv.txt) : PR quand une version ~=-compatible
+#   plus recente existe.
+# - github-actions (.github/workflows/) : bump des SHA epingles
+#   (actions/checkout, docker/login-action, docker/setup-buildx-action,
+#   docker/build-push-action...).
+#
+# Hors perimetre (non couvert par Dependabot, a verifier manuellement) :
+# config/environment.yml (conda, pas un ecosysteme Dependabot) et les pins
+# durs du Dockerfile (roofer, Sweet Home 3D -- volontairement non
+# automatises, cf. CLAUDE.md).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/config"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
