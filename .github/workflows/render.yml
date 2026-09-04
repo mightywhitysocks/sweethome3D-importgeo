@@ -150,12 +150,52 @@ jobs:
       - name: src/preview.py (1 vue par bâtiment propriété + vue d'ensemble)
         run: python3 src/preview.py "${{ inputs.width }}" "${{ inputs.height }}" "${{ inputs.quality }}"
 
-      - name: Publier les rendus
+      - name: Vérifier qu'au moins une vue a été produite
+        # Garde-fou explicite car les 3 steps "Publier ..." ci-dessous sont
+        # chacune en if-no-files-found: ignore -- une vue individuelle peut
+        # legitimement manquer (repli en yaw epuise sur rendu degrade, cf.
+        # preview.py DEGRADED_RETRY_MAX_OFFSET_DEG / PR #69), mais on veut
+        # toujours echouer dur si AUCUNE des 3 n'est sortie (ex. renderer
+        # indisponible).
+        run: |
+          shopt -s nullglob
+          files=(data/verif/preview_*.png)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::aucune vue rendue (renderer indisponible, ou toutes ecartees comme degradees)"
+            exit 1
+          fi
+
+      # Un artefact par image (archive: false, dispo depuis actions/upload-
+      # artifact v7 -- deja la version epinglee ici -- et actions/download-
+      # artifact v8, deja epinglee aussi) plutot qu'un seul zip pour les 3 :
+      # visible directement dans le navigateur, pas de dezippage. Contrainte
+      # de l'action : archive:false n'accepte qu'un seul fichier, donc pas de
+      # glob possible -- un step par label FIXE plutot qu'un seul step
+      # dynamique. Labels copies de preview.py::VIEW_SPECS -- a tenir a jour
+      # manuellement si cette liste change la-bas (aucune source commune
+      # entre le YAML et le Python).
+      - name: Publier ensemble_large
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: "Rendu preview"
-          path: "data/verif/preview_*.png"
-          if-no-files-found: error
+          path: "data/verif/preview_ensemble_large.png"
+          if-no-files-found: ignore
+          archive: false
           # Meme politique que Plan 3D (generation.yml) : ces images montrent
           # l'apparence exacte du site.
+          retention-days: 7
+
+      - name: Publier ensemble_rapprochee
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: "data/verif/preview_ensemble_rapprochee.png"
+          if-no-files-found: ignore
+          archive: false
+          retention-days: 7
+
+      - name: Publier ensemble_laterale
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: "data/verif/preview_ensemble_laterale.png"
+          if-no-files-found: ignore
+          archive: false
           retention-days: 7
