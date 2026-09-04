@@ -123,6 +123,38 @@ RELIABLE_STANDOFF_CM = 1800.0
 # bandes seules pour decider qu'une vue est bonne.
 SUSPECT_YAW_BANDS_DEG = [(41.5, 138.5), (221.5, 321.5)]
 
+# Repli en yaw sur rendu degrade (cf. main()) : la distance et la taille de
+# l'objet vise sont ecartees comme facteurs (issue #65, testees x10/x16 sans
+# effet) -- seul un changement d'azimut est donc tente ici plutot que de
+# reculer/rapprocher/elargir le FOV, qui degraderaient le cadrage voulu sans
+# raison de corriger le bug. Portee bornee (pas un balayage 360 deg complet,
+# cf. _offset_sweep utilise ailleurs pour ca) : chaque palier ajoute un rendu
+# SunFlow/YafaRay complet, cout non negligeable en CI. +/-30 deg (2 pas de
+# ANGLE_STEP_DEG) est un compromis cout/couverture choisi arbitrairement --
+# PAS valide sur un cas reel degrade (le bug ne s'est plus reproduit sur le
+# site de test depuis la correction du FOV, cf. docs/PIPELINE.md #12) : les
+# bandes mortes mesurees sur la scene synthetique dediee font ~100 deg de
+# large, un azimut au milieu d'une bande aussi large resterait hors de portee
+# de ce repli. A elargir si un site futur retombe reellement dans une bande
+# et que ce repli s'avere insuffisant en pratique.
+DEGRADED_RETRY_MAX_OFFSET_DEG = 30.0
+
+
+def _offset_sweep(step_deg, max_deg):
+    """Deplacements angulaires (rad), pas croissants alternes +/- : 0, +step,
+    -step, +2*step, -2*step, ... jusqu'a +/-max_deg inclus. Partage entre le
+    balayage d'obstruction (_camera_for_building, max_deg=180 = tour complet)
+    et le repli en yaw sur rendu degrade (cf. DEGRADED_RETRY_MAX_OFFSET_DEG,
+    max_deg borne pour rester bon marche en rendu)."""
+    step = math.radians(step_deg)
+    max_rad = math.radians(max_deg)
+    offsets = [0.0]
+    k = 1
+    while k * step <= max_rad:
+        offsets += [k * step, -k * step]
+        k += 1
+    return offsets
+
 
 def _yaw_in_suspect_band(yaw) -> bool:
     """Vrai si `yaw` (rad, repere plan SH3D) tombe dans une bande d'azimut
@@ -243,12 +275,7 @@ def _camera_for_building(b, tx, ty, obstacles, max_standoff):
                    _frame_distance(radius, height, DEFAULT_FOV, MARGIN_FACTOR)))
     base_yaw = math.atan2(tx - cx, ty - cy)
 
-    step = math.radians(ANGLE_STEP_DEG)
-    offsets = [0.0]
-    k = 1
-    while k * step <= math.pi:
-        offsets += [k * step, -k * step]
-        k += 1
+    offsets = _offset_sweep(ANGLE_STEP_DEG, 180.0)
 
     # position caméra = cible - standoff*direction_visée (reculer dans le sens
     # OPPOSE a ce qu'on regarde) ; yaw transmis au renderer = direction_visee
@@ -328,8 +355,27 @@ def _ensemble_camera(props, prop, max_standoff, *, margin=ENSEMBLE_MARGIN,
     return (px, py, z, yaw, pitch, ENSEMBLE_FOV)
 
 
+# (label, margin, pitch, yaw voulu) pour chaque vue d'ensemble publiee --
+# yaw=-pi/4 pour ensemble_laterale : donne un angle lateral/oblique distinct
+# de ensemble_large (yaw=0) plutot qu'une raison de contourner un azimut
+# degrade -- re-balaye apres la correction du FOV (grand-angle, cf.
+# DEFAULT_FOV) sur le site de test : les 8 azimuts cardinaux/diagonaux
+# (0/45/90/.../315 deg) rendent tous correctement (white_frac 0.26-0.53, bien
+# sous le seuil `_looks_degraded`), y compris +pi/2 qui produisait une image
+# quasi vide avant ce correctif.
+VIEW_SPECS = [
+    ("ensemble_large", ENSEMBLE_MARGIN, ENSEMBLE_PITCH, 0.0),
+    ("ensemble_rapprochee", 1.15, 0.5, 0.0),
+    ("ensemble_laterale", ENSEMBLE_MARGIN, ENSEMBLE_PITCH, -math.pi / 4.0),
+]
+
+
 def _viewpoints():
-    """[(label, (x, y, z, yaw, pitch[, fov])), ...] en repere plan SH3D (cm / rad).
+    """[(label, [(x, y, z, yaw, pitch[, fov]), ...]), ...] en repere plan SH3D
+    (cm / rad) : pour chaque vue publiee, l'azimut voulu (VIEW_SPECS) suivi
+    de candidats de repli en yaw (cf. DEGRADED_RETRY_MAX_OFFSET_DEG) --
+    main() essaie chaque candidat dans l'ordre et garde le premier rendu non
+    degrade.
 
     Vues d'ensemble uniquement (docs/PIPELINE.md #12) : les vues par batiment
     (_camera_for_building, conservee ci-dessus pour reference/reprise future,
@@ -341,7 +387,17 @@ def _viewpoints():
     investigation ciblee cette session). Seule la vue d'ensemble a ete
     validee fiable par rendu reel -> seules des variantes de cette meme vue
     (distance/hauteur/angle differents, cf. _ensemble_camera) sont publiees
-    pour l'instant, jamais les vues par batiment."""
+    pour l'instant, jamais les vues par batiment. Le bug directionnel du
+    renderer reste confirme independamment (scene synthetique, cf.
+    docs/PIPELINE.md #12) -- il ne se manifeste simplement plus, sur CE site
+    et a distance/pitch actuels, une fois le FOV reellement transmis large
+    plutot qu'etroit. `_looks_degraded` + le repli en yaw ci-dessous restent
+    donc geres comme un filet de securite (jamais retires), au cas ou un
+    autre site/cadrage retombe dans une zone sensible -- cf. issue #65 : la
+    distance et la taille de l'objet vise sont ecartees comme causes (aucun
+    effet mesure), seul le FOV/pitch/yaw absolu de la camera compte, d'ou le
+    choix de ne rejouer QUE le yaw en repli (les deux premiers sont fixes par
+    le cadrage voulu, pas par ce bug)."""
     bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
     props = [b for b in bat if b["classe"] == "propriete"]
     payload = json.loads((cg.DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
@@ -350,25 +406,12 @@ def _viewpoints():
     max_standoff = _terrain_max_standoff()
     if not props:
         return []
-    # yaw=-pi/4 pour ensemble_laterale : donne un angle lateral/oblique
-    # distinct de ensemble_large (yaw=0) plutot qu'une raison de contourner
-    # un azimut degrade -- re-balaye apres la correction du FOV (grand-angle,
-    # cf. DEFAULT_FOV) sur le site de test : les 8 azimuts cardinaux/diagonaux
-    # (0/45/90/.../315 deg) rendent tous correctement (white_frac 0.26-0.53,
-    # bien sous le seuil `_looks_degraded`), y compris +pi/2 qui produisait
-    # une image quasi vide avant ce correctif. Le bug directionnel du
-    # renderer reste confirme independamment (scene synthetique, cf.
-    # docs/PIPELINE.md #12) -- il ne se manifeste simplement plus, sur CE
-    # site et a distance/pitch actuels, une fois le FOV reellement transmis
-    # large plutot qu'etroit. `_looks_degraded` est garde comme filet de
-    # securite (pas retire), au cas ou un autre site/cadrage retombe dans une
-    # zone sensible.
+    retry_offsets = _offset_sweep(ANGLE_STEP_DEG, DEGRADED_RETRY_MAX_OFFSET_DEG)
     return [
-        ("ensemble_large", _ensemble_camera(props, prop, max_standoff)),
-        ("ensemble_rapprochee", _ensemble_camera(
-            props, prop, max_standoff, margin=1.15, pitch=0.5)),
-        ("ensemble_laterale", _ensemble_camera(
-            props, prop, max_standoff, yaw=-math.pi / 4.0)),
+        (label, [_ensemble_camera(props, prop, max_standoff, margin=margin,
+                                   pitch=pitch, yaw=base_yaw + off)
+                 for off in retry_offsets])
+        for label, margin, pitch, base_yaw in VIEW_SPECS
     ]
 
 
@@ -401,17 +444,28 @@ def main() -> None:
         raise SystemExit("aucun batiment 'propriete' dans data/bati.json ; lancer bati.py.")
 
     done = []
-    for label, cam in views:
-        out = cg.render_photo(cg.VERIF / f"preview_{label}.png",
-                              camera=cam, size=(w, h), quality=quality)
-        if out and _looks_degraded(out):
-            out.unlink()
-            out = None
-            print(f"  {label:16} -> ecarte (vue quasi vide, bug directionnel connu)")
-        else:
-            print(f"  {label:16} -> {('OK  ' + out.name) if out else 'indisponible / echec'}")
+    for label, candidates in views:
+        out_path = cg.VERIF / f"preview_{label}.png"
+        out, unavailable, tried = None, False, 0
+        for cam in candidates:
+            tried += 1
+            r = cg.render_photo(out_path, camera=cam, size=(w, h), quality=quality)
+            if r is None:
+                unavailable = True
+                break
+            if not _looks_degraded(r):
+                out = r
+                break
+            r.unlink()
         if out:
+            base_yaw, yaw = candidates[0][3], candidates[tried - 1][3]
+            retry_note = "" if tried == 1 else f" (repli yaw {math.degrees(yaw - base_yaw):+.0f} deg, essai {tried}/{len(candidates)})"
+            print(f"  {label:16} -> OK  {out.name}{retry_note}")
             done.append(out)
+        elif unavailable:
+            print(f"  {label:16} -> indisponible / echec")
+        else:
+            print(f"  {label:16} -> ecarte ({tried} azimuts testes, tous quasi vides -- bug directionnel connu)")
     print(f"\n>>> {len(done)}/{len(views)} apercus -> {cg.VERIF}")
     if not done:
         raise SystemExit(1)

@@ -215,8 +215,22 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
     ne dépend donc d'aucune propriété relative objet↔caméra, uniquement de
     l'orientation caméra absolue dans le repère du monde (yaw, modulé par
     FOV et pitch) -- un calcul de matrice de vue/frustum plus probable
-    qu'un problème de bounding-volume par objet. Cf. `## Écarts assumés`
-    ci-dessous.
+    qu'un problème de bounding-volume par objet.
+    **Levier exploité côté `preview.py` (session ultérieure)** : comme
+    distance et taille n'ont aucun effet, `main()` ne fait plus que filtrer
+    puis abandonner une vue dégradée -- sur rendu quasi vide, elle retente
+    désormais la MÊME vue (même marge/pitch/FOV, donc même cadrage voulu) à
+    quelques azimuts voisins (`_offset_sweep(ANGLE_STEP_DEG,
+    DEGRADED_RETRY_MAX_OFFSET_DEG)`, ±30° par défaut, 15° de pas) avant de
+    l'écarter pour de bon. Portée volontairement bornée (pas un balayage
+    360°, coûteux en rendu CI) et **non validée sur un cas réel dégradé** :
+    les bandes mortes mesurées sur la scène synthétique font ~100° de large,
+    un azimut retombant au milieu d'une bande aussi large resterait hors de
+    portée de ce repli à ±30°. `SUSPECT_YAW_BANDS_DEG` (mesurée à une seule
+    config FOV/pitch) n'est PAS utilisée pour orienter ce repli -- le
+    croisement FOV×pitch ci-dessus montre que ces bandes tournent avec la
+    config, une table figée mesurée ailleurs risquerait de désavantager un
+    azimut en réalité sûr. Cf. `## Écarts assumés` ci-dessous.
 
 ## Écarts assumés
 
@@ -224,9 +238,11 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
 
 | # | Limite concernée | Contexte | Choix assumé |
 |---|---|---|---|
-| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain, de la structure multi-niveaux du `Home`, de la distance caméra-cible, de la taille de l'objet) : toutes les hypothèses de ce type infirmées, y compris après correction du bug FOV séparé (`FOV_RENDER_CORRECTION` supprimé) -- reproduit à l'identique sur une scène synthétique dédiée (enrichie d'un repère d'axes coloré, d'un sol en damier et d'un cube à 6 couleurs par face pour affiner le diagnostic), sur deux moteurs de rendu indépendants (SunFlow et YafaRay), et que l'objet touché soit sur le même niveau SH3D que le sol ou un niveau différent. En revanche, **FOV et pitch ont un effet réel et mesurable** (déplacent/tournent les bandes d'azimut mortes, jusqu'à inversion en régime extrême) -- la cause ne dépend donc que de l'orientation caméra absolue (yaw × FOV × pitch), jamais d'une propriété de l'objet visé ou de sa distance à la caméra. Caractérisation affinée : la disparition est totale (jamais une seule face), et touche spécifiquement les objets compacts proches de l'origine -- jamais la grande dalle de sol qui les entoure, qui reste nette et correctement projetée à tous les azimuts testés. Sur le site de test réel, le passage au FOV corrigé (grand-angle, 2.0 rad) explique désormais mécaniquement pourquoi un re-balayage complet des azimuts ne reproduit plus la dégradation observée auparavant à yaw=+90° -- effet FOV confirmé, plus une hypothèse. Aucune règle générale n'explique quels azimuts/FOV/pitch/sites restent sûrs, la cause exacte reste dans les moteurs de rendu tiers (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur, y compris avec le FOV corrigé. |
+| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain, de la structure multi-niveaux du `Home`, de la distance caméra-cible, de la taille de l'objet) : toutes les hypothèses de ce type infirmées, y compris après correction du bug FOV séparé (`FOV_RENDER_CORRECTION` supprimé) -- reproduit à l'identique sur une scène synthétique dédiée (enrichie d'un repère d'axes coloré, d'un sol en damier et d'un cube à 6 couleurs par face pour affiner le diagnostic), sur deux moteurs de rendu indépendants (SunFlow et YafaRay), et que l'objet touché soit sur le même niveau SH3D que le sol ou un niveau différent. En revanche, **FOV et pitch ont un effet réel et mesurable** (déplacent/tournent les bandes d'azimut mortes, jusqu'à inversion en régime extrême) -- la cause ne dépend donc que de l'orientation caméra absolue (yaw × FOV × pitch), jamais d'une propriété de l'objet visé ou de sa distance à la caméra. Caractérisation affinée : la disparition est totale (jamais une seule face), et touche spécifiquement les objets compacts proches de l'origine -- jamais la grande dalle de sol qui les entoure, qui reste nette et correctement projetée à tous les azimuts testés. Sur le site de test réel, le passage au FOV corrigé (grand-angle, 2.0 rad) explique désormais mécaniquement pourquoi un re-balayage complet des azimuts ne reproduit plus la dégradation observée auparavant à yaw=+90° -- effet FOV confirmé, plus une hypothèse. Aucune règle générale n'explique quels azimuts/FOV/pitch/sites restent sûrs, la cause exacte reste dans les moteurs de rendu tiers (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) ; sur rendu dégradé, retente la même vue à quelques azimuts voisins (`DEGRADED_RETRY_MAX_OFFSET_DEG`, ±30° bornés, non validé sur un cas réel) avant de l'écarter silencieusement -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur, y compris avec le FOV corrigé. |
 
 Le compromis retenu privilégie l'absence d'une vue à une vue ponctuellement
 vide ou inexploitable, sur toutes les vues caméra (pas seulement celles par
 bâtiment) : mieux vaut publier 1 ou 2 vues d'ensemble fiables que 3 dont une
-inutilisable sans que rien ne le signale.
+inutilisable sans que rien ne le signale. Le repli en azimut ne change pas ce
+compromis (le filet de sécurité reste `_looks_degraded`), il réduit
+seulement, à cadrage identique, la probabilité d'avoir à s'y résoudre.
