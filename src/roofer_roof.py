@@ -177,8 +177,20 @@ def _remap67(src: Path, dst: Path) -> None:
     points 67 lui sont sinon invisibles -- jusqu'a 55 % de l'emprise BD TOPO
     non couverte par les pans reconstruits, constate sur 18 batiments reels
     (cf. CLAUDE.md). Reproduit le remap PDAL `filters.assign` 67 -> 6
-    documente par l'exemple officiel IGN ignfab/roofer-with-ignf-datasets."""
+    documente par l'exemple officiel IGN ignfab/roofer-with-ignf-datasets.
+
+    Les dalles LiDAR HD IGN sont distribuees au format COPC (`.copc.laz`,
+    cf. CLAUDE.md issue #24) : `laspy` sait le LIRE mais refuse de le
+    RE-ecrire tel quel (`NotImplementedError: Writing COPC is not
+    supported`, constate sur une dalle reelle -- l'appelant (`lidar_tile_paths`)
+    absorbe cette exception et fournit la dalle sans remap, mais ca annule
+    silencieusement le remap sur TOUTE dalle COPC, systematiquement). Le
+    format COPC vient de deux VLR/EVLR specifiques (l'index octree) que
+    `laspy` ne sait pas reserialiser -- on les retire avant l'ecriture ; la
+    copie remappee redevient une dalle LAZ classique (jamais relue en COPC,
+    seul `cg.lidar_points_l93` lit le fichier source original)."""
     import laspy
+    from laspy.vlrs.vlrlist import VLRList
 
     las = laspy.read(src)
     c = np.asarray(las.classification)
@@ -187,6 +199,10 @@ def _remap67(src: Path, dst: Path) -> None:
         c = c.copy()
         c[mask] = LIDAR_CLASS_BATIMENT
         las.classification = c
+    las.header.vlrs = VLRList(v for v in las.header.vlrs
+                              if type(v).__name__ != "CopcInfoVlr")
+    las.header.evlrs = VLRList(v for v in las.header.evlrs
+                               if type(v).__name__ != "CopcHierarchyVlr")
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(".part")
     las.write(tmp)
