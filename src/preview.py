@@ -110,9 +110,13 @@ RELIABLE_STANDOFF_CM = 1800.0
 # l'origine). PAS une constante universelle du bug directionnel SunFlow/
 # YafaRay (docs/PIPELINE.md #12) : sur le site de test reel, un balayage
 # complet des azimuts a distance/pitch/FOV differents (cf. commentaire dans
-# _viewpoints ci-dessous) ne reproduit PAS ces bandes -- la position/largeur
-# exacte depend visiblement de la distance/FOV/geometrie, pas seulement de
-# l'azimut dans l'absolu. Utilisee ICI uniquement comme PREFERENCE FAIBLE
+# _viewpoints ci-dessous) ne reproduit PAS ces bandes. La DISTANCE seule est
+# ecartee comme cause de cet ecart : balayage synthetique dedie (5 distances,
+# 800 a 8000 cm -- facteur x10 -- pitch/FOV fixes a la config de reference),
+# motif de visibilite par azimut IDENTIQUE bit a bit aux 5 distances (cf.
+# issue #65, mise a jour distance). Reste donc du FOV/pitch/geometrie
+# (non isoles individuellement) pour expliquer l'ecart site reel/synthetique.
+# Utilisee ICI uniquement comme PREFERENCE FAIBLE
 # (tie-break entre angles par ailleurs equivalents, cf. _camera_for_building)
 # -- jamais comme exclusion dure. `_looks_degraded` reste seul juge apres
 # rendu, quel que soit l'angle choisi : ne jamais faire confiance a ces
