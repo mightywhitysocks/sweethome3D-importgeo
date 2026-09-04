@@ -200,8 +200,23 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
     seul `elevationIndex` diffère). La cause reste donc localisée à la façon
     dont un objet (`pieceOfFurniture`) individuel, de petite emprise, est
     transformé/inclus dans la scène exportée à certains azimuts caméra --
-    pas une question de niveau, de matériau, de texture, de moteur ou de FOV.
-    Cf. `## Écarts assumés` ci-dessous.
+    pas une question de niveau, de matériau ou de texture.
+    **Distance et taille de l'objet écartées, FOV/pitch confirmés comme
+    facteurs réels (session ultérieure, cf. issue #65)** : contrairement à
+    la conclusion précédente (FOV testé à seulement 3 valeurs isolées, sans
+    effet constaté), un balayage continu montre que FOV (0.5-3.0 rad) et
+    pitch (0.0-1.0 rad) déplacent bel et bien les bandes d'azimut mortes,
+    par paliers -- le motif ne fait pas que grandir/rétrécir, il **tourne**
+    autour du cercle des azimuts jusqu'à une inversion complète en régime
+    extrême (FOV=3.0 rad, pitch=1.0 rad, hors usage réel du pipeline). À
+    l'inverse, la distance caméra-cible (×10 testé) et la taille de l'objet
+    (×16 testé) n'ont strictement aucun effet -- motif de visibilité
+    identique bit à bit sur toute la plage testée dans chaque cas. La cause
+    ne dépend donc d'aucune propriété relative objet↔caméra, uniquement de
+    l'orientation caméra absolue dans le repère du monde (yaw, modulé par
+    FOV et pitch) -- un calcul de matrice de vue/frustum plus probable
+    qu'un problème de bounding-volume par objet. Cf. `## Écarts assumés`
+    ci-dessous.
 
 ## Écarts assumés
 
@@ -209,7 +224,7 @@ compilation et lancement, partagé par `verif.py --render` et `preview.py`.
 
 | # | Limite concernée | Contexte | Choix assumé |
 |---|---|---|---|
-| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain, du FOV transmis, de la structure multi-niveaux du `Home`) : toutes les hypothèses techniques identifiées ont été infirmées, y compris après correction du bug FOV séparé (`FOV_RENDER_CORRECTION` supprimé) -- reproduit à l'identique sur une scène synthétique dédiée (enrichie d'un repère d'axes coloré, d'un sol en damier et d'un cube à 6 couleurs par face pour affiner le diagnostic), à plusieurs FOV, sur deux moteurs de rendu indépendants (SunFlow et YafaRay), et que l'objet touché soit sur le même niveau SH3D que le sol ou un niveau différent. Caractérisation affinée : la disparition est totale (jamais une seule face), et touche spécifiquement les objets compacts proches de l'origine -- jamais la grande dalle de sol qui les entoure, qui reste nette et correctement projetée à tous les azimuts testés. Sur le site de test réel, un re-balayage complet des azimuts avec le FOV corrigé ne reproduit plus la dégradation observée auparavant à yaw=+90° -- possible effet de bord du grand-angle plutôt qu'une correction du bug lui-même (toujours confirmé sur la scène synthétique). Aucune règle générale n'explique quels azimuts/FOV/sites restent sûrs, la cause exacte reste dans les moteurs de rendu tiers (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur, y compris avec le FOV corrigé. |
+| 1 | #12 (vues caméra de `preview.py`) | Investigation ciblée (calibration du soleil, du maillage terrain, de la végétation, de la proximité des bâtiments voisins, du winding/volume signé du maillage terrain, de la structure multi-niveaux du `Home`, de la distance caméra-cible, de la taille de l'objet) : toutes les hypothèses de ce type infirmées, y compris après correction du bug FOV séparé (`FOV_RENDER_CORRECTION` supprimé) -- reproduit à l'identique sur une scène synthétique dédiée (enrichie d'un repère d'axes coloré, d'un sol en damier et d'un cube à 6 couleurs par face pour affiner le diagnostic), sur deux moteurs de rendu indépendants (SunFlow et YafaRay), et que l'objet touché soit sur le même niveau SH3D que le sol ou un niveau différent. En revanche, **FOV et pitch ont un effet réel et mesurable** (déplacent/tournent les bandes d'azimut mortes, jusqu'à inversion en régime extrême) -- la cause ne dépend donc que de l'orientation caméra absolue (yaw × FOV × pitch), jamais d'une propriété de l'objet visé ou de sa distance à la caméra. Caractérisation affinée : la disparition est totale (jamais une seule face), et touche spécifiquement les objets compacts proches de l'origine -- jamais la grande dalle de sol qui les entoure, qui reste nette et correctement projetée à tous les azimuts testés. Sur le site de test réel, le passage au FOV corrigé (grand-angle, 2.0 rad) explique désormais mécaniquement pourquoi un re-balayage complet des azimuts ne reproduit plus la dégradation observée auparavant à yaw=+90° -- effet FOV confirmé, plus une hypothèse. Aucune règle générale n'explique quels azimuts/FOV/pitch/sites restent sûrs, la cause exacte reste dans les moteurs de rendu tiers (boîte noire). | `_viewpoints()` ne génère plus que des vues d'ensemble de la parcelle (large, rapprochée, latérale), jamais les vues par bâtiment (code conservé dans `preview.py` pour référence/reprise future, plus appelé). En complément, `main()` filtre chaque rendu (`_looks_degraded`) et écarte silencieusement toute vue quasi vide plutôt que de la publier -- le pipeline reste donc fiable même si un azimut donné se révèle mauvais sur un site futur, y compris avec le FOV corrigé. |
 
 Le compromis retenu privilégie l'absence d'une vue à une vue ponctuellement
 vide ou inexploitable, sur toutes les vues caméra (pas seulement celles par
