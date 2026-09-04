@@ -103,6 +103,30 @@ ENSEMBLE_MIN_DIST_CM = 1500.0
 # vue d'ensemble, a distance/direction differentes, reste validee fiable).
 RELIABLE_STANDOFF_CM = 1800.0
 
+# Bandes d'azimut suspectes (repere plan SH3D, yaw=0 = direction +Y/sud->nord) :
+# mesurees empiriquement sur UNE scene synthetique de test (gizmo d'axes colore
+# + cube 6 couleurs, sol repere par coordonnees -- cf. issue #65) a une seule
+# configuration camera (distance 2500 cm, pitch 0.5 rad, FOV 2.0 rad, cible a
+# l'origine). PAS une constante universelle du bug directionnel SunFlow/
+# YafaRay (docs/PIPELINE.md #12) : sur le site de test reel, un balayage
+# complet des azimuts a distance/pitch/FOV differents (cf. commentaire dans
+# _viewpoints ci-dessous) ne reproduit PAS ces bandes -- la position/largeur
+# exacte depend visiblement de la distance/FOV/geometrie, pas seulement de
+# l'azimut dans l'absolu. Utilisee ICI uniquement comme PREFERENCE FAIBLE
+# (tie-break entre angles par ailleurs equivalents, cf. _camera_for_building)
+# -- jamais comme exclusion dure. `_looks_degraded` reste seul juge apres
+# rendu, quel que soit l'angle choisi : ne jamais faire confiance a ces
+# bandes seules pour decider qu'une vue est bonne.
+SUSPECT_YAW_BANDS_DEG = [(41.5, 138.5), (221.5, 321.5)]
+
+
+def _yaw_in_suspect_band(yaw) -> bool:
+    """Vrai si `yaw` (rad, repere plan SH3D) tombe dans une bande d'azimut
+    suspecte (cf. SUSPECT_YAW_BANDS_DEG). Tie-break faible, pas une
+    exclusion -- cf. docstring de la constante."""
+    deg = math.degrees(yaw) % 360.0
+    return any(lo <= deg <= hi for lo, hi in SUSPECT_YAW_BANDS_DEG)
+
 
 def _terrain_max_standoff():
     """Distance de recul maximale sure : meme avec un FOV grand-angle
@@ -228,18 +252,27 @@ def _camera_for_building(b, tx, ty, obstacles, max_standoff):
     # stocke) : le pattern position=cible+standoff*dir / yaw=dir (utilise par
     # l'ancien code) fait regarder la camera a 180 deg de la cible -- jamais
     # detecte car aucun rendu bati* n'avait encore ete vu avant ce fix.
-    best = None  # (n_bloques, |offset|, px, py, yaw)
+    #
+    # Tri par (obstruction, bande d'azimut suspecte, |offset|) : l'obstruction
+    # reste le critere dur (jamais sacrifie pour eviter une bande suspecte) ;
+    # a obstruction egale, preference faible pour un azimut hors des bandes
+    # mesurees (cf. SUSPECT_YAW_BANDS_DEG) ; a egalite sur les deux, le plus
+    # proche de la direction naturelle. Ne pas s'arreter au premier n==0
+    # trouve s'il tombe dans une bande suspecte -- un candidat n==0 hors
+    # bande, teste plus loin dans le balayage, doit pouvoir le remplacer.
+    best = None  # (n_bloques, bande_suspecte, |offset|, px, py, yaw)
     for off in offsets:
         yaw = base_yaw + off
         px, py = cx - standoff * math.sin(yaw), cy - standoff * math.cos(yaw)
         n = _blocked((px, py), (cx, cy), radius, obstacles, b["id"])
-        cand = (n, abs(off), px, py, yaw)
-        if best is None or cand[:2] < best[:2]:
+        suspect = _yaw_in_suspect_band(yaw)
+        cand = (n, suspect, abs(off), px, py, yaw)
+        if best is None or cand[:3] < best[:3]:
             best = cand
-        if n == 0:
+        if n == 0 and not suspect:
             break
 
-    n, _, px, py, yaw = best
+    n, _, _, px, py, yaw = best
     dist = standoff  # distance REELLEMENT utilisee (peut grandir ci-dessous) ; le
                       # pitch doit etre recalcule pour cette distance finale, pas
                       # le standoff initial -- sinon (bug constate) une camera
