@@ -157,10 +157,13 @@ jobs:
         # preview.py DEGRADED_RETRY_MAX_OFFSET_DEG / PR #69), mais on veut
         # toujours echouer dur si AUCUNE des 3 n'est sortie (ex. renderer
         # indisponible).
+        #
+        # POSIX sh (pas bash) dans ce conteneur -- `shopt -s nullglob`
+        # (bash-only) plantait ici avec "shopt: not found" (exit 127), meme
+        # apres un rendu reussi : find + grep evite toute dependance a un
+        # glob bash-specifique.
         run: |
-          shopt -s nullglob
-          files=(data/verif/preview_*.png)
-          if [ "${#files[@]}" -eq 0 ]; then
+          if ! find data/verif -maxdepth 1 -name 'preview_*.png' -print -quit | grep -q .; then
             echo "::error::aucune vue rendue (renderer indisponible, ou toutes ecartees comme degradees)"
             exit 1
           fi
