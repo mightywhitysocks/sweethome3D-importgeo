@@ -76,6 +76,12 @@ trois vues d'ensemble aériennes de la parcelle -- large, rapprochée, latérale
 (`data/verif/preview_ensemble_*.png`), cf. limitation #12 pour le détail et
 les vues par bâtiment (désactivées). `sitegeo.render_photo()` factorise
 compilation et lancement, partagé par `verif.py --render` et `preview.py`.
+`python src/roof_focus_render.py [larg haut [low|high]]` réutilise la même
+brique pour un cadrage manuel distinct, non lancé par `run.sh`/`run.ps1` : un
+rendu oblique par bâtiment propriété, plus rapproché/plus incliné que
+`preview.py`, pour lire spécifiquement la géométrie du toit reconstruit par
+`roofer` (`data/verif/roof_*.png`) -- outil de diagnostic ponctuel, à invoquer
+à la main après `bati.py`.
 
 - Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
   suggère la doc communautaire du même nom) : c'est un petit helper source,
