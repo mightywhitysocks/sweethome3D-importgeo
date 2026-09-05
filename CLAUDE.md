@@ -158,6 +158,28 @@ script isolément (cf. Environnement) — pas la génération complète.
   (les seuls OBJ garantis fermés par construction).
 - **Ancrage sol** : objets posés à `cg.terrain_z_at(x, y)` = altitude de la
   **surface du maillage** (pas le MNT brut 0,5 m ; le maillage est à 2 m).
+- **Emprises `<room>` visibles des bâtiments propriété** : un `<room>` SH3D n'a
+  pas d'élévation propre, seulement celle de son niveau (`<level elevation=...>`,
+  partagée par tout ce qui y est placé) -- contrairement à un `<pieceOfFurniture>`
+  qui porte son propre `elevation`. Un niveau *Bâti propriété* unique (élévation
+  0.0, cf. gabarit) suffit pour les pièces de repère invisibles existantes
+  (`floorVisible='false'`, ne servent qu'aux étiquettes 2D -- la vraie géométrie
+  vient de `bati_propriete.obj`, ancré lui via `cg.terrain_z_at` par bâtiment).
+  Mais une emprise VISIBLE (demandée pour matérialiser au sol le contour d'un
+  bâtiment) sur ce même niveau partagé se retrouverait clippée dans le maillage
+  terrain dès que celui-ci dépasse l'élévation du niveau -- constaté sur le site
+  réel : jusqu'à ~2,5 m d'écart de sol entre deux bâtiments propriété. Solution :
+  `bati.py` calcule, par emprise (`bati_propriete_ref.json[footprints[].sol_max_cm]`,
+  même ordre que les commandes `create_room_polygon`), le point de terrain le plus
+  haut sous cette emprise (`cg.terrain_z_at` sur ses sommets) ; `build_home.py` lit
+  cette valeur telle quelle (aucun nouvel appel `cg.terrain_z_at`, conforme à son
+  propre rôle d'assembleur hors-ligne depuis `data/`) et crée un niveau dédié par
+  bâtiment ("Emprise <id>", id privé -- jamais dans `LEVELS`, le registre stable du
+  gabarit, passé explicitement à `_room` via son paramètre `levels`), élévation =
+  `sol_max_cm` + `FOOTPRINT_CLEARANCE_CM` (3 cm) -- jamais clippée, quitte
+  à légèrement flotter au-dessus du terrain sur les coins bas d'une emprise en
+  pente (compromis assumé : une pièce reste un plan plat, pas un maillage suivant
+  le relief).
 - **`.mtl` 100 % mat** : `Ka 0`, `Ks 0`, `Ns 1`, `illum 1` (`write_mtl`).
 - **Génération `.sh3d`** : le loader Sweet Home 3D exige l'entrée `Home`
   sérialisée Java -> produite par `java/Conv.java` (JDK requis). Un `.sh3d` avec

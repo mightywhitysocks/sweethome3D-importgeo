@@ -18,7 +18,10 @@ Sorties dans data/ :
                                environnement Linux (roofer n'a pas de build Windows officiel) ;
                                repli pyramidal silencieux si le binaire est absent.
   bati_propriete_ref.json      emprises au sol 2D + etiquettes (commandes MCP), + hauteur de
-                               reference de la camera de visite 3D (cf. build_home.py)
+                               reference de la camera de visite 3D (cf. build_home.py), + le
+                               sol le plus haut sous chaque emprise (footprints[].sol_max_cm,
+                               meme ordre que les commandes create_room_polygon) pour le niveau
+                               SH3D dedie de l'emprise visible correspondante (cf. build_home.py)
 """
 from __future__ import annotations
 
@@ -196,11 +199,14 @@ def main() -> None:
 
 def _propriete_ref(props) -> None:
     cmds = []
-    # sol le plus haut sous les emprises des batiments de la propriete (repere plan,
-    # cm) -> hauteur de reference de la camera de visite 3D (cf. build_home.py).
-    sol_max = max((cg.terrain_z_at(x, y)
-                   for b in props for ring in b["rings_cm"] for x, y in ring),
-                  default=0.0)
+    # sol le plus haut sous une emprise donnee (repere plan, cm), un par ring de
+    # "commands" (meme ordre, meme correspondance positionnelle) -> cale le niveau
+    # SH3D dedie de l'emprise visible correspondante (cf. build_home.py) : un <room>
+    # SH3D n'a pas d'elevation propre, seulement celle de son niveau, donc un niveau
+    # unique partage clipperait certains batiments dans le maillage terrain sur un
+    # site en pente (constate : jusqu'a ~2,5 m d'ecart de sol entre deux batiments
+    # propriete du meme site).
+    footprints = []
     for b in props:
         for ring in b["rings_cm"]:
             cmds.append({"action": "create_room_polygon", "params": {
@@ -208,6 +214,8 @@ def _propriete_ref(props) -> None:
                 "name": f"bati propriete {b['id'][-4:]}",
                 "floorVisible": False, "ceilingVisible": False, "areaVisible": False,
                 "floorColor": "#B0A48F"}})
+            footprints.append({"id": b['id'][-4:],
+                                "sol_max_cm": round(max(cg.terrain_z_at(x, y) for x, y in ring), 1)})
         pts = [p for r in b["rings_cm"] for p in r]
         cx = sum(p[0] for p in pts) / len(pts)
         cy = sum(p[1] for p in pts) / len(pts)
@@ -221,8 +229,12 @@ def _propriete_ref(props) -> None:
         cmds.append({"action": "add_label", "params": {
             "text": txt, "x": round(cx, 1), "y": round(cy, 1),
             "fontSize": 45, "color": "#6D5F4B"}})
+    # hauteur de reference de la camera de visite 3D (cf. build_home.py) : max des
+    # max par emprise == max sur tous les points, sans re-scanner le terrain.
+    sol_max = max((fp["sol_max_cm"] for fp in footprints), default=0.0)
     (GEO / "bati_propriete_ref.json").write_text(
-        json.dumps({"sol_bati_max_cm": round(sol_max, 1), "commands": cmds}),
+        json.dumps({"sol_bati_max_cm": round(sol_max, 1), "commands": cmds,
+                    "footprints": footprints}),
         encoding="utf-8")
     print(f"bati_propriete_ref.json : {len(cmds)} cmds ({len(props)} batiments propriete)")
 

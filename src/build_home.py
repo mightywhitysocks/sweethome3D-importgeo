@@ -54,6 +54,7 @@ LEVELS = {                       # noms -> ids (repris du gabarit, stables)
     "Bati propriete": "level-19f6a101-847c-4426-94b8-b0722d1015db",
     "Vegetation": "level-d7571dd8-f841-4ace-9baa-2b5b5df57394",
 }
+FOOTPRINT_CLEARANCE_CM = 3.0     # marge au-dessus du terrain pour les emprises visibles
 
 
 def _esc(s: str) -> str:
@@ -95,13 +96,18 @@ def _furniture_group(level, name, children: list[str]) -> str:
             f"  </furnitureGroup>")
 
 
-def _room(level, name, ring_cm, *, floor_color, floor_visible=True) -> str:
+def _room(level, name, ring_cm, *, floor_color, floor_visible=True, levels=LEVELS) -> str:
     pts = "\n".join(f"    <point x='{x:.1f}' y='{y:.1f}'/>" for x, y in ring_cm)
     fv = "" if floor_visible else " floorVisible='false'"
     av = " areaVisible='true'" if floor_visible else ""
-    return (f"  <room id='{_uid('room')}' level='{LEVELS[level]}' name='{_esc(name)}'"
+    return (f"  <room id='{_uid('room')}' level='{levels[level]}' name='{_esc(name)}'"
             f"{av}{fv} floorColor='{floor_color}' ceilingVisible='false' "
             f"ceilingFlat='true'>\n{pts}\n  </room>")
+
+
+def _level(level_id, name, elevation, index) -> str:
+    return (f"  <level id='{level_id}' name='{_esc(name)}' elevation='{elevation:.1f}' "
+            f"floorThickness='12.0' height='30.0' elevationIndex='{index}'/>")
 
 
 def _background_image_tag(fond_png: Path, width_m: float) -> str:
@@ -170,6 +176,31 @@ def main() -> None:
         wx, wy, wz = None, None, z_max_cm + 60
     head = _set_walk_camera(head, wx, wy, wz)
 
+    # ---- niveaux dynamiques : emprises au sol visibles des batiments propriete ----
+    # Un <room> SH3D n'a pas d'elevation propre, seulement celle de son niveau (cf.
+    # "Bati propriete" plus bas, plancher invisible car sa geometrie 3D vient de
+    # bati_propriete.obj). Pour une emprise VISIBLE posee sur un terrain non plan, un
+    # niveau unique partage clipperait forcement certains batiments dans le maillage
+    # terrain (site reel observe : jusqu'a ~2,5 m d'ecart de sol entre deux batiments
+    # propriete) -> un niveau dedie par batiment, cale sur le point de terrain le PLUS
+    # HAUT sous son emprise (sol_max_cm, calcule par bati.py) + FOOTPRINT_CLEARANCE_CM,
+    # jamais clippe. Ids prives (pas dans LEVELS, qui reste le registre stable du
+    # gabarit) -> passes explicitement a _room via son parametre `levels`.
+    footprint_cmds = [c for c in ref["commands"] if c["action"] == "create_room_polygon"]
+    base_level_count = len(LEVELS)
+    footprint_levels_xml = []
+    footprint_levels = {}               # nom de niveau prive -> id
+    footprint_rooms = []                # (level_name, ring_cm), consommes plus bas
+    for i, (cmd, fp) in enumerate(zip(footprint_cmds, ref["footprints"])):
+        ring = [(pt["x"], pt["y"]) for pt in cmd["params"]["points"]]
+        elevation = fp["sol_max_cm"] + FOOTPRINT_CLEARANCE_CM
+        level_name = f"Emprise {fp['id']}"
+        level_id = _uid("level")
+        footprint_levels[level_name] = level_id
+        footprint_levels_xml.append(_level(level_id, level_name, elevation, base_level_count + i))
+        footprint_rooms.append((level_name, ring))
+    head += "\n" + "\n".join(footprint_levels_xml) + "\n"
+
     # ---- pieces ----
     pieces = []
     tp = json.loads((GEO / "terrain_place.json").read_text(encoding="utf-8"))
@@ -236,13 +267,14 @@ def main() -> None:
         for ring in pc["rings_cm"]:
             rooms.append(_room("Cadastre", f"{cg.SECTION} {pc['numero']} {tag}", ring,
                                floor_color=col))
-    for cmd in ref["commands"]:
-        if cmd["action"] != "create_room_polygon":
-            continue
+    for cmd in footprint_cmds:
         pr = cmd["params"]
         ring = [(pt["x"], pt["y"]) for pt in pr["points"]]
         rooms.append(_room("Bati propriete", pr["name"], ring,
                            floor_color="00B0A48F", floor_visible=False))
+    for level_name, ring in footprint_rooms:
+        rooms.append(_room(level_name, level_name, ring, floor_color="00B0A48F",
+                           levels=footprint_levels))
 
     home_xml = head + "\n".join(pieces) + "\n" + "\n".join(rooms) + "\n</home>\n"
     (GEO / "home_source.xml").write_text(home_xml, encoding="utf-8")   # debug / diff
