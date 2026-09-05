@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import argparse
 import base64
-import io
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -43,10 +43,12 @@ _BG_PNG_B64 = (
 
 
 def _prepare_java(sh3d_jar: Path) -> tuple[Path, Path]:
+    """Meme pattern que `src/build_home.py::_prepare_java()` (copie une fois,
+    recompile si `Conv.java` a change depuis)."""
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     jar = BUILD_DIR / "SweetHome3D.jar"
-    if not jar.exists() or jar.stat().st_size != sh3d_jar.stat().st_size:
-        jar.write_bytes(sh3d_jar.read_bytes())
+    if not jar.exists():
+        shutil.copy2(sh3d_jar, jar)
     cls = BUILD_DIR / "com" / "eteks" / "sweethome3d" / "io" / "Conv.class"
     if not cls.exists() or cls.stat().st_mtime < JAVA_SRC.stat().st_mtime:
         r = subprocess.run(
@@ -69,9 +71,7 @@ def build(sh3d_jar: Path, out: Path) -> None:
         z.write(FIXTURE_DIR / "cube.mtl", "cube/cube.mtl")
         z.write(FIXTURE_DIR / "pyramid.obj", "pyramid/pyramid.obj")
         z.write(FIXTURE_DIR / "pyramid.mtl", "pyramid/pyramid.mtl")
-        ico = io.BytesIO()
-        ico.write(base64.b64decode(_BG_PNG_B64))
-        z.writestr("ico", ico.getvalue())
+        z.writestr("ico", base64.b64decode(_BG_PNG_B64))
 
     jar, jconv = _prepare_java(sh3d_jar)
     r = subprocess.run(
