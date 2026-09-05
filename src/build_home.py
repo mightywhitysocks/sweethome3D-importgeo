@@ -212,7 +212,7 @@ def main() -> None:
         p = pl["params"]
         model_key = rz.get("model")
         if model_key in species_models:
-            tree_pieces.append(_piece("Vegetation", "Arbre", f"tree/{model_key}.obj",
+            tree_pieces.append(_piece("Vegetation", "Arbre", f"{model_key}/{model_key}.obj",
                                  len(species_models[model_key]["obj"]),
                                  p["x"], p["y"], p["elevation"],
                                  rz["width"], rz["depth"], rz["height"],
@@ -270,13 +270,24 @@ def main() -> None:
         if any(rz.get("model") not in species_models for rz in veg["resize"]):
             z.writestr("tree/tree.obj", tree_obj)
             z.writestr("tree/tree.mtl", tree_mtl)
-        written_mtl = set()
+        # chaque modele dans son PROPRE dossier de premier niveau (pas un
+        # "tree/" partage) : bug constate dans HomeContentContext.lookupContent
+        # (SweetHome3D, appele par Conv.java/HomeXMLHandler) -- son cache de
+        # contenu est keye par le PREMIER segment du chemin, pas le chemin
+        # complet, donc plusieurs pieceOfFurniture sans catalogId referencant
+        # des fichiers sous le MEME premier segment ("tree/xxx.obj" pour
+        # toutes les variantes) recoivent TOUTES le Content du premier
+        # resolu -- silhouette identique partout malgre des model= distincts
+        # dans Home.xml, confirme par reproduction minimale isolee (varier
+        # name/creator/catalogId/icon/elevation/niveau ne change rien, seul
+        # le premier segment du chemin importe). Le .mtl est duplique dans
+        # chaque dossier (plus de partage inter-variantes) : cout negligeable
+        # (quelques centaines d'octets), la duplication est ce qui garantit
+        # des premiers segments distincts.
         for model_key in used_models:
             m = species_models[model_key]
-            z.writestr(f"tree/{model_key}.obj", m["obj"])
-            if m["mtl_name"] not in written_mtl:          # partage entre variantes d'une meme espece
-                z.writestr(f"tree/{m['mtl_name']}", m["mtl"])
-                written_mtl.add(m["mtl_name"])
+            z.writestr(f"{model_key}/{model_key}.obj", m["obj"])
+            z.writestr(f"{model_key}/{m['mtl_name']}", m["mtl"])
         ico = io.BytesIO()
         Image.new("RGB", (48, 48), (110, 130, 90)).save(ico, "PNG")
         z.writestr("ico", ico.getvalue())

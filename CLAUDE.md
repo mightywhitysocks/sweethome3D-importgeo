@@ -416,12 +416,33 @@ script isolément (cf. Environnement) — pas la génération complète.
   + teinte depuis l'ortho) choisissant entre les 3 archetypes ci-dessus,
   pas une identification botanique -- aucun outil open source mature trouve
   en recherche documentaire pour aller plus loin (cf. issue #81 §3, vide
-  constate apres recherche). Validee mecaniquement (logique de classification,
-  cache par hash de preset, repli en cascade sur variante/espece manquante)
-  dans une session Claude Code distante. **Pas encore revalidee sur donnees
-  reelles** (pas de site configure dans cette session, confidentialite) :
-  a reprendre lors d'un prochain run complet sur le site (silhouettes
-  effectivement variees, classification essence plausible a l'oeil).
+  constate apres recherche).
+  **Bug SweetHome3D confirme sur donnees reelles (run CI `generation.yml`
+  #16) et corrige** : `HomeContentContext.lookupContent` (bibliotheque
+  SweetHome3D, appelee par `HomeXMLHandler`/`Conv.java` lors de la
+  conversion `Home.xml` -> `.sh3d`) cache le `Content` resolu par le
+  PREMIER SEGMENT du chemin `model=`, pas le chemin complet -- confirme par
+  reproduction minimale isolee (faire varier tour a tour name/creator/
+  catalogId/icon/elevation/niveau/ordre de lecture ne change rien, seul le
+  premier segment du chemin importe). Consequence concrete : tant que tous
+  les arbres ecrivaient `model='tree/{model_key}.obj'` (meme premier
+  segment `tree/` pour toutes les variantes), TOUS les arbres du `.sh3d`
+  final heritaient du Content du PREMIER arbre resolu -- silhouette
+  identique partout (verifie par rendu SunFlow HIGH cible sur des arbres de
+  hauteurs tres differentes, meme maillage exact sur les 76 arbres du site
+  reel) malgre un calcul et un embarquement corrects en amont (7 fichiers
+  OBJ distincts bien presents dans le `.sh3d`, jamais utilises). Corrige
+  dans `build_home.py` : chaque modele espece x variante ecrit desormais
+  dans son PROPRE dossier de premier niveau (`{model_key}/{model_key}.obj`
+  + `.mtl` duplique dans ce meme dossier, plus de partage inter-variantes)
+  au lieu d'un dossier `tree/` commun -- verifie par reproduction minimale
+  (7 modeles, 7 objets `Content` distincts apres le fix, contre 1 seul
+  avant). **Pas encore revalidee de bout en bout sur le site reel** (pas de
+  site configure dans cette session, confidentialite ; le zip intermediaire
+  du run #16 n'a pas ete conserve, seul le `.sh3d` final buggue etait
+  disponible) : a reprendre lors d'un prochain run complet sur le site
+  (silhouettes effectivement variees a l'oeil, classification essence
+  plausible).
 
 ## git
 
