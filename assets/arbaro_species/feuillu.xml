@@ -1,0 +1,59 @@
+<?xml version="1.0" ?>
+<!--
+  feuillu.xml : parametres Weber & Penn (algorithme implemente par l'outil
+  externe arbaro, GPL-2, https://github.com/wdiestel/arbaro) pour
+  l'archetype "feuillu" du pipeline vegetation (issues #81/#82).
+
+  Valeurs choisies par ce projet (PAS une copie des arbres de demonstration
+  du depot arbaro, ex. trees/quaking_aspen.xml, cf. NOTICE) : Shape=2
+  (hemispherical, houppier large et arrondi), Levels=2 et nombre de
+  branches/CurveRes reduits pour rester au meme ordre de grandeur que le
+  gabarit historique unique (environ 5000 faces, cf. src/arbaro_tree.py).
+-->
+<arbaro>
+  <species name="feuillu">
+    <param name="Shape" value="2"/>
+    <param name="BaseSize" value="0.2"/>
+    <param name="Scale" value="12.0"/>
+    <param name="ScaleV" value="3.0"/>
+    <param name="Levels" value="2"/>
+    <param name="Ratio" value="0.018"/>
+    <param name="RatioPower" value="1.2"/>
+    <param name="Flare" value="0.5"/>
+    <param name="Leaves" value="80"/>
+    <param name="LeafShape" value="0"/>
+    <param name="LeafScale" value="0.20"/>
+    <param name="LeafScaleX" value="0.8"/>
+    <param name="LeafStemLen" value="0.4"/>
+    <param name="LeafBend" value="0.3"/>
+    <param name="AttractionUp" value="0.4"/>
+    <param name="0Scale" value="1.0"/>
+    <param name="0ScaleV" value="0.0"/>
+    <param name="0BaseSplits" value="0"/>
+    <param name="0Length" value="1.0"/>
+    <param name="0LengthV" value="0.0"/>
+    <param name="0Taper" value="1.0"/>
+    <param name="0SegSplits" value="0.0"/>
+    <param name="0CurveRes" value="3"/>
+    <param name="0Curve" value="0.0"/>
+    <param name="0CurveV" value="20.0"/>
+    <param name="0CurveBack" value="0.0"/>
+    <param name="1DownAngle" value="60"/>
+    <param name="1DownAngleV" value="-40"/>
+    <param name="1Rotate" value="140.0"/>
+    <param name="1RotateV" value="0.0"/>
+    <param name="1Branches" value="28"/>
+    <param name="1Length" value="0.35"/>
+    <param name="1LengthV" value="0.0"/>
+    <param name="1Taper" value="1.0"/>
+    <param name="1SegSplits" value="0.0"/>
+    <param name="1CurveRes" value="3"/>
+    <param name="1Curve" value="0.0"/>
+    <param name="1CurveV" value="40.0"/>
+    <param name="1CurveBack" value="0.0"/>
+    <param name="2DownAngle" value="45.0"/>
+    <param name="2DownAngleV" value="10.0"/>
+    <param name="2Rotate" value="140.0"/>
+    <param name="2RotateV" value="0.0"/>
+  </species>
+</arbaro>

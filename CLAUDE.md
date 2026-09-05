@@ -136,7 +136,9 @@ script isolément (cf. Environnement) — pas la génération complète.
 - `java/Conv.java` : helper Sweet Home 3D (génération `.sh3d`).
 - `java/RenderPhoto.java` : helper rendu photo headless (`verif.py --render`,
   optionnel).
-- `assets/` : gabarits stables versionnés (`home_template.xml` neutre, `tree.obj/.mtl`).
+- `assets/` : gabarits stables versionnés (`home_template.xml` neutre,
+  `tree.obj/.mtl` gabarit d'arbre historique, `arbaro_species/*.xml` presets
+  de variete des arbres).
 - `config/` : `environment.yml` + `site.example.toml` (versionnés) / `site.local.toml` (non).
 - `docs/` : `PIPELINE.md` (détail `.sh3d` + limites). `notice_calage.md` est généré.
 - `data/` : **toutes** les sorties. Ne pas éditer à la main, ne pas versionner.
@@ -371,6 +373,55 @@ script isolément (cf. Environnement) — pas la génération complète.
   - Décision : ne pas engager ce travail maintenant. À reconsidérer
     seulement si les erreurs réseau redeviennent un blocage récurrent réel
     (pas seulement théorique) en usage normal du pipeline.
+
+- **Dependance externe optionnelle : `arbaro`** (implementation Java de
+  l'algorithme Weber & Penn de generation procedurale d'arbres,
+  https://github.com/wdiestel/arbaro, **licence GPL-2**) -- variete des
+  arbres (issues #81/#82) : silhouettes conifere/feuillu/arbuste generees
+  par `src/arbaro_tree.py`, appele en sous-processus CLI depuis
+  `vegetation.py`/`build_home.py` (meme principe que roofer : aucun code
+  arbaro copie/lie). Contrairement a roofer, **optionnel** : binaire absent
+  (`arbaro_tree.find_arbaro_jar` -> None) -> `prepare_species_models`
+  renvoie `{}`, tous les arbres reutilisent le gabarit unique historique
+  (`assets/tree.obj`, comportement inchange), jamais bloquant.
+  Pas d'installeur officiel ni de binaire Linux precompile publie (a la
+  difference de roofer) -- a construire depuis les sources (`javac`/`jar`,
+  package `gui/` exclu -- inutile en CLI, memes exclusions que
+  `arbaro_cmd.jar` officiel) ou recuperer l'archive SourceForge `1.9.9` ;
+  chemin renseigne dans `[tools].arbaro_jar` (`config/site.local.toml`).
+  L'image CI (`Dockerfile`) le construit automatiquement depuis un commit
+  git fige (`ARBARO_COMMIT`).
+  **Les 3 presets d'espece** (`assets/arbaro_species/*.xml`) sont des
+  parametres Weber & Penn ORIGINAUX ecrits par ce projet -- PAS une copie
+  des arbres de demonstration du depot arbaro (`trees/*.xml`, ex.
+  `tamarack.xml`) : un preset de demonstration standard (Levels=3, ~75x50
+  branches, CurveRes=8) produit environ 300 000 faces pour un seul arbre
+  (29 Mo en OBJ, mesure dans cette session) -- beaucoup trop lourd pour un
+  objet repete dans une scene SH3D face au gabarit historique (~5000 faces,
+  165 Ko). Les 3 presets (Levels=2, ~25-35 branches, CurveRes=3,
+  `--smooth 0.0`) visent le meme ordre de grandeur (~5000-6000 faces),
+  verifie sur les 3 archetypes lors de cette session.
+  **Bug CLI arbaro confirme dans cette session** (`arbaro.java`, toutes
+  versions du depot a ce jour) : `--uvleaves`/`--uvstems` incrementent
+  l'index d'argument une fois DE TROP (`i++` en plus de l'increment normal
+  de la boucle `for`), ce qui avale silencieusement l'option suivante --
+  observe concretement : place juste avant `-o <fichier>`, ce dernier est
+  saute et le nom du fichier de sortie est pris a tort comme fichier
+  D'ENTREE (`FileNotFoundException` sur le chemin de sortie). Contournement
+  applique dans `arbaro_tree.py` : ces deux options ne sont jamais passees
+  (inutiles ici, les `.mtl` ecrits par ce projet sont des couleurs plates
+  sans texture, cf. convention ".mtl 100% mat" ci-dessus).
+  **Pas de detection d'essence reelle** : `vegetation.py::_classify_essence`
+  est une heuristique grossiere a 2 indices (forme du houppier depuis le MNH
+  + teinte depuis l'ortho) choisissant entre les 3 archetypes ci-dessus,
+  pas une identification botanique -- aucun outil open source mature trouve
+  en recherche documentaire pour aller plus loin (cf. issue #81 §3, vide
+  constate apres recherche). Validee mecaniquement (logique de classification,
+  cache par hash de preset, repli en cascade sur variante/espece manquante)
+  dans une session Claude Code distante. **Pas encore revalidee sur donnees
+  reelles** (pas de site configure dans cette session, confidentialite) :
+  a reprendre lors d'un prochain run complet sur le site (silhouettes
+  effectivement variees, classification essence plausible a l'oeil).
 
 ## git
 

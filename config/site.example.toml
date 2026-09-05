@@ -38,3 +38,10 @@ sweethome3d_jar = ""
 # Laisser "" = le lib/ du .jar ci-dessus (recherche recursive : gere le
 # sous-dossier java3d-* du build MSIX). Absent/incomplet -> etape ignoree.
 render_libs_dir = ""
+# Chemin absolu de arbaro_cmd.jar (variete des houppiers, cf. issue #82) :
+# outil externe, pas d'installeur officiel -- a construire depuis les sources
+# (https://github.com/wdiestel/arbaro) ou recuperer l'archive SourceForge
+# (arbaro-1.9.9), voir le README. Laisser "" = auto-detection
+# (~/.local/share/arbaro/arbaro_cmd.jar) ; absent -> repli sur le gabarit
+# d'arbre unique historique (assets/tree.obj), jamais bloquant.
+arbaro_jar = ""
