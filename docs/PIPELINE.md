@@ -85,19 +85,22 @@ rendu oblique par bâtiment propriété, plus rapproché/plus incliné que
 
 `python src/orbit_render.py [larg haut [low|high] [images] [secondes]]`
 assemble en MP4 (`data/verif/orbit.mp4`, via `ffmpeg` en sous-processus) une
-séquence de rendus au cadrage `preview._ensemble_camera`, yaw réparti sur
-360° -- une animation faisant le tour de la parcelle. Option du job CI
-*Rendu* (`.github/workflows/render.yml`, entrées `animation`/`orbit_frames`/
-`orbit_seconds`), jamais lancé par `run.sh`/`run.ps1` (coût : un rendu
-SunFlow complet par image).
+séquence de rendus depuis une caméra FIXE (`cg.walk_camera_xyz()` -- même
+point que la caméra de visite 3D du `.sh3d` : centroïde de la parcelle
+propriété, hauteur d'œil au-dessus du sol le plus haut sous ses bâtiments),
+seul le yaw tournant sur 360° -- un **panoramique circulaire** (la caméra
+pivote sur elle-même), pas un travelling autour de la parcelle : la position
+ne bouge jamais. Option du job CI *Rendu* (`.github/workflows/render.yml`,
+entrées `animation`/`orbit_frames`/`orbit_seconds`), jamais lancé par
+`run.sh`/`run.ps1` (coût : un rendu SunFlow complet par image).
 
-Cadrage plus serré que la vue fixe `ensemble_large` : `ORBIT_MARGIN`/
-`ORBIT_PITCH` (proches de `ensemble_rapprochee`) plutôt que les défauts de
-`_ensemble_camera` -- moins d'air autour de la parcelle, moins plongeant.
-Sans risque supplémentaire vis-à-vis du bug directionnel (issue #65) : la
-distance caméra-cible (pilotée par la marge) n'a aucun effet mesuré sur ce
-bug (testé ×10, motif de visibilité identique) ; FOV/pitch en ont un, mais
-le filet de sécurité (repli + gel, ci-dessous) en est indépendant.
+Pitch/FOV fixes eux aussi (`PANO_PITCH`≈0.135 rad, `PANO_FOV`≈1.0996 rad --
+même convention que l'`observerCamera` du gabarit : quasi horizontale, FOV
+observateur standard Sweet Home 3D, plutôt que le grand-angle plongeant des
+vues d'ensemble `preview.py`). Dans la plage déjà testée pour le bug
+directionnel (issue #65 point 15) -- le filet de sécurité (repli + gel,
+ci-dessous) reste actif quelle que soit la position exacte des zones mortes
+à ce pitch/FOV.
 
 Vitesse de rotation découplée du nombre d'images (`images`, seul poste de
 coût) via une durée de tour explicite (`secondes`, 10 s par défaut -- un

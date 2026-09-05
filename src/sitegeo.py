@@ -556,6 +556,40 @@ def terrain_z_at(x_cm, y_cm) -> float:
     return _TERRAIN.z_at(x_cm, y_cm)
 
 
+WALK_EYE_CM = 170.0   # hauteur d'oeil de la camera de visite 3D / du panoramique circulaire
+
+
+def walk_camera_xyz() -> tuple[float, float, float]:
+    """Position (x, y, z cm, repere plan) d'un point de visite sur la parcelle
+    propriete : son centroide, a hauteur d'oeil (WALK_EYE_CM) au-dessus du sol
+    le plus haut sous ses batiments (data/bati_propriete_ref.json
+    [sol_bati_max_cm]) -- repli sur le point haut du terrain (data/
+    terrain_stats.json) si aucun bati propriete. Utilise par src/
+    orbit_render.py (position fixe du panoramique circulaire).
+
+    Proche du calcul de la camera <observerCamera> du .sh3d (build_home.py),
+    SANS etre rigoureusement identique : build_home.py ne repositionne x/y
+    sur ce centroide QUE si un bati propriete existe (sinon il garde le x/y
+    neutre du gabarit) ; ici x/y utilisent toujours le centroide de la
+    parcelle des qu'elle existe, un bati propriete ne conditionnant que z --
+    l'ecart n'affecte que ce cas limite (aucun bati propriete) et n'est donc
+    PAS reutilise tel quel par build_home.py (comportement du .sh3d livre
+    volontairement inchange)."""
+    payload = json.loads((DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
+    prop = next((p for p in payload["parcels"] if p["is_property"]), None)
+    if prop is None:
+        raise SystemExit("aucune parcelle propriete dans data/sh3d_payload.json ; lancer phase1_cadastre.py.")
+    wx, wy = prop["centroid_cm"]
+    ref_path = DATA / "bati_propriete_ref.json"
+    ref = json.loads(ref_path.read_text(encoding="utf-8")) if ref_path.exists() else {}
+    if ref.get("sol_bati_max_cm"):
+        wz = ref["sol_bati_max_cm"] + WALK_EYE_CM
+    else:
+        stats = json.loads((DATA / "terrain_stats.json").read_text(encoding="utf-8"))
+        wz = (stats["z_max_ngf"] - stats["z_min_ngf"]) * 100.0 + 60.0
+    return wx, wy, wz
+
+
 # --------------------------------------------------------------------------- #
 # Couleur de toiture depuis l'ortho
 #   SH3D delave fort les tons moyens au rendu -> renvoyer des couleurs franches
