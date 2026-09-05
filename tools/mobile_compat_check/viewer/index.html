@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>mobile_compat_check viewer</title>
+</head>
+<body style="margin:0">
+<canvas id="viewerCanvas" width="800" height="600"></canvas>
+
+<!--
+  Charge les memes libs, dans le meme ordre, que
+  @node-projects/sweethome3d-webcomponent (SweetHome3dWebcomponent.js,
+  methode ready()) -- meme moteur JS officiel eTeks que Sweet Home 3D
+  Online et, d'apres la doc officielle, l'appli mobile. Balises <script>
+  classiques (pas de type="module"/async/defer) : le navigateur les
+  execute dans l'ordre du document, pas besoin d'une boucle de chargement
+  maison pour le garantir.
+-->
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/big.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/gl-matrix-min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/jszip.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/core.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/geom.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/stroke.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/batik-svgpathparser.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/jsXmlSaxParser.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/triangulator.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/viewmodel.min.js"></script>
+<script src="../node_modules/@node-projects/sweethome3d-webcomponent/lib/sweethome3djsviewer/lib/viewhome.min.js"></script>
+<script>
+  // On appelle ici directement la fonction globale `viewHome` (definie par
+  // viewhome.min.js ci-dessus) plutot que le web component, pour capturer
+  // nous-memes succes/erreurs/progression sans dependre de son wrapper.
+  window.__chk = { errors: [], pageerrors: [], progress: 0, calledBack: false };
+
+  window.addEventListener("error", (e) => {
+    window.__chk.pageerrors.push(String(e.error || e.message));
+  });
+
+  const params = new URLSearchParams(location.search);
+  viewHome(
+    document.getElementById("viewerCanvas"),
+    params.get("url"),
+    (err) => { window.__chk.errors.push(String(err && err.message || err)); },
+    (part, info, percentage) => { window.__chk.progress = percentage; },
+    { navigationPanel: "none", activateCameraSwitchKey: false }
+  );
+  window.__chk.calledBack = true;
+</script>
+</body>
+</html>

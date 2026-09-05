@@ -52,6 +52,12 @@ replie sur le gabarit d'arbre unique historique, sans planter. Déjà construit
 automatiquement dans l'image CI (génération à la demande via GitHub Actions,
 ci-dessous).
 
+**Optionnel** : **Node.js** (`node` sur le `PATH`) pour `verif.py
+--mobile-compat` (vérifie que `Plan 3D.sh3d` se charge sans erreur dans le
+vrai moteur JS partagé par l'appli mobile Sweet Home 3D et Sweet Home 3D
+Online — cf. `tools/mobile_compat_check/`, `npm install` dans ce dossier au
+préalable). Absent : contrôle ignoré, sans planter.
+
 ### Génération à la demande, sans machine Linux/macOS locale (GitHub Actions)
 
 Ce dépôt est un **template GitHub**. Pour générer sans rien installer
@@ -169,7 +175,7 @@ utiliser `py` (Python système) ni `conda run`.
 | `src/vegetation.py` | arbres (maxima MNH) + haies taillées éventuelles |
 | `src/courbes.py` | courbes de niveau 1 m (`gdal_contour`) |
 | `src/build_home.py` | assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`) |
-| `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d`) |
+| `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d` ; `--mobile-compat` : compatibilité appli mobile / Sweet Home 3D Online, cf. `tools/mobile_compat_check/`) |
 | `src/preview.py` | aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`), via `python src/preview.py [larg haut [low\|high]]` |
 | `src/orbit_render.py` | panoramique circulaire MP4 (caméra fixe sur la parcelle propriété, 360° de yaw, `data/verif/orbit.mp4`), option du job CI *Rendu* — via `python src/orbit_render.py [larg haut [low\|high] [images] [secondes]]` (cf. `docs/PIPELINE.md`) |
 

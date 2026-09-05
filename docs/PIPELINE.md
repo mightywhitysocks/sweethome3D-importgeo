@@ -284,6 +284,22 @@ image exploitable.
     croisement FOV×pitch ci-dessus montre que ces bandes tournent avec la
     config, une table figée mesurée ailleurs risquerait de désavantager un
     azimut en réalité sûr. Cf. `## Écarts assumés` ci-dessous.
+13. **Compatibilite appli mobile / Sweet Home 3D Online.** Le loader du
+    moteur JS partage par l'appli mobile et Sweet Home 3D Online
+    (`SweetHome3DJS`, transpile Java->JS via JSweet) ne sait pas lire
+    l'entree `Home` serialisee Java qu'exige le desktop -- seulement une
+    entree XML `Home.xml`. `java/Conv.java` ecrit desormais les deux
+    (`HomeFileRecorder(..., preferXmlEntry=true)`, cf. CLAUDE.md
+    "Points durs") : un seul `.sh3d` reste ouvrable sur le desktop
+    (entree `Home`) et sur mobile/Online (entree `Home.xml`, chemins de
+    modeles deja corrects car ecrite par `HomeXMLExporter`, integre a
+    `SweetHome3D.jar`). Verifie de bout en bout sur un plan synthetique
+    (`tools/mobile_compat_check/`, chargement reel dans Chromium headless
+    via le meme moteur JS officiel) ; pas encore verifie sur un vrai
+    `Plan 3D.sh3d` (poids geometrique reel : terrain, toits `roofer`,
+    arbres `arbaro`) faute de site configure lors de l'ecriture de ce
+    correctif. `verif.py --mobile-compat` automatise ce controle a chaque
+    generation (optionnel, ignore si Node.js est absent).
 
 ## Écarts assumés
 

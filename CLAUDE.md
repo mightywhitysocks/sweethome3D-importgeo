@@ -640,6 +640,50 @@ script isolément (cf. Environnement) — pas la génération complète.
     de losange), coherents entre eux et avec le reste de la vegetation
     (feuillu/arbuste inchanges). Fix definitivement confirme de bout en
     bout, plus seulement sur un `.sh3d` patche.
+- **Compatibilite `Plan 3D.sh3d` avec l'appli mobile / Sweet Home 3D
+  Online -- corrigee.** L'appli mobile Sweet Home 3D (eTeks, Google Play/
+  App Store) declare officiellement partager sa compatibilite de format
+  avec **Sweet Home 3D Online** : les deux utilisent le meme moteur JS,
+  `SweetHome3DJS` (transpile depuis le code Java via **JSweet**, projet
+  CINCHEO x eTeks). Ce moteur sait parser du XML (`HomeXMLHandler`
+  transpile) mais **ne sait pas deserialiser l'entree Java `Home`**
+  (`ObjectInputStream`, sans equivalent JS) que `java/Conv.java` ecrivait
+  seule via `HomeFileRecorder` -- confirme empiriquement (pas suppose) en
+  chargeant un `.sh3d` reel dans le **vrai moteur JS officiel eTeks**
+  (memes fichiers `.min.js` que Sweet Home 3D Online, embarques par le
+  paquet npm `@node-projects/sweethome3d-webcomponent`, GPL-2.0) via
+  Chromium headless : echec explicite `No Home.xml entry`, alors que le
+  meme fichier s'ouvre normalement sur le desktop.
+  **Corrige** : `HomeFileRecorder(9, false, null, false, true, false)`
+  (`preferXmlEntry=true`) dans `java/Conv.java` fait ecrire, EN PLUS de
+  l'entree `Home` serialisee (seule lue par le desktop), une entree
+  `Home.xml` via `HomeXMLExporter` -- classe deja integree a
+  `SweetHome3D.jar`, pas une reconstruction maison : les chemins de
+  modeles renumerotes par `ContentDigests` (ex. `cube/cube.obj` ->
+  `1/cube.obj` apres ecriture) y sont donc deja corrects, sans risque de
+  desynchronisation. Sans impact desktop (l'entree `Home` reste lue en
+  priorite) : un seul `.sh3d` reste compatible desktop **et**
+  mobile/Online, sans dupliquer aucun contenu.
+  **Valide de bout en bout** (`tools/mobile_compat_check/`, outil
+  autonome sur le modele de `tools/lidar_view/`) : un plan synthetique
+  committe (`fixture/`, cube + pyramide + 3 niveaux + `furnitureGroup` +
+  `room` + `backgroundImage`, aucune donnee geographique reelle) est
+  assemble en `.sh3d` reel via le meme `java/Conv.java` (`build_fixture.py`,
+  JDK + `SweetHome3D.jar` -- non fournis par le depot), puis charge dans
+  Chromium headless (Playwright) via le vrai moteur JS eTeks
+  (`check.mjs`) : chargement propre (zero erreur), rendu visuellement
+  coherent (capture d'ecran). Integre a `verif.py --mobile-compat` (repli
+  explicite si Node/le paquet npm sont absents, comme les autres
+  dependances externes optionnelles -- mais ECHEC si le chargement
+  lui-meme rapporte une erreur, contrairement a `--render` qui est un
+  simple smoke-test visuel).
+  **Pas encore valide sur un vrai `Plan 3D.sh3d`** d'un site reel (pas de
+  site configure dans la session qui a ecrit ce correctif,
+  confidentialite) : le poids geometrique cumule reel (terrain ~43k
+  faces, toits `roofer` multi-batiments, jusqu'a ~76 arbres `arbaro`) n'a
+  pas ete teste sur ce moteur -- performance/fluidite sur mobile restent
+  a observer sur un run complet (`node tools/mobile_compat_check/check.mjs
+  "Plan 3D.sh3d"`, ou `verif.py --mobile-compat`).
 
 ## git
 

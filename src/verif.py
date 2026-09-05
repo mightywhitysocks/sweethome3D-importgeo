@@ -15,6 +15,13 @@ verif.py : controle complet du pipeline (lecture seule).
      smoke-test visuel du .sh3d ; voir _render_photo() et java/RenderPhoto.java.
      Optionnel : ignore si les jars de rendu ([tools].render_libs_dir) sont absents,
      n'affecte pas le code retour de verif.py.
+ 10. (option --mobile-compat) charge le .sh3d dans le vrai moteur JS eTeks
+     (SweetHome3DJS, partage par Sweet Home 3D Online et l'appli mobile) via
+     Chromium headless -- voir _mobile_compat() et tools/mobile_compat_check/.
+     Optionnel : ignore si Node/le paquet npm sont absents ou non installes
+     (`npm install` dans ce dossier), mais ECHEC si le chargement lui-meme
+     rapporte une erreur (contrairement a --render, il s'agit ici d'une
+     vraie garantie de compatibilite, pas d'un simple smoke-test visuel).
 
 Sortie : rapport + code retour 0 (OK) / 1 (echec).
 """
@@ -23,6 +30,8 @@ from __future__ import annotations
 import io
 import json
 import re
+import shutil
+import subprocess
 import sys
 import zipfile
 from math import hypot
@@ -194,6 +203,9 @@ def main() -> None:
     if "--render" in sys.argv:
         _render_photo()
 
+    if "--mobile-compat" in sys.argv:
+        _mobile_compat()
+
     print("\n=== RESULTAT ===", "TOUT OK" if _OK[0] else ">>> ECHEC <<<")
     sys.exit(0 if _OK[0] else 1)
 
@@ -267,6 +279,40 @@ def _render_photo() -> None:
     out = cg.render_photo(cg.VERIF / "render_photo.png")
     if out:
         print(f"  {out} ({out.stat().st_size // 1024} Ko)")
+
+
+def _mobile_compat() -> None:
+    """Verifie que le .sh3d se charge sans erreur dans le vrai moteur JS eTeks
+    (SweetHome3DJS -- partage par Sweet Home 3D Online et, d'apres la doc
+    officielle, l'appli mobile), via tools/mobile_compat_check/check.mjs
+    (Chromium headless). Repli explicite (n'affecte pas le code retour) si
+    Node ou le paquet npm sont absents -- meme politique que les autres
+    dependances externes optionnelles du projet (arbaro, jars de rendu).
+    Contrairement a _render_photo(), un echec de CHARGEMENT reel (pas
+    l'absence de l'outil) fait echouer verif.py : c'est la garantie de
+    compatibilite mobile visee, pas un simple smoke-test visuel."""
+    print("\n=== 10. Compatibilite appli mobile / Sweet Home 3D Online (optionnel) ===")
+    tool_dir = cg.ROOT / "tools" / "mobile_compat_check"
+    node = shutil.which("node")
+    if not node:
+        print("  Node.js introuvable sur le PATH -- verification ignoree "
+              "(cf. tools/mobile_compat_check/README.md).")
+        return
+    if not (tool_dir / "node_modules").exists():
+        print(f"  {tool_dir}/node_modules absent -- lancer `npm install` dans "
+              "ce dossier (cf. son README.md). Verification ignoree.")
+        return
+    if not cg.HOME_SH3D.exists():
+        print(f"  {cg.HOME_SH3D} absent -- rien a verifier.")
+        return
+    cg.VERIF.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(
+        [node, "check.mjs", str(cg.HOME_SH3D),
+         "--screenshot", str(cg.VERIF / "mobile_compat.png")],
+        cwd=tool_dir, capture_output=True, text=True)
+    print(r.stdout.strip() or r.stderr.strip()[:1200])
+    check("chargement moteur mobile/Online (SweetHome3DJS)", r.returncode == 0,
+          "OK" if r.returncode == 0 else "echec (voir sortie ci-dessus)")
 
 
 if __name__ == "__main__":
