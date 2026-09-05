@@ -585,6 +585,48 @@ script isolément (cf. Environnement) — pas la génération complète.
       hors du cadre "source" de cette section) ; ou une qualite de rendu
       encore superieure a `high` si `PhotoRenderer`/SunFlow l'expose.
       Aucune des deux n'a ete decidee a ce stade.
+  - **Revalidation confirmee sans changement, puis levier LeafScale non
+    botanique choisi par l'utilisateur et valide -- corrige le plafond.**
+    Un nouveau run reel (`generation.yml` #20 -> `render.yml` #21, commit
+    du merge ci-dessus, aucun changement de code) a ete revalidé avec la
+    meme methode (camera recalculee, meme grappe de coniferes) : 652 px de
+    feuillage, identique au pixel pres a la mesure precedente -- confirme
+    qu'aucune regression ni amelioration n'etait attendue, et que la
+    mesure est reproductible d'un run a l'autre (le seul ecart entre les
+    deux fichiers PNG, 2 octets, est du bruit d'echantillonnage SunFlow,
+    pas un changement de contenu).
+    Face au choix explicite de l'utilisateur ("LeafScale non-botanique"
+    plutot que qualite de rendu superieure), plusieurs paliers testes sur
+    le meme conifere patche dans le `.sh3d` reel (meme camera/grappe de
+    reference), `LeafScale`/`LeafScaleX` relevees ensemble en conservant le
+    rapport largeur/longueur d'origine (silhouette "aiguille" preservee,
+    pas une derive vers une forme en losange) :
+    - 0.18/0.35 (valeur PR#86, reference) : 652 px.
+    - 0.35/0.7 (x2) : 678 px (+4 %).
+    - 0.6/1.2 (x3,3) : 705 px (+8 %).
+    - 1.0/2.0 (x5,5) : 724 px (+11 %) -- gain net et visible en inspection
+      directe du rendu (silhouette nettement plus pleine sur les arbres
+      patches), sans artefact (pas de blocs/losanges visibles).
+    - 1.6/3.2 (x8,9) : 727 px (+11,5 %) -- plateau atteint, gain marginal
+      supplementaire negligeable.
+    **Valeur retenue : `LeafScale`=1.0, `LeafScaleX`=2.0** (le point juste
+    avant le plateau, pas la valeur maximale testee). Contrairement a
+    `1Branches` (qui ajoute de la geometrie, cout en faces/temps de
+    rendu), `LeafScale` ne change que la taille des quads de feuillage
+    deja existants (`Leaves`=70 inchange) : **aucun cout supplementaire de
+    faces ni de temps de rendu** (12739 faces/arbre, identique a avant).
+    **Deviation delibérement non botanique**, assumee et documentee comme
+    telle : ~2,9x plus grand que la reference reelle `tamarack.xml`
+    (0.15/0.35) et ~5,5x la valeur precedente de ce projet (0.18/0.35,
+    elle-meme deja au-dessus du reel pour corriger le sous-echantillonnage,
+    cf. plus haut) -- ne pas reprendre cette valeur comme reference
+    botanique Weber & Penn si ce fichier sert de modele ailleurs. Choisie
+    explicitement par l'utilisateur en connaissance de cause, apres avoir
+    constate qu'aucun levier source (branches, niveaux, qualite de rendu)
+    ne fonctionnait. Pas encore revalidee sur un run `generation.yml`/
+    `render.yml` complet (le test ci-dessus patche un `.sh3d` deja genere,
+    meme methode que les tests precedents de cette section) : a confirmer
+    au prochain run complet du pipeline.
 
 ## git
 
