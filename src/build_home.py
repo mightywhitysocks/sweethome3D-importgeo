@@ -12,7 +12,8 @@ Plus aucune choregraphie MCP / redemarrage.
     (le loader SH3D exige l'entree `Home` serialisee Java, que Python ne sait pas faire).
 
 Sources (data/) :
-  terrain.obj/.mtl + terrain_drape.jpg + terrain_place.json
+  terrain.obj/.mtl + terrain_place.json + terrain_drape.jpg (si present --
+    repli couleur unie sinon, cf. terrain.py)
   bati_voisinage.obj/.mtl + bati_place.json + bati_propriete_ref.json
   haies.obj/.mtl + haies_place.json          (si present)
   vegetation_arbres.json  (+ assets/tree.obj/.mtl gabarit historique, et/ou
@@ -253,7 +254,11 @@ def main() -> None:
         z.write(fond_png, "bg")
         z.write(GEO / "terrain.obj", "t/terrain.obj")
         z.write(GEO / "terrain.mtl", "t/terrain.mtl")
-        z.write(GEO / "terrain_drape.jpg", "t/terrain_drape.jpg")
+        if (GEO / "terrain_drape.jpg").exists():
+            # absent -> repli deliberement gere par terrain.py (WMS ortho
+            # indisponible : couleur unie COL_HERBE, terrain.mtl sans
+            # map_Kd) -- jamais une raison de faire echouer l'assemblage.
+            z.write(GEO / "terrain_drape.jpg", "t/terrain_drape.jpg")
         z.write(GEO / "bati_voisinage.obj", "b/bati_voisinage.obj")
         z.write(GEO / "bati_voisinage.mtl", "b/bati_voisinage.mtl")
         if has_bati_propriete:
