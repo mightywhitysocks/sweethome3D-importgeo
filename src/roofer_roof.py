@@ -57,11 +57,18 @@ LIDAR_CLASS_DIVERS_BATI_IGN = 67  # classe IGN hors nomenclature ASPRS ("Divers 
                                    # invisible pour --bld-class de roofer (defaut 6)
 LIDAR_CLASS_BATIMENT = 6
 
-# Memes noms de colonne BD TOPO que l'exemple officiel IGN
-# ignfab/roofer-with-ignf-datasets (scripts/run_workflow.sh, appel roofer) :
-# --h-terrain-attribute altitude_minimale_sol --h-roof-attribute altitude_maximale_toit.
+# H_TERRAIN_FIELD : altitude BD TOPO absolue (NGF) -- roofer --help-all :
+# "--h-terrain-attribute : fallback terrain ELEVATION", meme convention.
 H_TERRAIN_FIELD = "altitude_minimale_sol"
-H_ROOF_FIELD = "altitude_maximale_toit"
+# H_ROOF_FIELD : PAS altitude_maximale_toit (absolue) -- roofer --help-all :
+# "--h-roof-attribute : fallback roof HEIGHT" (hauteur relative au sol, pas
+# une altitude NGF). Confirme empiriquement sur un run reel (issue #23) :
+# passer alt_toit (absolu, ~90 m NGF) faisait extruder le repli LoD1.1 a
+# alt_sol + alt_toit (~180 m NGF, toit "dans le ciel") au lieu de alt_toit --
+# roofer traite bien la valeur comme une hauteur ajoutee au sol, jamais comme
+# une altitude absolue. Colonne ecrite = hauteur (alt_toit - alt_sol), cf.
+# write_footprint_gpkg.
+H_ROOF_FIELD = "hauteur_toit"
 
 
 def find_roofer_bin() -> str | None:
@@ -275,21 +282,23 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     peut renvoyer que le premier trouve pour les parties suivantes (toit
     disjoint) -- cf. `build_roof`, appele avec le meme identifiant.
 
-    Ecrit aussi `H_TERRAIN_FIELD`/`H_ROOF_FIELD` (altitudes BD TOPO,
-    completees autant que possible par `_complete_altitudes`) : repli
-    d'altitude que roofer utilise lui-meme (`--h-terrain-attribute`/
-    `--h-roof-attribute`, cf. `run_roofer`) quand sa couverture LiDAR est
-    insuffisante pour deriver l'altitude sol/toit d'un batiment depuis le
-    nuage -- jamais une reconstruction geometrique cote projet, cf.
-    CLAUDE.md."""
+    Ecrit aussi `H_TERRAIN_FIELD` (altitude absolue) / `H_ROOF_FIELD` (hauteur,
+    PAS une altitude -- cf. commentaire sur `H_ROOF_FIELD`), completees
+    autant que possible par `_complete_altitudes` : repli que roofer utilise
+    lui-meme (`--h-terrain-attribute`/`--h-roof-attribute`, cf. `run_roofer`)
+    quand sa couverture LiDAR est insuffisante pour deriver l'altitude
+    sol/toit d'un batiment depuis le nuage -- jamais une reconstruction
+    geometrique cote projet, cf. CLAUDE.md."""
     import geopandas as gpd
 
     rows = []
     for polys, _rings, haut, alt_sol, alt_toit, rid in prop_bldgs:
         alt_sol_c, alt_toit_c = _complete_altitudes(alt_sol, alt_toit, haut)
+        hauteur_toit = (alt_toit_c - alt_sol_c
+                        if alt_sol_c is not None and alt_toit_c is not None else None)
         for i, poly in enumerate(polys):
             rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly,
-                         H_TERRAIN_FIELD: alt_sol_c, H_ROOF_FIELD: alt_toit_c})
+                         H_TERRAIN_FIELD: alt_sol_c, H_ROOF_FIELD: hauteur_toit})
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
     gdf.to_file(path, driver="GPKG")
 
