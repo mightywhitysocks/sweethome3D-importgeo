@@ -94,21 +94,25 @@ def main() -> None:
     print("\n=== 1. Parcelles : API Carto (live) vs payload ===")
     live = cg.parcels_l93()
     geoms = {}
-    for _, p in live.iterrows():
+    # Jamais cg.SECTION/num (numero de parcelle) dans les labels ci-dessous --
+    # identifierait le site en clair dans les logs/verif_overlay.png (cf.
+    # CLAUDE.md section Confidentialite) ; un index suffit au diagnostic.
+    for i, (_, p) in enumerate(live.iterrows(), 1):
         num = p["numero"]
+        tag = f"parcelle {i}/{len(live)}"
         pc = next(x for x in payload["parcels"] if x["numero"] == num)
         geoms[num] = p.geometry
         cont = int(p["contenance"])
-        check(f"{cg.SECTION} {num} contenance", cont == pc["contenance_m2"], f"{cont} m2")
-        check(f"{cg.SECTION} {num} aire recalculee (<0.5 m2)",
+        check(f"{tag} contenance", cont == pc["contenance_m2"], f"{cont} m2")
+        check(f"{tag} aire recalculee (<0.5 m2)",
               abs(p.geometry.area - pc["area_calc_m2"]) < 0.5,
               f"{p.geometry.area:.1f} vs {pc['area_calc_m2']:.1f}")
-        check(f"{cg.SECTION} {num} ecart aire/contenance < 1%",
+        check(f"{tag} ecart aire/contenance < 1%",
               abs(p.geometry.area - cont) / cont < 0.01,
               f"{abs(p.geometry.area - cont) / cont * 100:.2f}%")
         r0 = pc["rings_cm"][0][0]
         d = p.geometry.boundary.distance(Point(E0 + r0[0] / 100, N1 - r0[1] / 100))
-        check(f"{cg.SECTION} {num} 1er sommet sur le contour (<0.05 m)", d < 0.05, f"{d * 100:.1f} cm")
+        check(f"{tag} 1er sommet sur le contour (<0.05 m)", d < 0.05, f"{d * 100:.1f} cm")
 
     print("\n=== 2. Topologie ===")
     union = unary_union(list(geoms.values()))
@@ -153,8 +157,11 @@ def main() -> None:
             raw = (z.read("Home.xml").decode("utf-8", "replace") if "Home.xml" in names
                    else z.read("Home").decode("latin-1", "replace"))
             check("niveau 'Cadastre' present", "Cadastre" in raw)
-            for num in cg.NUMEROS:
-                check(f"piece '{cg.SECTION} {num}' presente",
+            # Jamais cg.SECTION/num dans le label -- seule la verification
+            # elle-meme (presence dans raw, le XML interne du .sh3d prive)
+            # a besoin de la vraie valeur (cf. CLAUDE.md Confidentialite).
+            for i, num in enumerate(cg.NUMEROS, 1):
+                check(f"piece {i}/{len(cg.NUMEROS)} presente",
                       f"{cg.SECTION} {num}" in raw)
 
             print("\n=== 7. Calage <backgroundImage> ===")
@@ -235,14 +242,17 @@ def _overlay(payload) -> None:
     draw = ImageDraw.Draw(img, "RGBA")
     sx = W / (payload["fond"]["width_m"] * 100.0)
     sy = H / (payload["fond"]["height_m"] * 100.0)
-    for p in payload["parcels"]:
+    # Jamais cg.SECTION/p['numero'] dans le texte dessine -- verif_overlay.png
+    # peut finir dans un artefact CI de diagnostic (cf. CLAUDE.md
+    # Confidentialite) ; un index par parcelle suffit au controle visuel.
+    for i, p in enumerate(payload["parcels"], 1):
         prop = p["is_property"]
         outline = (27, 122, 61, 255) if prop else (60, 60, 60, 230)
         for ring in p["rings_cm"]:
             draw.polygon([(x * sx, y * sy) for x, y in ring], outline=outline,
                          width=5 if prop else 3)
         cx, cy = p["centroid_cm"]
-        draw.text((cx * sx, cy * sy), f"{cg.SECTION} {p['numero']}", fill=outline,
+        draw.text((cx * sx, cy * sy), f"parcelle {i}", fill=outline,
                   anchor="mm")
     cg.VERIF.mkdir(parents=True, exist_ok=True)
     img.save(cg.VERIF / "verif_overlay.png")

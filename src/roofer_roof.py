@@ -227,7 +227,7 @@ def lidar_tile_paths(bbox_l93, margin_m: float = 5.0, *, log=print) -> list[Path
     cg.lidar_points_l93(bbox_l93, margin_m=margin_m)  # effet de bord : peuple le cache LAZ
     tiles = cg.lidar_tile_index(bbox_l93, margin_m=margin_m)
     paths = []
-    for _, row in tiles.iterrows():
+    for i, (_, row) in enumerate(tiles.iterrows(), 1):
         if not row.get("url"):
             continue
         src = cg.LIDAR_CACHE / Path(row["url"]).name
@@ -236,8 +236,12 @@ def lidar_tile_paths(bbox_l93, margin_m: float = 5.0, *, log=print) -> list[Path
             try:
                 _remap67(src, dst)
             except Exception as e:                                     # noqa: BLE001
-                log(f"  toit roofer : remap classe 67->6 echoue sur {src.name} "
-                    f"({type(e).__name__}: {e}) -> dalle fournie sans remap")
+                # Jamais {src.name} ici : le nom de dalle LiDAR HD IGN encode
+                # les coordonnees Lambert-93 en km (LHD_FXX_<E>_<N>_...) --
+                # localiserait le site en clair dans les logs (cf. CLAUDE.md
+                # section Confidentialite).
+                log(f"  toit roofer : remap classe 67->6 echoue sur la dalle "
+                    f"{i}/{len(tiles)} ({type(e).__name__}: {e}) -> dalle fournie sans remap")
                 paths.append(src)
                 continue
         paths.append(dst)
