@@ -44,6 +44,29 @@
   complet des 76 arbres du site reel en 13,7 s contre environ 11 s avant
   (qualite low, meme camera), ecart negligeable, verifie dans une session
   Claude Code distante.
+
+  Revalidation post-merge (run generation.yml reel) : le conifere restait
+  juge insuffisamment dense. Trois leviers testes SANS effet mesurable sur
+  le rendu reel (qualite high, Levels=3 reequilibre, 1Branches=150,
+  cf. CLAUDE.md section arbaro), plafond d'echantillonnage SunFlow a
+  qualite low/distance normale, pas un manque de geometrie. Confirme par
+  comparaison au houppier reel (ortho IGN du site) : les vrais coniferes
+  apparaissent pleins/opaques, pas clairsemes, l'ecart est reel.
+  LeafScale/LeafScaleX relevees une seconde fois, DELIBEREMENT au-dela de
+  toute valeur botanique reelle (0.18/0.35 -> 1.0/2.0, meme rapport
+  largeur/longueur conserve pour garder la silhouette "aiguille", pas un
+  losange) : seul levier teste qui produit un gain mesurable et
+  reproductible (652 -> 724 px de feuillage sur la grappe de reference,
+  +11%, contre un effet quasi nul pour 1Branches/qualite/Levels). Rendement
+  decroissant mesure par paliers (0.35/0.7 : +4% ; 0.6/1.2 : +8% ;
+  1.0/2.0 : +11% ; 1.6/3.2 : +11.5%, plateau atteint), 1.0/2.0 retenu
+  comme le point avant plateau, pas la valeur maximale testee. Aucun cout
+  supplementaire de faces/temps de rendu (LeafScale change la taille des
+  quads existants, pas leur nombre, Leaves=70 inchange). Deviation
+  ASSUMEE et non botanique, choisie explicitement par l'utilisateur apres
+  avoir constate qu'aucune valeur sourcee ne resout le plafond de rendu ;
+  ne pas la presenter comme une valeur Weber & Penn reelle si ce fichier
+  est repris comme reference ailleurs.
 -->
 <arbaro>
   <species name="conifere">
@@ -57,8 +80,8 @@
     <param name="Flare" value="0.3"/>
     <param name="Leaves" value="70"/>
     <param name="LeafShape" value="0"/>
-    <param name="LeafScale" value="0.18"/>
-    <param name="LeafScaleX" value="0.35"/>
+    <param name="LeafScale" value="1.0"/>
+    <param name="LeafScaleX" value="2.0"/>
     <param name="LeafStemLen" value="0.2"/>
     <param name="LeafBend" value="0.3"/>
     <param name="AttractionUp" value="0.6"/>
