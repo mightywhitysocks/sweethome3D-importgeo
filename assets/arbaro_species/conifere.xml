@@ -21,6 +21,29 @@
   comparatif cible (avant/apres, meme seed) dans une session Claude Code
   distante. Nombre de faces quasi inchange (Leaves=70 inchange, seule la
   taille de chaque aiguille change).
+
+  1Branches relevee de 30 a 75 (densite jugee insuffisante malgre le fix
+  LeafScale ci-dessus) : valeur reprise TELLE QUELLE du preset
+  communautaire arbaro/trees/tamarack.xml (meme algorithme Weber & Penn,
+  https://github.com/wdiestel/arbaro, licence GPL-2 : source documentaire,
+  aucun autre parametre de ce fichier copie). Ajouter un niveau de
+  ramification supplementaire (Levels=3, comme tamarack.xml et la table de
+  parametres publiee par l'article Weber & Penn 1995 "Creation and
+  Rendering of Realistic Trees", SIGGRAPH : Quaking Aspen/Black Tupelo,
+  seules especes dont l'annexe donne les valeurs completes) a ete teste et
+  ECARTE : le nombre de feuilles se multiplie par 1Branches x 2Branches
+  (pas leur somme), un niveau 2 meme allege (CurveRes=1-2, 2Branches=12) a
+  produit 48139 faces pour un seul arbre, confirmant le probleme deja
+  documente ci-dessus pour le preset de demo standard. Justifie par la
+  Table 2 du meme article (decompte de triangles par niveau selon la
+  distance de vue, sur un Quaking Aspen) : les branches de niveau 2
+  tombent a 0 triangle au-dela de 30 m, alors que le niveau 1 et les
+  feuilles restent significatifs bien plus loin ; la densite percue a
+  distance de rendu normale vient du niveau 1 et des feuilles, pas d'un
+  niveau 2 supplementaire. 1Branches=75 : ~12739 faces/arbre, rendu
+  complet des 76 arbres du site reel en 13,7 s contre environ 11 s avant
+  (qualite low, meme camera), ecart negligeable, verifie dans une session
+  Claude Code distante.
 -->
 <arbaro>
   <species name="conifere">
@@ -54,7 +77,7 @@
     <param name="1DownAngleV" value="-30"/>
     <param name="1Rotate" value="140.0"/>
     <param name="1RotateV" value="0.0"/>
-    <param name="1Branches" value="30"/>
+    <param name="1Branches" value="75"/>
     <param name="1Length" value="0.5"/>
     <param name="1LengthV" value="0.0"/>
     <param name="1Taper" value="1.0"/>

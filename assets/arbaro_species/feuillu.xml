@@ -9,6 +9,19 @@
   (hemispherical, houppier large et arrondi), Levels=2 et nombre de
   branches/CurveRes reduits pour rester au meme ordre de grandeur que le
   gabarit historique unique (environ 5000 faces, cf. src/arbaro_tree.py).
+
+  1Branches relevee de 28 a 50 (densite jugee insuffisante, meme
+  raisonnement que conifere.xml) : valeur EXACTE de la table de parametres
+  publiee par Weber & Penn, "Creation and Rendering of Realistic Trees",
+  SIGGRAPH 1995 (annexe "Parameter List") pour Quaking Aspen ET Black
+  Tupelo (les deux especes reelles publiees s'accordent sur 1Branches=50) :
+  source primaire, pas seulement un preset communautaire derive. Reste sur
+  Levels=2 pour la meme raison que conifere.xml (cf. CLAUDE.md, section
+  arbaro) : la Table 2 du meme article montre que les branches de niveau 2
+  ne contribuent plus a la silhouette au-dela de 30 m de distance de vue.
+  1Branches=50 : ~10113 faces/arbre, verifie sur un rendu complet des
+  76 arbres du site reel sans impact mesurable sur le temps de rendu
+  (session Claude Code distante).
 -->
 <arbaro>
   <species name="feuillu">
@@ -42,7 +55,7 @@
     <param name="1DownAngleV" value="-40"/>
     <param name="1Rotate" value="140.0"/>
     <param name="1RotateV" value="0.0"/>
-    <param name="1Branches" value="28"/>
+    <param name="1Branches" value="50"/>
     <param name="1Length" value="0.35"/>
     <param name="1LengthV" value="0.0"/>
     <param name="1Taper" value="1.0"/>

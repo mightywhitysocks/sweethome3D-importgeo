@@ -465,6 +465,53 @@ script isolément (cf. Environnement) — pas la génération complète.
   en bout sur le site reel** (`render.yml` #19, apres merge du fix) :
   meme arbre comparee avant/apres sur les images reelles -- squelette nu
   au run #18, feuillage clairseme mais visible au run #19.
+  **Densite de branches insuffisante pour les 3 archetypes, etudiee sur
+  sources documentaires** : meme apres le fix LeafScale ci-dessus,
+  utilisateur juge le conifere pas assez dense. Etude systematique des
+  3 presets (`assets/arbaro_species/*.xml`) contre des sources reelles du
+  meme algorithme plutot qu'un reglage a l'oeil :
+  - Article original **Weber & Penn, "Creation and Rendering of Realistic
+    Trees", SIGGRAPH 1995** (PDF recupere et parse par cette session,
+    `pypdf` -- `pdftoppm`/poppler indisponible) : annexe "Parameter List"
+    donne les valeurs completes pour 4 especes reelles (Quaking Aspen,
+    Black Tupelo, Weeping Willow, CA Black Oak). Quaking Aspen ET Black
+    Tupelo s'accordent sur `1Branches=50` (contre 28 dans notre
+    `feuillu.xml` d'origine). Table 2 du meme article (nombre de triangles
+    par niveau selon la distance de vue, sur un Quaking Aspen) : les
+    branches de niveau 2 tombent a 0 triangle au-dela de 30 m, alors que le
+    niveau 1 et les feuilles restent significatifs bien plus loin --
+    justifie de rester sur `Levels=2` pour les 3 archetypes (la densite
+    percue a distance de rendu normale vient du niveau 1 et des feuilles,
+    pas d'un niveau 2 supplementaire) plutot que de chercher a reproduire
+    la structure a 3-4 niveaux des especes reelles.
+  - Presets communautaires du meme algorithme, `arbaro/trees/*.xml`
+    (clone depuis le commit du `Dockerfile` dans une session Claude Code
+    distante) : `tamarack.xml` (conifere reel, `1Branches=75`, contre 30
+    dans notre preset d'origine) ; `desert_bush.xml` (arbuste/buisson reel,
+    `1Branches=9` mais compense par un niveau 2 a 40 branches).
+  - **Essai rejete** : ajouter un niveau 2 allege (conifere, `Levels=3`,
+    `2Branches=12`, `CurveRes` reduit a 1-2) pour se rapprocher de la
+    structure reelle a plusieurs niveaux : 48139 faces pour un seul arbre
+    (le nombre de feuilles se multiplie par `1Branches x 2Branches`, pas
+    leur somme) -- confirme le probleme deja documente plus haut pour le
+    preset de demo standard arbaro, et coherent avec la Table 2
+    ci-dessus (niveau 2 inutile a distance de rendu normale).
+  - **Corrige** : `1Branches` releve a la valeur reelle exacte pour
+    `conifere.xml` (30->75, `tamarack.xml`) et `feuillu.xml` (28->50,
+    Quaking Aspen/Black Tupelo). `arbuste.xml` **inchange** (`1Branches=22`) :
+    copier litteralement le `9` de `desert_bush.xml` rendrait l'arbuste
+    MOINS dense sans le niveau 2 compensatoire qu'on n'ajoute pas (meme
+    raison que le point precedent) -- deviation deliberee de la source pour
+    cet archetype, arbuste deja juge visuellement adequat dans tous les
+    rendus de cette session. Valide par rendu comparatif avant/apres (meme
+    seed, meme distance, les 5 configurations cote a cote) ET par un rendu
+    complet des 76 arbres du site reel avec les nouveaux modeles substitues
+    (`ContentDigests` du `.sh3d` recalcule normalement par le pipeline reel,
+    contourne uniquement pour ce test ponctuel sur un fichier deja genere) :
+    13,7 s contre environ 11 s avant (qualite low, meme camera), ecart
+    negligeable, aucun artefact ni fouillis visuel constate. **Pas encore
+    revalidee sur le site reel** (pas de site configure dans cette session,
+    confidentialite) : a reprendre lors d'un prochain run complet.
 
 ## git
 
