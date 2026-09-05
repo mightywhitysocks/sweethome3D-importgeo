@@ -83,6 +83,23 @@ rendu oblique par bâtiment propriété, plus rapproché/plus incliné que
 `roofer` (`data/verif/roof_*.png`) -- outil de diagnostic ponctuel, à invoquer
 à la main après `bati.py`.
 
+`python src/orbit_render.py [larg haut [low|high] [images]]` assemble en MP4
+(`data/verif/orbit.mp4`, via `ffmpeg` en sous-processus) une séquence de
+rendus au même cadrage que `ensemble_large` (`preview._ensemble_camera`),
+yaw réparti sur 360° -- une animation faisant le tour de la parcelle. Option
+du job CI *Rendu* (`.github/workflows/render.yml`, entrée `animation`),
+jamais lancé par `run.sh`/`run.ps1` (coût : un rendu SunFlow complet par
+image). Un tour complet balaie nécessairement tous les azimuts, y compris
+ceux où le bug directionnel de la limitation #12/issue #65 peut dégrader une
+image : chaque image tente d'abord le même repli en yaw que `preview.py`
+(`DEGRADED_RETRY_MAX_OFFSET_DEG`), puis à défaut est remplacée par un GEL de
+la dernière image bonne (jamais de saut de montage ni d'image quasi vide
+publiée dans la boucle -- la durée et le nombre d'images restent constants,
+contrairement au simple abandon utilisé par `preview.py` pour une vue
+isolée). Échoue explicitement (`SystemExit`) si `ffmpeg` est absent, si le
+rendu lui-même est indisponible, ou si les 360° balayés ne produisent aucune
+image exploitable.
+
 - Cette classe **n'existe pas** dans `SweetHome3D.jar` (contrairement à ce que
   suggère la doc communautaire du même nom) : c'est un petit helper source,
   adapté de `com.eteks.sweethome3d.utilities.ConsolePhotoGenerator`

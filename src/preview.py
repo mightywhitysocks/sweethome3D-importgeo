@@ -370,6 +370,18 @@ VIEW_SPECS = [
 ]
 
 
+def _props_and_parcel():
+    """Batiments 'propriete' + parcelle propriete, depuis data/bati.json et
+    data/sh3d_payload.json -- charge partage par _viewpoints (vues d'ensemble
+    fixes ci-dessous) et src/orbit_render.py (meme cadrage d'ensemble, yaw
+    variable pour l'animation orbitale)."""
+    bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
+    props = [b for b in bat if b["classe"] == "propriete"]
+    payload = json.loads((cg.DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
+    prop = next((p for p in payload["parcels"] if p["is_property"]), None)
+    return props, prop
+
+
 def _viewpoints():
     """[(label, [(x, y, z, yaw, pitch[, fov]), ...]), ...] en repere plan SH3D
     (cm / rad) : pour chaque vue publiee, l'azimut voulu (VIEW_SPECS) suivi
@@ -398,11 +410,7 @@ def _viewpoints():
     effet mesure), seul le FOV/pitch/yaw absolu de la camera compte, d'ou le
     choix de ne rejouer QUE le yaw en repli (les deux premiers sont fixes par
     le cadrage voulu, pas par ce bug)."""
-    bat = json.loads((cg.DATA / "bati.json").read_text(encoding="utf-8"))["batiments"]
-    props = [b for b in bat if b["classe"] == "propriete"]
-    payload = json.loads((cg.DATA / "sh3d_payload.json").read_text(encoding="utf-8"))
-    prop = next((p for p in payload["parcels"] if p["is_property"]), None)
-
+    props, prop = _props_and_parcel()
     max_standoff = _terrain_max_standoff()
     if not props:
         return []
