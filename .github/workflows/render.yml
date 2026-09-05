@@ -52,6 +52,11 @@ on:
         required: false
         type: string
         default: "24"
+      orbit_seconds:
+        description: "Durée du tour complet en secondes -- pilote la vitesse (ignoré si animation=false)"
+        required: false
+        type: string
+        default: "10"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -201,7 +206,7 @@ jobs:
       # la verification des vues ci-dessus, un echec silencieux serait pire.
       - name: src/orbit_render.py (animation 360°)
         if: ${{ inputs.animation }}
-        run: python3 src/orbit_render.py "${{ inputs.width }}" "${{ inputs.height }}" "${{ inputs.quality }}" "${{ inputs.orbit_frames }}"
+        run: python3 src/orbit_render.py "${{ inputs.width }}" "${{ inputs.height }}" "${{ inputs.quality }}" "${{ inputs.orbit_frames }}" "${{ inputs.orbit_seconds }}"
 
       - name: Publier l'animation
         if: ${{ inputs.animation }}
