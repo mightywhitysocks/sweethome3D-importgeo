@@ -101,7 +101,11 @@ jobs:
               )
 
           text = raw if raw.endswith("\n") else raw + "\n"
-          text += '\n[tools]\nsweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"\n'
+          text += (
+              '\n[tools]\n'
+              'sweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"\n'
+              'arbaro_jar = "/opt/arbaro/arbaro_cmd.jar"\n'
+          )
           path = pathlib.Path("config/site.local.toml")
           path.write_text(text, encoding="utf-8")
 

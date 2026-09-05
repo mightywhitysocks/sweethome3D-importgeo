@@ -28,7 +28,11 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 5. Génère les `<pieceOfFurniture>` : terrain (`data/terrain.obj`), bâti voisinage
    (`data/bati_voisinage.obj`), bâti propriété si présent (`data/bati_propriete.obj`,
    cf. limitation #9), haies si présentes, et ~1 arbre par entrée de
-   `data/vegetation_arbres.json` (tous `model='tree/tree.obj'`, redimensionnés).
+   `data/vegetation_arbres.json`, redimensionné selon la hauteur mesurée :
+   `model='tree/<espèce>_<variante>.obj'` (silhouette conifère/feuillu/arbuste
+   générée par `arbaro_tree.py`, cf. issue #82) si l'outil externe `arbaro`
+   était disponible lors de la génération, sinon `model='tree/tree.obj'`
+   (gabarit unique historique) pour tous les arbres.
    Position / élévation depuis les `*_place.json` et la végétation JSON. Haies +
    arbres sont rassemblés dans un seul `<furnitureGroup>` (niveau *Végétation*) :
    `x`/`y`/`width`/`depth`/`height` du groupe sont calculés par SH3D

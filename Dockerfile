@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         gzip \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -102,5 +103,35 @@ RUN mkdir -p /opt/sweethome3d \
     && tar -xzf /tmp/sh3d.tgz -C /opt/sweethome3d --strip-components=1 \
     && rm /tmp/sh3d.tgz \
     && test -f /opt/sweethome3d/lib/SweetHome3D.jar
+
+# arbaro (variete des houppiers, issue #82) : pas de binaire officiel publie
+# pour Linux (contrairement a roofer) -- construit depuis les sources
+# (GPL-2, https://github.com/wdiestel/arbaro), appele en sous-processus CLI
+# depuis src/arbaro_tree.py (aucun code copie/lie, meme principe que
+# roofer). Integrite assuree par un COMMIT git fige (immutable, contrairement
+# a un tag) verifie apres clone, plutot qu'une somme de controle sur une
+# archive (aucune archive officielle equivalente n'existe pour ce depot).
+# Paquet gui/ exclu de la compilation : inutile en CLI (javax.swing), meme
+# choix que arbaro_cmd.jar officiel (cf. build.xml du depot). Etape non
+# bloquante pour le reste de l'image : `arbaro_tree.find_arbaro_jar` renvoie
+# None si ce jar est absent/invalide, `vegetation.py` se replie alors sur le
+# gabarit d'arbre unique historique (cf. CLAUDE.md).
+ARG ARBARO_COMMIT=e01a77657f8c831b1049f4b0ebb20f1fcb2f7c31
+RUN git clone --quiet https://github.com/wdiestel/arbaro.git /tmp/arbaro-src \
+    && cd /tmp/arbaro-src \
+    && test "$(git rev-parse HEAD)" = "${ARBARO_COMMIT}" \
+    && mkdir -p /tmp/arbaro-bin /opt/arbaro \
+    && javac -d /tmp/arbaro-bin $(find src/net/sourceforge/arbaro -name "*.java" \
+         ! -path "*/gui/*" ! -name "arbaro_gui.java") \
+    && printf 'Main-Class: net.sourceforge.arbaro.arbaro\n' > /tmp/arbaro-manifest.txt \
+    && jar cfm /opt/arbaro/arbaro_cmd.jar /tmp/arbaro-manifest.txt \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/arbaro.class \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/export \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/mesh \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/params \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/transformation \
+         -C /tmp/arbaro-bin net/sourceforge/arbaro/tree \
+    && rm -rf /tmp/arbaro-src /tmp/arbaro-bin /tmp/arbaro-manifest.txt \
+    && test -f /opt/arbaro/arbaro_cmd.jar
 
 WORKDIR /workspace

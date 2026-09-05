@@ -86,6 +86,7 @@ MARGE_M = float(SITE.get("emprise", {}).get("margin_m", 10.0))
 SITE_NAME = str(SITE.get("labels", {}).get("site_name", "Terrain"))
 SH3D_JAR_CFG = str(SITE.get("tools", {}).get("sweethome3d_jar", "")).strip()
 RENDER_LIBS_DIR = str(SITE.get("tools", {}).get("render_libs_dir", "")).strip()
+ARBARO_JAR_CFG = str(SITE.get("tools", {}).get("arbaro_jar", "")).strip()
 
 WMS_URL = "https://data.geopf.fr/wms-r/wms"
 WFS_URL = "https://data.geopf.fr/wfs/ows"

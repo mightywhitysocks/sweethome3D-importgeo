@@ -15,7 +15,8 @@ Sources (data/) :
   terrain.obj/.mtl + terrain_drape.jpg + terrain_place.json
   bati_voisinage.obj/.mtl + bati_place.json + bati_propriete_ref.json
   haies.obj/.mtl + haies_place.json          (si present)
-  vegetation_arbres.json  (+ assets/tree.obj/.mtl)
+  vegetation_arbres.json  (+ assets/tree.obj/.mtl gabarit historique, et/ou
+    modeles espece x variante generes par arbaro_tree.py, cf. issue #82)
   fond_cadastre_ortho.png + sh3d_payload.json
 
 Sortie : Plan 3D.sh3d (racine). Sauvegarde .sh3d.bak.
@@ -37,6 +38,7 @@ from pathlib import Path
 
 from PIL import Image
 
+import arbaro_tree
 import sitegeo as cg
 
 GEO = cg.GEO
@@ -143,6 +145,13 @@ def main() -> None:
     tree_mtl = (cg.ASSETS / "tree.mtl").read_bytes()
     head = tmpl[: tmpl.rindex("</home>")]
 
+    # especes generees (issue #82) : {} si arbaro indisponible au moment de ce
+    # run (meme cache disque que vegetation.py -- deja genere/reutilise dans
+    # data/arbaro_cache, cet appel est donc rapide, jamais une regeneration).
+    # Les arbres dont vegetation_arbres.json ne porte pas de "model" (gabarit
+    # unique historique) restent inchanges quel que soit ce resultat.
+    species_models = arbaro_tree.prepare_species_models(log=print)
+
     # fond de plan : remplacer la <backgroundImage> du niveau Cadastre
     head = re.sub(r"[ \t]*<backgroundImage\b[^>]*/>",
                   _background_image_tag(fond_png, payload["fond"]["width_m"]), head)
@@ -194,13 +203,26 @@ def main() -> None:
     tree_pieces = []
     veg = json.loads((GEO / "vegetation_arbres.json").read_text(encoding="utf-8"))
     tsz = len(tree_obj)
+    # modeles espece x variante REELLEMENT references (jamais tous : ne pas
+    # embarquer dans le zip un modele que species_models fournirait mais
+    # qu'aucun arbre de CE site n'utilise).
+    used_models = {rz.get("model") for rz in veg["resize"]} & species_models.keys()
     for pl, rz in zip(veg["place"]["commands"], veg["resize"]):
         p = pl["params"]
-        tree_pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
-                             p["x"], p["y"], p["elevation"],
-                             rz["width"], rz["depth"], rz["height"],
-                             catalog="OlaKristianHoff#tree", creator="Ola-Kristian Hoff",
-                             extra=" movable='false' license='Free Art / CC-BY'"))
+        model_key = rz.get("model")
+        if model_key in species_models:
+            tree_pieces.append(_piece("Vegetation", "Arbre", f"tree/{model_key}.obj",
+                                 len(species_models[model_key]["obj"]),
+                                 p["x"], p["y"], p["elevation"],
+                                 rz["width"], rz["depth"], rz["height"],
+                                 creator="Arbaro (Weber & Penn) + parametres du projet",
+                                 extra=" movable='false'"))
+        else:
+            tree_pieces.append(_piece("Vegetation", "Arbre", "tree/tree.obj", tsz,
+                                 p["x"], p["y"], p["elevation"],
+                                 rz["width"], rz["depth"], rz["height"],
+                                 catalog="OlaKristianHoff#tree", creator="Ola-Kristian Hoff",
+                                 extra=" movable='false' license='Free Art / CC-BY'"))
 
     pieces.append(_furniture_group("Vegetation", "Arbres", tree_pieces))
     pieces.append(_furniture_group("Vegetation", "Haies", hedge_pieces))
@@ -240,8 +262,16 @@ def main() -> None:
         if (GEO / "haies.obj").exists():
             z.write(GEO / "haies.obj", "h/haies.obj")
             z.write(GEO / "haies.mtl", "h/haies.mtl")
-        z.writestr("tree/tree.obj", tree_obj)
-        z.writestr("tree/tree.mtl", tree_mtl)
+        if any(rz.get("model") not in species_models for rz in veg["resize"]):
+            z.writestr("tree/tree.obj", tree_obj)
+            z.writestr("tree/tree.mtl", tree_mtl)
+        written_mtl = set()
+        for model_key in used_models:
+            m = species_models[model_key]
+            z.writestr(f"tree/{model_key}.obj", m["obj"])
+            if m["mtl_name"] not in written_mtl:          # partage entre variantes d'une meme espece
+                z.writestr(f"tree/{m['mtl_name']}", m["mtl"])
+                written_mtl.add(m["mtl_name"])
         ico = io.BytesIO()
         Image.new("RGB", (48, 48), (110, 130, 90)).save(ico, "PNG")
         z.writestr("ico", ico.getvalue())

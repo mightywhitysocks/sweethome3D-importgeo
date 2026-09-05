@@ -21,6 +21,16 @@ java/Conv.java
   l'installation locale de Sweet Home 3D (non redistribuee). Sweet Home 3D
   est un logiciel libre sous GPL (https://www.sweethome3d.com/).
 
+assets/arbaro_species/*.xml
+  Fichiers de parametres Weber & Penn ecrits par ce projet (donnees
+  numeriques originales, pas une copie des arbres de demonstration du
+  depot arbaro) pour generer des houppiers varies via l'outil externe
+  `arbaro` (https://github.com/wdiestel/arbaro, GPL-2). arbaro n'est pas
+  redistribue dans ce depot : appele en sous-processus CLI (binaire
+  externe, aucun code copie/lie), a installer separement -- voir
+  CLAUDE.md section "Dependance externe : roofer" (meme principe) et le
+  README. Cf. src/arbaro_tree.py.
+
 Release GitHub "sweethome3d-mirror-7.5" de ce depot
   Copie miroir, non modifiee, de l'archive Linux x64 officielle
   SweetHome3D-7.5-linux-x64.tgz (source : SourceForge). Redistribution

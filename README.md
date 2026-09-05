@@ -42,6 +42,16 @@ Dans tous les cas : un **JDK** (`java` et `javac` sur le `PATH`), p.ex.
 Oracle JDK 21 (assemblage/relecture du `.sh3d`, rendu photo headless), et
 **Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`).
 
+**Optionnel** : `arbaro_cmd.jar` (variété des arbres, silhouettes conifère/
+feuillu/arbuste au lieu d'un gabarit unique répété, cf. issue #82) — aucun
+binaire officiel Linux publié, à construire depuis les sources (`git clone
+https://github.com/wdiestel/arbaro`, licence GPL-2, puis `javac`/`jar`, cf.
+`Dockerfile` pour la séquence exacte), chemin renseigné dans
+`[tools].arbaro_jar` (`config/site.local.toml`). Absent : `vegetation.py` se
+replie sur le gabarit d'arbre unique historique, sans planter. Déjà construit
+automatiquement dans l'image CI (génération à la demande via GitHub Actions,
+ci-dessous).
+
 ### Génération à la demande, sans machine Linux/macOS locale (GitHub Actions)
 
 Ce dépôt est un **template GitHub**. Pour générer sans rien installer
@@ -143,7 +153,8 @@ utiliser `py` (Python système) ni `conda run`.
 │   └── site.local.toml       VOTRE parcelle (git-ignored, créé au 1er lancement)
 ├── src/                 le pipeline Python
 ├── java/                Conv.java (assemble le .sh3d) + RenderPhoto.java (rendu photo)
-├── assets/              gabarits stables (home_template.xml, tree.obj/.mtl)
+├── assets/              gabarits stables (home_template.xml, tree.obj/.mtl,
+│                        arbaro_species/*.xml pour la variété des arbres)
 ├── docs/PIPELINE.md     détail de la génération du .sh3d + limitations
 ├── data/                toutes les sorties (git-ignored)
 └── README.md  CLAUDE.md  LICENSE  NOTICE
