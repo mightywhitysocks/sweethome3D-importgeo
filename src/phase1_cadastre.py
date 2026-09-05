@@ -31,9 +31,12 @@ TO_WGS = Transformer.from_crs("EPSG:2154", "EPSG:4326", always_xy=True)
 
 def main() -> None:
     gdf = cg.parcels_l93()                      # EPSG:2154, colonnes dont 'contenance'
-    for _, p in gdf.iterrows():
+    for i, (_, p) in enumerate(gdf.iterrows(), 1):
         a, c = p.geometry.area, int(p["contenance"])
-        print(f"{cg.SECTION} {p['numero']}: aire={a:8.1f}  contenance={c:6d}  "
+        # Jamais cg.SECTION/p['numero'] ici (section cadastrale + numero de
+        # parcelle) -- identifierait le site en clair dans les logs (cf.
+        # CLAUDE.md section Confidentialite) ; un index suffit au diagnostic.
+        print(f"parcelle {i}/{len(gdf)}: aire={a:8.1f}  contenance={c:6d}  "
               f"ecart={abs(a - c) / c * 100:.2f}%  "
               f"{'OK' if abs(a - c) / c < 0.01 else '!! ECART'}")
 
