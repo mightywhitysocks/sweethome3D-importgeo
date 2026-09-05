@@ -14,6 +14,17 @@ import com.eteks.sweethome3d.model.*;
  *
  * Doit tourner dans le package com.eteks.sweethome3d.io (setContentContext est
  * package-private) -> compiler en .class sur le classpath, PAS en mode source.
+ *
+ * `preferXmlEntry=true` (5e argument du HomeFileRecorder ci-dessous) : en plus
+ * de l'entree `Home` serialisee Java (seule lue par le desktop), fait ecrire
+ * une entree `Home.xml` (via HomeXMLExporter, chemins de contenu deja corrects
+ * -- renumerotes par ContentDigests) dans le meme .sh3d. Necessaire pour
+ * l'appli mobile / Sweet Home 3D Online : leur moteur JS (SweetHome3DJS,
+ * transpile JSweet) ne sait PAS deserialiser l'entree Java `Home`, seulement
+ * parser du XML -- confirme par test reel (`tools/mobile_compat_check/`,
+ * chargement Chromium headless du meme moteur JS officiel) : sans cette
+ * option, echec explicite "No Home.xml entry" ; avec elle, chargement propre.
+ * Sans impact desktop (toujours l'entree `Home` qui est lue en priorite).
  */
 public class Conv {
   public static void main(String[] a) throws Exception {
@@ -43,7 +54,7 @@ public class Conv {
         + byLevel.values().stream().mapToInt(Integer::intValue).sum() + " meubles "
         + byLevel + ", " + home.getRooms().size() + " pieces-plan");
 
-    new HomeFileRecorder(9, false).writeHome(home, out);
+    new HomeFileRecorder(9, false, null, false, true, false).writeHome(home, out);
     System.out.println("ecrit : " + out + "  (" + new File(out).length() + " o)");
 
     // controle : relire le .sh3d ecrit et verifier la repartition par niveau

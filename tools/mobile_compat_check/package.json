@@ -1,0 +1,15 @@
+{
+  "name": "mobile_compat_check",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Verifie qu'un .sh3d se charge sans erreur dans le vrai moteur JS eTeks (SweetHome3DJS) partage par Sweet Home 3D Online et l'appli mobile.",
+  "type": "module",
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@node-projects/sweethome3d-webcomponent": "^0.0.5",
+    "playwright": "1.56.1"
+  }
+}
