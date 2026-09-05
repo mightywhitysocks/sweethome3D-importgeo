@@ -11,6 +11,16 @@
   src/arbaro_tree.py) : un preset de demonstration standard (Levels=3,
   75x50 branches) produit environ 300000 faces pour un seul arbre, mesure
   lors de cette session.
+
+  LeafScale/LeafScaleX relevees de 0.10/0.2 a 0.18/0.35 (feuillage
+  "aiguilles" quasi invisible au rendu sinon, cf. CLAUDE.md, section
+  arbaro) : aire des quads du groupe "leaves" mesuree ~20x plus petite que
+  feuillu/arbuste avec les valeurs d'origine, sous le seuil
+  d'echantillonnage SunFlow (qualite low) a distance de camera normale,
+  ne laissant qu'un squelette tronc/branches nu. Confirme par rendu
+  comparatif cible (avant/apres, meme seed) dans une session Claude Code
+  distante. Nombre de faces quasi inchange (Leaves=70 inchange, seule la
+  taille de chaque aiguille change).
 -->
 <arbaro>
   <species name="conifere">
@@ -24,8 +34,8 @@
     <param name="Flare" value="0.3"/>
     <param name="Leaves" value="70"/>
     <param name="LeafShape" value="0"/>
-    <param name="LeafScale" value="0.10"/>
-    <param name="LeafScaleX" value="0.2"/>
+    <param name="LeafScale" value="0.18"/>
+    <param name="LeafScaleX" value="0.35"/>
     <param name="LeafStemLen" value="0.2"/>
     <param name="LeafBend" value="0.3"/>
     <param name="AttractionUp" value="0.6"/>

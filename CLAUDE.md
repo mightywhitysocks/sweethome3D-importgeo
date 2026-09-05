@@ -437,12 +437,34 @@ script isolément (cf. Environnement) — pas la génération complète.
   + `.mtl` duplique dans ce meme dossier, plus de partage inter-variantes)
   au lieu d'un dossier `tree/` commun -- verifie par reproduction minimale
   (7 modeles, 7 objets `Content` distincts apres le fix, contre 1 seul
-  avant). **Pas encore revalidee de bout en bout sur le site reel** (pas de
-  site configure dans cette session, confidentialite ; le zip intermediaire
-  du run #16 n'a pas ete conserve, seul le `.sh3d` final buggue etait
-  disponible) : a reprendre lors d'un prochain run complet sur le site
-  (silhouettes effectivement variees a l'oeil, classification essence
-  plausible).
+  avant), **et confirme sur le run CI reel suivant** (`generation.yml` #17 +
+  `render.yml` #18, apres merge du fix) : les 76 arbres du site reel
+  portent bien chacun leur propre modele espece x variante (verifie par
+  lecture directe du `Home` du `.sh3d` produit).
+  **Feuillage "conifere" quasi invisible au rendu, corrige** : en
+  inspectant les images reelles de `render.yml` #18, des arbres apparaissent
+  reduits a un squelette tronc/branches nu, sans feuillage -- confirme (pas
+  suppose) etre lie a l'archetype "conifere" par rendu comparatif cible
+  (meme `.sh3d`, meme camera/distance/qualite, especes differentes cote a
+  cote) : mesure de l'aire des quads du groupe `leaves` par fichier OBJ,
+  aiguilles du conifere ~20x plus petites en surface que feuillu/arbuste
+  (coherent avec `LeafScale`/`LeafScaleX` 0.10/0.2 contre 0.20/0.8 et
+  0.22/0.8) -- sous le seuil d'echantillonnage SunFlow (qualite `low`,
+  defaut de `render.yml`) a distance de camera normale. Effet d'echelle de
+  l'arbre exclu comme explication unique (teste : un grand conifere,
+  10,8 m, montre un feuillage tout aussi clairseme qu'un petit, 5,1 m, a
+  taille apparente egalisee) ; hypotheses memoire JVM et geometrie
+  corrompue egalement ecartees (cf. `ModelManager.loadModel` source reelle :
+  aucun `Error`/`OutOfMemoryError` intercepte, seulement des exceptions de
+  format ; aucune face degeneree mesuree dans les 7 fichiers OBJ). Corrige
+  dans `assets/arbaro_species/conifere.xml` (`LeafScale` 0.10->0.18,
+  `LeafScaleX` 0.2->0.35, nombre de faces quasi inchange) -- valide par
+  rendu comparatif avant/apres (meme seed, meme distance) dans une session
+  Claude Code distante : feuillage nettement plus couvrant, silhouette
+  "aiguilles" toujours plus fine que feuillu/arbuste. **Pas encore
+  revalidee de bout en bout sur le site reel** (pas de site configure dans
+  cette session, confidentialite) : a reprendre lors d'un prochain run
+  complet sur le site (feuillage conifere effectivement visible a l'oeil).
 
 ## git
 
