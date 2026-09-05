@@ -83,13 +83,36 @@ rendu oblique par bâtiment propriété, plus rapproché/plus incliné que
 `roofer` (`data/verif/roof_*.png`) -- outil de diagnostic ponctuel, à invoquer
 à la main après `bati.py`.
 
-`python src/orbit_render.py [larg haut [low|high] [images]]` assemble en MP4
-(`data/verif/orbit.mp4`, via `ffmpeg` en sous-processus) une séquence de
-rendus au même cadrage que `ensemble_large` (`preview._ensemble_camera`),
-yaw réparti sur 360° -- une animation faisant le tour de la parcelle. Option
-du job CI *Rendu* (`.github/workflows/render.yml`, entrée `animation`),
-jamais lancé par `run.sh`/`run.ps1` (coût : un rendu SunFlow complet par
-image). Un tour complet balaie nécessairement tous les azimuts, y compris
+`python src/orbit_render.py [larg haut [low|high] [images] [secondes]]`
+assemble en MP4 (`data/verif/orbit.mp4`, via `ffmpeg` en sous-processus) une
+séquence de rendus au cadrage `preview._ensemble_camera`, yaw réparti sur
+360° -- une animation faisant le tour de la parcelle. Option du job CI
+*Rendu* (`.github/workflows/render.yml`, entrées `animation`/`orbit_frames`/
+`orbit_seconds`), jamais lancé par `run.sh`/`run.ps1` (coût : un rendu
+SunFlow complet par image).
+
+Cadrage plus serré que la vue fixe `ensemble_large` : `ORBIT_MARGIN`/
+`ORBIT_PITCH` (proches de `ensemble_rapprochee`) plutôt que les défauts de
+`_ensemble_camera` -- moins d'air autour de la parcelle, moins plongeant.
+Sans risque supplémentaire vis-à-vis du bug directionnel (issue #65) : la
+distance caméra-cible (pilotée par la marge) n'a aucun effet mesuré sur ce
+bug (testé ×10, motif de visibilité identique) ; FOV/pitch en ont un, mais
+le filet de sécurité (repli + gel, ci-dessous) en est indépendant.
+
+Vitesse de rotation découplée du nombre d'images (`images`, seul poste de
+coût) via une durée de tour explicite (`secondes`, 10 s par défaut -- un
+tour à 180°/s comme la première version de ce script était jugé bien trop
+rapide) : l'entrée ffmpeg est consommée à `images/secondes` im/s puis
+ré-échantillonnée (filtre `fps=`) à 30 im/s de sortie pour un MP4 lisible
+normalement -- par duplication d'image, **pas** d'interpolation de
+mouvement : la rotation reste "par à-coups" (des positions distinctes
+tenues chacune plusieurs images de sortie), juste plus lente. Un mouvement
+réellement fluide demanderait soit beaucoup plus d'images (coût linéaire,
+un rendu SunFlow complet chacune), soit `ffmpeg minterpolate` (pas de rendu
+supplémentaire, mais risque de "warping" non testé entre deux azimuts très
+différents) -- ni l'un ni l'autre n'est activé pour l'instant.
+
+Un tour complet balaie nécessairement tous les azimuts, y compris
 ceux où le bug directionnel de la limitation #12/issue #65 peut dégrader une
 image : chaque image tente d'abord le même repli en yaw que `preview.py`
 (`DEGRADED_RETRY_MAX_OFFSET_DEG`), puis à défaut est remplacée par un GEL de
