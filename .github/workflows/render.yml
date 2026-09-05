@@ -3,9 +3,10 @@
 # roofer, juste le rendu sur ce qui a deja ete genere. A la demande
 # uniquement.
 #
-# Option `animation` : en plus des 3 vues fixes, une animation MP4 (tour a
-# 360 deg autour de la parcelle, src/orbit_render.py) -- cf. ce script pour
-# la gestion du bug directionnel SunFlow/YafaRay (issue #65).
+# Option `animation` : en plus des 3 vues fixes, un panoramique circulaire MP4
+# (camera fixe sur la parcelle propriete, 360 deg de yaw, src/orbit_render.py)
+# -- cf. ce script pour la gestion du bug directionnel SunFlow/YafaRay
+# (issue #65).
 #
 # Prerequis : au moins un run reussi de generation.yml ayant publie l'artefact
 # "Plan 3D" (Plan 3D.sh3d + data/bati.json + data/sh3d_payload.json +
@@ -43,7 +44,7 @@ on:
         type: string
         default: "640"
       animation:
-        description: "Generer aussi une animation MP4 (tour a 360 deg autour de la parcelle)"
+        description: "Generer aussi un panoramique circulaire MP4 (camera fixe sur la parcelle, 360 deg)"
         required: false
         type: boolean
         default: false
@@ -196,15 +197,16 @@ jobs:
             exit 1
           fi
 
-      # Option (cf. entree `animation`) : animation MP4, tour a 360 deg autour
-      # de la parcelle (meme cadrage que la vue d'ensemble, cf. src/orbit_
-      # render.py) -- gere elle-meme les images degradees (bug directionnel
-      # SunFlow/YafaRay documente en issue #65) par repli en yaw puis gel de
-      # la derniere image bonne, jamais de saut de montage ni d'image quasi
-      # vide publiee. Echec dur (pas de continue-on-error) si aucune image
-      # n'est exploitable ou si ffmpeg/le renderer manque -- meme logique que
-      # la verification des vues ci-dessus, un echec silencieux serait pire.
-      - name: src/orbit_render.py (animation 360°)
+      # Option (cf. entree `animation`) : panoramique circulaire MP4 -- camera
+      # fixe sur la parcelle propriete (meme point que la camera de visite 3D
+      # du .sh3d, cf. src/orbit_render.py), 360 deg de yaw. Gere elle-meme les
+      # images degradees (bug directionnel SunFlow/YafaRay documente en
+      # issue #65) par repli en yaw puis gel de la derniere image bonne,
+      # jamais de saut de montage ni d'image quasi vide publiee. Echec dur
+      # (pas de continue-on-error) si aucune image n'est exploitable ou si
+      # ffmpeg/le renderer manque -- meme logique que la verification des
+      # vues ci-dessus, un echec silencieux serait pire.
+      - name: src/orbit_render.py (panoramique circulaire)
         if: ${{ inputs.animation }}
         run: python3 src/orbit_render.py "${{ inputs.width }}" "${{ inputs.height }}" "${{ inputs.quality }}" "${{ inputs.orbit_frames }}" "${{ inputs.orbit_seconds }}"
 

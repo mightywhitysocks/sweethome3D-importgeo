@@ -42,7 +42,7 @@ import sitegeo as cg
 GEO = cg.GEO
 SH3D = cg.HOME_SH3D
 JCONV = cg.DATA / "_jconv"                   # cache : jar copie + Conv.class
-WALK_EYE_CM = 170.0                          # hauteur d'oeil de la camera de visite 3D
+WALK_EYE_CM = cg.WALK_EYE_CM                  # hauteur d'oeil de la camera de visite 3D
 
 LEVELS = {                       # noms -> ids (repris du gabarit, stables)
     "Cadastre": "level-444fad18-a6ed-490b-9cda-2016da873fcc",

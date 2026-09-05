@@ -1,26 +1,23 @@
 """
-orbit_render.py : animation video (tour a 360 deg autour de la parcelle),
-option du job rendu (`.github/workflows/render.yml`, entree `animation`).
-Reprend le meme moteur SunFlow que preview.py (post-build), jamais lance par
-run.sh/run.ps1 (cout : un rendu SunFlow complet par image de la sequence,
-significatif meme en qualite basse).
+orbit_render.py : panoramique circulaire (video, 360 deg depuis un point fixe
+sur la parcelle), option du job rendu (`.github/workflows/render.yml`, entree
+`animation`). Reprend le meme moteur SunFlow que preview.py (post-build),
+jamais lance par run.sh/run.ps1 (cout : un rendu SunFlow complet par image de
+la sequence, significatif meme en qualite basse).
 
-Cadrage : reprend preview._ensemble_camera (meme FOV que les 3 vues fixes,
-cf. preview.ENSEMBLE_FOV, validees fiables sur le site de test reel -- cf.
-docs/PIPELINE.md limitation #12 et issue #65) mais avec une marge/un pitch
-plus serres (ORBIT_MARGIN/ORBIT_PITCH ci-dessous, proches de la vue fixe
-`ensemble_rapprochee`) que la vue `ensemble_large` par defaut de
-`_ensemble_camera` -- moins d'air autour de la parcelle, moins plongeant.
-Sans risque particulier vis-a-vis du bug directionnel : la distance
-camera-cible (pilotee par la marge) n'a AUCUN effet mesure sur ce bug
-(issue #65, teste x10, motif de visibilite identique) ; seuls FOV/pitch
-deplacent les zones mortes, mais le filet de securite ci-dessous (repli +
-gel) est deja concu pour etre agnostique de leur position. Seul le yaw
-tourne autour de la parcelle. Un tour complet balaie necessairement tous
-les azimuts, y compris ceux ou le bug directionnel documente en issue #65
-peut degrader un rendu (disparition totale de l'objet vise, boite noire
-SunFlow/YafaRay -- ni la distance camera-cible ni la taille de l'objet
-n'ont d'effet, seul l'azimut/FOV/pitch absolu de la camera compte).
+Camera FIXE (cg.walk_camera_xyz() -- meme point que la camera de visite 3D du
+.sh3d : centroide de la parcelle propriete, hauteur d'oeil au-dessus du sol
+le plus haut sous ses batiments), pitch quasi horizontal (PANO_PITCH, meme
+convention que l'observerCamera du gabarit) et FOV standard Sweet Home 3D
+(PANO_FOV) -- SEUL le yaw tourne sur 360 deg (camera qui pivote sur elle-meme,
+PAS un travelling circulaire autour de la parcelle : la position ne bouge
+jamais). Un tour complet balaie necessairement tous les azimuts, y compris
+ceux ou le bug directionnel documente en issue #65 peut degrader un rendu
+(disparition totale de l'objet vise, boite noire SunFlow/YafaRay -- ni la
+distance camera-cible ni la taille de l'objet n'ont d'effet, seul l'azimut/
+FOV/pitch absolu de la camera compte) ; PANO_PITCH/PANO_FOV sont dans la
+plage deja testee (issue #65 point 15), le filet de securite ci-dessous
+(repli + gel) reste actif quelle que soit la position exacte des zones mortes.
 
 Vitesse de rotation : decouplee du nombre d'images rendues (`n_frames`,
 seul poste de cout -- un rendu SunFlow complet chacune) via une duree de
@@ -73,34 +70,24 @@ DEFAULT_FRAMES = 24    # 360/24 = 15 deg de pas, meme granularite que preview.AN
 DEFAULT_SECONDS = 10.0  # duree d'un tour complet -- pilote la VITESSE, independamment du cout de rendu
 PLAYBACK_FPS = 30       # fps de sortie (compatibilite lecteur/plateforme), ne pilote PAS la vitesse
 
-# Cadrage plus serre que ensemble_large (defauts de preview._ensemble_camera) :
-# proche de la vue fixe ensemble_rapprochee (moins d'air autour de la
-# parcelle, moins plongeant) -- cf. docstring de module pour l'absence de
-# risque vis-a-vis du bug directionnel (issue #65).
-ORBIT_MARGIN = 1.15
-ORBIT_PITCH = 0.5
+# Pitch/FOV de la camera fixe : meme convention que l'observerCamera du
+# gabarit (assets/home_template.xml, cf. preview.py pour la meme lecture de
+# signe) -- quasi horizontale, pas la vue plongeante des vues d'ensemble.
+PANO_PITCH = 0.135      # rad (~7.7 deg), "quasi horizontale"
+PANO_FOV = 1.0995575    # rad (~63 deg), FOV observateur par defaut Sweet Home 3D
 
 
-def _orbit_candidates(n_frames):
-    """[[camera, ...], ...] : une liste par image de la sequence (yaw
-    regulierement reparti sur 360 deg, marge/pitch ORBIT_MARGIN/ORBIT_PITCH,
-    meme FOV par defaut que preview._ensemble_camera), chaque entree suivie de
-    ses candidats de repli en yaw (cf. preview.DEGRADED_RETRY_MAX_OFFSET_DEG)
-    -- meme structure que preview._viewpoints, une camera entierement
-    recalculee par candidat plutot qu'un yaw retouche seul (la position
-    depend elle aussi du yaw, cf. preview._ensemble_camera)."""
-    props, prop = preview._props_and_parcel()
-    if not props:
-        return []
-    max_standoff = preview._terrain_max_standoff()
+def _pano_candidates(n_frames):
+    """[[camera, ...], ...] : une liste par image de la sequence -- position
+    FIXE (cg.walk_camera_xyz(), calculee une seule fois), seul le yaw tourne
+    (regulierement reparti sur 360 deg), chaque entree suivie de ses candidats
+    de repli en yaw (cf. preview.DEGRADED_RETRY_MAX_OFFSET_DEG)."""
+    wx, wy, wz = cg.walk_camera_xyz()
     retry_offsets = preview._offset_sweep(preview.ANGLE_STEP_DEG,
                                            preview.DEGRADED_RETRY_MAX_OFFSET_DEG)
     step = 2.0 * math.pi / n_frames
     return [
-        [preview._ensemble_camera(props, prop, max_standoff,
-                                   margin=ORBIT_MARGIN, pitch=ORBIT_PITCH,
-                                   yaw=i * step + off)
-         for off in retry_offsets]
+        [(wx, wy, wz, i * step + off, PANO_PITCH, PANO_FOV) for off in retry_offsets]
         for i in range(n_frames)
     ]
 
@@ -130,9 +117,7 @@ def main() -> None:
     if shutil.which("ffmpeg") is None:
         raise SystemExit("ffmpeg introuvable sur le PATH -> animation ignoree.")
 
-    frames = _orbit_candidates(n_frames)
-    if not frames:
-        raise SystemExit("aucun batiment 'propriete' dans data/bati.json ; lancer bati.py.")
+    frames = _pano_candidates(n_frames)  # leve SystemExit si la parcelle propriete est introuvable
 
     out_mp4 = cg.VERIF / "orbit.mp4"
     with tempfile.TemporaryDirectory(prefix="orbit_") as tmp_str:
