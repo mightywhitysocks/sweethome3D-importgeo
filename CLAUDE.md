@@ -512,6 +512,79 @@ script isolément (cf. Environnement) — pas la génération complète.
     negligeable, aucun artefact ni fouillis visuel constate. **Pas encore
     revalidee sur le site reel** (pas de site configure dans cette session,
     confidentialite) : a reprendre lors d'un prochain run complet.
+  - **Revalidee sur le site reel (`generation.yml` #19, post-merge du fix
+    ci-dessus) : le conifere reste juge insuffisamment dense par
+    l'utilisateur -- investigation approfondie, conclusion inattendue.**
+    Methode corrigee par rapport a une comparaison anterieure jugee a tort
+    "sans effet" (portait tres probablement sur un arbuste, jamais
+    retouche, pas un conifere -- 54 % des 76 arbres du site sont des
+    arbustes) : camera `ensemble_rapprochee` recalculee EXACTEMENT depuis
+    les donnees reelles du run (`preview._ensemble_camera` sur
+    `data/bati.json`/`sh3d_payload.json`/`terrain_grid.npz`), positions
+    des 76 arbres extraites du `.sh3d` reel par un outil Java
+    (`HomeFileRecorder`), projection pinhole pour identifier une grappe de
+    VRAIS coniferes dans le rendu CI reel. Validation croisee : un rendu
+    local avec cette camera reconstruite reproduit un compte de pixels de
+    feuillage identique au pixel pres au rendu CI reel (652 px de
+    feuillage sombre dans les deux cas) -- la reconstruction de camera est
+    exacte, pas approximative.
+    - Fix `1Branches` 30->75 ci-dessus : effet reel mesure sur cette
+      grappe (+8,8 % de pixels de feuillage sombre) -- pas nul comme la
+      comparaison anterieure le laissait croire a tort, mais modeste.
+    - Qualite SunFlow `high` au lieu de `low` (meme camera/scene) : +14 %
+      de pixels de feuillage seulement, silhouette toujours clairsemee --
+      ecarte le sous-echantillonnage `low` comme cause principale.
+    - `Levels=3` reequilibre teste (`1Branches=75`, `2Branches=8`,
+      `Leaves=10`/brindille au lieu de 70/branche -- corrige un defaut
+      methodologique de l'essai rejete ci-dessus, qui n'avait pas reduit
+      `Leaves` en ajoutant un niveau, d'ou l'explosion a 48139 faces) :
+      8581 faces (moins cher que l'actuel) mais rendu quasi identique
+      (649 px vs 652) -- les brindilles ne comblent pas les trous percus.
+    - `1Branches=150` teste (x2 de la valeur sourcee `tamarack.xml`,
+      `Levels=2` inchange, 25423 faces contre 12739, faces de feuillage
+      x3,4 car chaque branche ajoutee porte aussi son quota `Leaves=70`) :
+      **655 px de feuillage contre 652 avant -- effet quasi nul**, malgre
+      un quasi-doublement de la geometrie. Patch verifie present dans le
+      `.sh3d` de test (25423 faces confirmees dans l'entree zip) : pas un
+      bug de patch, un vrai plafond.
+    - **Constat** : trois leviers structurellement tres differents
+      (qualite de rendu, structure de branches a `Levels=2` inchange,
+      niveau de ramification supplementaire) produisent tous un effet
+      quasi nul sur le rendu CI reel a qualite `low`/distance normale. Le
+      plafond perçu n'est donc PAS un probleme de configuration arbaro
+      (parametres deja au niveau ou au-dessus de toutes les references
+      documentaires trouvees), mais tres probablement un plafond
+      d'echantillonnage SunFlow a cette qualite/distance : une fois qu'un
+      minimum de geometrie remplit l'enveloppe du houppier a l'ecran,
+      ajouter des branches/feuilles derriere des pixels deja verts ne
+      change rien a un comptage par pixel (SunFlow n'echantillonne pas
+      assez de rayons par pixel a qualite `low` pour distinguer une
+      superposition dense d'une clairsemee).
+    - **Comparaison au houppier reel (ortho IGN, site reel)**, demandee
+      explicitement par l'utilisateur pour trancher si le rendu clairseme
+      correspond a une realite botanique du site ou a un manque du
+      modele : sur 9 conifères reels confiants (hauteur MNH >= 8,5 m,
+      rayon de houppier 4-6 m), coefficient de variation de la luminosite
+      dans le disque du houppier (mesure de solidite/uniformite, insensible
+      a l'exposition -- une mesure par seuil de couleur absolu s'est
+      averee non robuste aux variations d'exposition de la mosaique ortho)
+      median = 0,21 (plage 0,18-0,28), soit une "solidite" 1/(1+CV) ~ 0,83
+      -- **les vrais conifères du site apparaissent bien comme des
+      houppiers pleins/opaques vus du dessus, pas clairsemes**. Confirme
+      que le rendu clairseme du modele arbaro est un ecart reel par
+      rapport a la realite du site, pas une caracteristique botanique
+      attendue -- mais n'aide pas a le corriger, puisque la cause
+      identifiee (plafond d'echantillonnage SunFlow, pas la configuration
+      arbaro) n'est pas addressable cote parametres de l'espece.
+    - **A date, aucun levier cote configuration arbaro (`1Branches`,
+      `Levels`, qualite de rendu jusqu'a `high`) ne resout ce plafond.**
+      Pistes restantes non testees a ce stade : augmenter `LeafScale`/
+      `LeafScaleX` tres au-dela des valeurs botaniques reelles (feuilles
+      artificiellement plus grandes pour depasser le seuil
+      d'echantillonnage, cout : ecart au realisme deja documente comme
+      hors du cadre "source" de cette section) ; ou une qualite de rendu
+      encore superieure a `high` si `PhotoRenderer`/SunFlow l'expose.
+      Aucune des deux n'a ete decidee a ce stade.
 
 ## git
 
