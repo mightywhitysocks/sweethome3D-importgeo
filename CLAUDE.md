@@ -461,10 +461,10 @@ script isolément (cf. Environnement) — pas la génération complète.
   `LeafScaleX` 0.2->0.35, nombre de faces quasi inchange) -- valide par
   rendu comparatif avant/apres (meme seed, meme distance) dans une session
   Claude Code distante : feuillage nettement plus couvrant, silhouette
-  "aiguilles" toujours plus fine que feuillu/arbuste. **Pas encore
-  revalidee de bout en bout sur le site reel** (pas de site configure dans
-  cette session, confidentialite) : a reprendre lors d'un prochain run
-  complet sur le site (feuillage conifere effectivement visible a l'oeil).
+  "aiguilles" toujours plus fine que feuillu/arbuste. **Revalidee de bout
+  en bout sur le site reel** (`render.yml` #19, apres merge du fix) :
+  meme arbre comparee avant/apres sur les images reelles -- squelette nu
+  au run #18, feuillage clairseme mais visible au run #19.
 
 ## git
 
