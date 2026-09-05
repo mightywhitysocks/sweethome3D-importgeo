@@ -156,6 +156,8 @@ jobs:
           mv _plan3d/data/bati.json data/bati.json
           mv _plan3d/data/sh3d_payload.json data/sh3d_payload.json
           mv _plan3d/data/terrain_grid.npz data/terrain_grid.npz
+          mv _plan3d/data/bati_propriete_ref.json data/bati_propriete_ref.json
+          mv _plan3d/data/terrain_stats.json data/terrain_stats.json
           rm -rf _plan3d
 
       # Valeurs fictives : le rendu ne relit ni le cadastre ni aucune donnee
