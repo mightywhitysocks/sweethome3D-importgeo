@@ -627,6 +627,19 @@ script isolément (cf. Environnement) — pas la génération complète.
     `render.yml` complet (le test ci-dessus patche un `.sh3d` deja genere,
     meme methode que les tests precedents de cette section) : a confirmer
     au prochain run complet du pipeline.
+  - **Revalidee sur un run complet reel (`generation.yml` #21 ->
+    `render.yml` #22, commit du merge ci-dessus) : gain confirme et MEILLEUR
+    que prevu.** 1112 px de feuillage sur la grappe de reference (contre 652
+    avant, et 724 sur le patch-test partiel qui ne modifiait qu'un seul des
+    3 modeles conifere presents dans cette grappe) -- un run complet
+    regenere les 3 variantes (`conifere_0/1/2`) avec la nouvelle valeur, pas
+    une seule, d'ou un gain superieur a l'extrapolation du patch-test.
+    Inspection visuelle directe (grappe ET scene complete) : tous les
+    coniferes du site affichent desormais une silhouette pleine et
+    reconnaissable (forme de sapin classique), sans artefact (pas de bloc ni
+    de losange), coherents entre eux et avec le reste de la vegetation
+    (feuillu/arbuste inchanges). Fix definitivement confirme de bout en
+    bout, plus seulement sur un `.sh3d` patche.
 
 ## git
 
