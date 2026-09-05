@@ -41,7 +41,16 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 6. Génère les `<room>` : les parcelles (niveau Cadastre) et les emprises au sol
    des bâtiments de la propriété (niveau *Bâti propriété*, plancher invisible :
    la géométrie 3D vient de `bati_propriete.obj`, cette pièce ne sert qu'aux
-   étiquettes/repères 2D).
+   étiquettes/repères 2D). Génère aussi, pour chacun de ces bâtiments, une
+   seconde pièce VISIBLE ("Emprise <id>") sur un niveau dédié : un `<room>`
+   SH3D n'a pas d'élévation propre (seulement celle de son niveau), et un
+   niveau unique partagé clipperait certains bâtiments dans le maillage
+   terrain sur un site en pente (écart constaté : jusqu'à ~2,5 m de sol entre
+   deux bâtiments propriété du même site). Élévation du niveau = point de
+   terrain le plus haut sous l'emprise du bâtiment (`bati_propriete_ref.json
+   [footprints[].sol_max_cm]`, calculé par `bati.py`) + `FOOTPRINT_CLEARANCE_CM`
+   (3 cm) -- jamais clippée, quitte à légèrement flotter au-dessus du terrain
+   sur les coins bas d'une emprise en pente.
 7. Écrit le ZIP : `Home.xml` + `bg` + dossiers modèles (`t/ b/ p/ h/ tree/`, chaque
    OBJ avec son `.mtl` et sa texture) + une icône. Écrit aussi
    `data/home_source.xml` pour debug / diff.
@@ -64,8 +73,9 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 3. `build_home.py` sauvegarde l'ancien `.sh3d` en `.sh3d.bak` et supprime
    `_home_raw.zip`.
 
-**Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques :
-Cadastre / Terrain / Bâti voisinage / Bâti propriété / Végétation.
+**Résultat** : `Plan 3D.sh3d` (~2,3 Mo), double-cliquable, 5 calques fixes
+(Cadastre / Terrain / Bâti voisinage / Bâti propriété / Végétation) + un
+calque *Emprise <id>* par bâtiment propriété (cf. point 6 ci-dessus).
 
 ## Étape 3 (optionnelle) : rendu photo headless (`verif.py --render`, `preview.py`)
 
