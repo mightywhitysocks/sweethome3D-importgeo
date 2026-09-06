@@ -29,6 +29,52 @@ sans collision, contenu du meuble catalogue correctement copié/résolu.
 session, confidentialité) : à reprendre au prochain run complet avec un vrai
 bâtiment édité dans l'appli desktop.
 
+### Repère absolu -> repère local par bâtiment (défaut constaté à l'usage, corrigé)
+
+Défaut remonté par l'utilisateur en ouvrant un `interieur/<id>.sh3d` généré
+avec le repère absolu d'origine : la pièce-repère de l'emprise n'apparaissait
+pas dans le plan 2D à l'ouverture (visible en 3D seulement, un clic-droit
+"Sélectionner l'objet" en 3D la faisait apparaître en 2D avec bord/nom/
+surface). Cause réelle, identifiée en creusant plutôt qu'en corrigeant à
+l'aveugle une hypothèse de transparence de `floorColor` d'abord envisagée :
+le bâtiment était positionné à des dizaines de mètres de l'origine du
+fichier (repère absolu du site), largement hors du cadrage 2D par défaut à
+l'ouverture -- la pièce existait mais n'était simplement pas dans la zone
+visible tant qu'on n'avait pas zoomé/recentré (ou sélectionné l'objet, qui
+recentre la vue). Second défaut, lié : le bâtiment apparaissait aussi en
+biais par rapport à la grille du plan 2D (repère absolu orienté sur la trame
+Lambert-93/site, sans rapport avec l'orientation réelle du bâtiment),
+gênant pour tracer des murs (magnétisme/grille peu utile sur un bâtiment en
+biais).
+
+Corrigé par un repère LOCAL par bâtiment (`interieur_init.py::_local_frame`,
+rectangle englobant minimal via `shapely.oriented_envelope`, cf. `CLAUDE.md`
+§Points durs pour la conception retenue). Schéma XML des éléments à
+transformer (`<point>` imbriqué, `xStart`/`yStart`/`xEnd`/`yEnd`, `x`/`y`,
+`angle`/`areaAngle`/`nameAngle` en radians) **vérifié empiriquement** avant
+d'écrire `fusion_interieur.py::_apply_transform`, plutôt que supposé -- même
+méthode que le reste de ce mécanisme : petit programme Java jetable (JDK +
+`SweetHome3D.jar` déjà présents dans la session), export XML réel via
+`HomeXMLExporter` d'un `Home` construit avec un `Polyline`/`Label`/`Room`
+d'angles connus (ex. `angle='0.7853982'` pour un angle réglé à 45°,
+confirmant l'unité radian).
+
+**Validé de bout en bout** sur une fixture synthétique dans cette session :
+une emprise rectangulaire tournée de 25° par rapport aux axes absolus ->
+`_local_frame` produit un contour local axé sur la grille (proche de
+l'origine) ; un mur, un meuble de catalogue (avec un `angle` local non nul),
+une `<polyline>`, un `<label>` (avec `angle`) et une `<dimensionLine>`
+ajoutés dans le fichier intérieur (simulant une édition native réelle) ;
+fusion dans un `Plan 3D.sh3d` minimal puis relecture du résultat via
+`HomeFileRecorder` -- coordonnées et angles absolus reconstruits comparés au
+calcul direct de la transformation inverse (recalculée indépendamment en
+Python) : concordance exacte aux arrondis près, pour chaque type d'élément.
+Vérifié aussi : la pièce-repère de l'emprise est bien absente du fichier
+fusionné, et un `interieur/<id>.sh3d` sans `interieur/<id>.transform.json`
+(simulant un fichier créé par une version antérieure du script, en repère
+absolu) fusionne toujours correctement (repli sur la transformation
+identité, coordonnées/angles inchangés).
+
 ## Dépendance externe : `roofer`
 
 ### Bug confirmé (roofer 1.1.0-beta.1), n'affecte QUE `roofer_compare.py`

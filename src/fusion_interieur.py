@@ -25,9 +25,32 @@ embarque sa propre copie de modele/icone dans le zip sous forme d'entrees
 numeriques (ex. `model='1'`, `icon='0'`) -- jamais une reference catalogue
 pure : ces entrees doivent etre copiees, pas seulement les attributs qui
 les referencent.
+
+Chaque interieur/<id>.sh3d est dans son propre repere LOCAL (cf.
+interieur_init.py::_local_frame, rectangle englobant minimal de l'emprise --
+bien plus pratique a l'edition qu'un batiment loin de l'origine et en biais
+sur la trame Lambert-93 du site). La fusion doit donc appliquer la
+transformation INVERSE (repere local -> repere absolu de Plan 3D.sh3d) a
+chaque point/angle retenu, lue dans interieur/<id>.transform.json (ecrit une
+seule fois par interieur_init.py) -- repli sur la transformation identite si
+ce fichier annexe est absent (compatibilite avec un interieur/<id>.sh3d cree
+par une version anterieure de interieur_init.py, deja en repere absolu).
+Schema verifie empiriquement (JDK + SweetHome3D.jar, meme methode que le
+reste de ce mecanisme) : <room>/<polyline> portent leurs points en <point x
+y/> imbriques ; <wall>/<dimensionLine> ont xStart/yStart/xEnd/yEnd (l'offset
+d'une cote est une distance perpendiculaire a la ligne, invariante par
+rotation) ; <pieceOfFurniture>/<furnitureGroup>/<label> ont x/y + un angle en
+RADIANS ; <room> porte aussi areaAngle/nameAngle (radians).
+
+La piece-repere de l'emprise (sh3d_xml.GUIDE_ROOM_NAME, creee par
+interieur_init.py comme calque de tracage) n'est JAMAIS copiee dans le
+fichier fusionne -- reconnue par son nom exact (limite assumee : perdue si
+l'utilisateur la renomme, repli sur en element normal, pas un crash).
 """
 from __future__ import annotations
 
+import json
+import math
 import shutil
 import xml.etree.ElementTree as ET
 import zipfile
@@ -45,6 +68,25 @@ LEVEL_SCOPED_TAGS = {"room", "wall", "pieceOfFurniture", "furnitureGroup",
 CONTENT_ATTRS = {"model", "icon", "planIcon", "image", "texture"}
 WALL_REF_ATTRS = ("wallAtStart", "wallAtEnd")
 SKIP_ENTRIES = {"Home.xml", "Home", "ContentDigests"}
+
+# Attributs point (x,y) et angle (radians) par type d'element, pour la
+# transformation repere local -> absolu (cf. module docstring). Les <point>
+# imbriques de <room>/<polyline> sont geres a part (meme tag "point" pour les
+# deux, cf. _apply_transform).
+POINT_ATTR_PAIRS = {
+    "wall": [("xStart", "yStart"), ("xEnd", "yEnd")],
+    "dimensionLine": [("xStart", "yStart"), ("xEnd", "yEnd")],
+    "pieceOfFurniture": [("x", "y")],
+    "furnitureGroup": [("x", "y")],
+    "label": [("x", "y")],
+}
+ANGLE_ATTRS = {
+    "pieceOfFurniture": ("angle",),
+    "furnitureGroup": ("angle",),
+    "label": ("angle",),
+    "room": ("areaAngle", "nameAngle"),
+}
+_TWO_PI = 2.0 * math.pi
 
 
 def _home_xml(zf: zipfile.ZipFile, label: str) -> ET.Element:
@@ -73,6 +115,49 @@ def _rewrite_content_refs(elem: ET.Element, prefix: str, known: set[str]) -> Non
         for k, v in list(e.attrib.items()):
             if k in CONTENT_ATTRS and v in known:
                 e.attrib[k] = f"{prefix}/{v}"
+
+
+def _read_transform(fid: str) -> tuple[float, float, float]:
+    """(angle_rad, x0_cm, y0_cm) depuis interieur/<fid>.transform.json --
+    repli sur la transformation identite (0,0,0) si absent (cf. module
+    docstring : compatibilite avec un fichier cree avant l'introduction du
+    repere local)."""
+    path = INT_DIR / f"{fid}.transform.json"
+    if not path.is_file():
+        return 0.0, 0.0, 0.0
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data["angle_rad"], data["x0_cm"], data["y0_cm"]
+
+
+def _apply_transform(children: list[ET.Element], transform: tuple[float, float, float]) -> None:
+    """Applique en place, a tous les points/angles des sous-arbres retenus, la
+    transformation repere local -> absolu inverse de
+    interieur_init.py::_local_frame : absolute = R(angle) . (local + (x0,y0)).
+    No-op pour la transformation identite (fichier sans .transform.json)."""
+    angle, x0, y0 = transform
+    if angle == 0.0 and x0 == 0.0 and y0 == 0.0:
+        return
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+
+    def to_absolute(lx: float, ly: float) -> tuple[float, float]:
+        x, y = lx + x0, ly + y0
+        return x * cos_a - y * sin_a, x * sin_a + y * cos_a
+
+    for child in children:
+        for e in child.iter():
+            if e.tag == "point":
+                x, y = to_absolute(float(e.get("x")), float(e.get("y")))
+                e.set("x", f"{x:.2f}")
+                e.set("y", f"{y:.2f}")
+                continue
+            for ax, ay in POINT_ATTR_PAIRS.get(e.tag, []):
+                x, y = to_absolute(float(e.get(ax)), float(e.get(ay)))
+                e.set(ax, f"{x:.2f}")
+                e.set(ay, f"{y:.2f}")
+            for aa in ANGLE_ATTRS.get(e.tag, []):
+                if e.get(aa) is None:
+                    continue
+                e.set(aa, f"{(float(e.get(aa)) + angle) % _TWO_PI:.7f}")
 
 
 def _remap_ids(children: list[ET.Element]) -> None:
@@ -106,6 +191,7 @@ def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
     """Fusionne un interieur/<fid>.sh3d dans ext_root (in place). Renvoie
     (niveaux ajoutes, elements ajoutes, next_index mis a jour)."""
     fid = path.stem
+    transform = _read_transform(fid)
     with zipfile.ZipFile(path) as zf:
         root = _home_xml(zf, path.name)
         known_content = _content_entries(zf)
@@ -124,7 +210,14 @@ def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
             next_index += 1
             added_levels += 1
 
-        retained = [c for c in list(root) if c.tag in LEVEL_SCOPED_TAGS]
+        all_scoped = [c for c in list(root) if c.tag in LEVEL_SCOPED_TAGS]
+        guide_skipped = sum(1 for c in all_scoped
+                             if c.tag == "room" and c.get("name") == sh3d_xml.GUIDE_ROOM_NAME)
+        retained = [c for c in all_scoped
+                    if not (c.tag == "room" and c.get("name") == sh3d_xml.GUIDE_ROOM_NAME)]
+        if guide_skipped:
+            print(f"  {path.name} : {guide_skipped} piece-repere (calque) exclue(s) de la fusion")
+        _apply_transform(retained, transform)
         _remap_ids(retained)
 
         added_items = 0

@@ -25,6 +25,14 @@ import sitegeo as cg
 JCONV = cg.DATA / "_jconv"     # cache : jar copie + Conv.class (partage entre appelants)
 FOOTPRINT_CLEARANCE_CM = 3.0   # marge au-dessus du terrain/sol de reference (evite le clipping)
 
+# Nom de la piece-repere (emprise du batiment) creee par interieur_init.py sur
+# chaque niveau d'un interieur/<id>.sh3d -- identifiant stable partage avec
+# fusion_interieur.py, qui l'utilise pour EXCLURE cette piece du fichier
+# fusionne (jamais un element du resultat final, seulement un calque de
+# tracage pendant l'edition). Le libelle documente lui-meme ce sort pour
+# l'utilisateur qui ouvre le fichier dans l'appli native.
+GUIDE_ROOM_NAME = "Repere emprise (auto-exclu de la fusion)"
+
 
 def esc(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -79,12 +87,19 @@ def level(level_id, name, elevation, index) -> str:
             f"floorThickness='12.0' height='30.0' elevationIndex='{index}'/>")
 
 
-def compass_tag() -> str:
-    """<compass> avec long/lat (radians) du centroide du site (pas stocke au depot)."""
+def compass_tag(north_direction_rad: float = 0.0) -> str:
+    """<compass> avec long/lat (radians) du centroide du site (pas stocke au depot).
+    `north_direction_rad` : decalage du nord geographique -- 0.0 par defaut
+    (repere absolu, ou le nord correspond deja a northDirection=0 par
+    construction de `sitegeo.to_cm`). Utilise par interieur_init.py pour un
+    fichier en repere local tourne : effet cosmetique seulement (orientation
+    du soleil dans l'apercu 3D pendant l'edition), sans impact sur la
+    geometrie -- sens/convention exact non revalide empiriquement."""
     lon0, lat0, lon1, lat1 = cg.META.bbox_wgs84
     lon = math.radians((lon0 + lon1) / 2.0)
     lat = math.radians((lat0 + lat1) / 2.0)
-    return (f"  <compass x='-100.0' y='50.0' diameter='100.0' northDirection='0.0' "
+    return (f"  <compass x='-100.0' y='50.0' diameter='100.0' "
+            f"northDirection='{north_direction_rad:.7f}' "
             f"longitude='{lon:.7f}' latitude='{lat:.7f}' timeZone='Europe/Paris'/>")
 
 
