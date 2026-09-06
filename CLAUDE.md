@@ -10,7 +10,11 @@ La parcelle cible vit **uniquement** dans `config/site.local.toml` (git-ignored)
 section / un numéro de parcelle / des coordonnées dans le code, les docstrings,
 les commentaires, les docs ou les messages de commit. Avant tout commit :
 `git grep -iE "<commune>|<insee>"` doit être vide. Tout `data/` est git-ignored
-(géométrie exacte du site).
+(géométrie exacte du site). `interieur/` (projets `.sh3d` intérieurs par
+bâtiment, cf. Arborescence) et `Plan 3D (avec interieur).sh3d` (sortie de
+`fusion_interieur.py`) le sont aussi -- un plan intérieur réel dévoile
+l'agencement d'un bâtiment habité, tout aussi sensible que la géométrie
+exacte du site.
 
 ## Environnement
 
@@ -130,6 +134,17 @@ script isolément (cf. Environnement) — pas la génération complète.
 .\run.ps1 -Site x.toml
 ```
 
+**Plan 2D intérieur** (séparé de la génération 3D extérieure, cf. "Points
+durs" > plan 2D intérieur) : jamais dans la génération complète par défaut,
+toujours à la main.
+
+```
+./run.sh phase1_cadastre terrain bati   # prerequis (sol_max_cm par batiment)
+./run.sh interieur_init                 # cree interieur/<id>.sh3d (jamais les existants)
+# ... edition manuelle dans l'appli Sweet Home 3D native ...
+./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
+```
+
 ## Arborescence
 
 - `src/` : Python (lancé en scripts ; `import sitegeo as cg`).
@@ -142,11 +157,69 @@ script isolément (cf. Environnement) — pas la génération complète.
 - `config/` : `environment.yml` + `site.example.toml` (versionnés) / `site.local.toml` (non).
 - `docs/` : `PIPELINE.md` (détail `.sh3d` + limites). `notice_calage.md` est généré.
 - `data/` : **toutes** les sorties. Ne pas éditer à la main, ne pas versionner.
+- `interieur/` : projets `.sh3d` intérieurs par bâtiment propriété (un
+  fichier par emprise/ring, nommé par son id), créés par `interieur_init.py`
+  puis **édités à la main** dans l'appli Sweet Home 3D native -- à l'inverse
+  de `data/`, jamais réécrit automatiquement par le pipeline de génération
+  extérieur (`interieur_init.py` ne touche jamais un fichier déjà présent).
+  Git-ignoré (cf. Confidentialité). `src/sh3d_xml.py` : génération de
+  fragments XML SH3D (`<level>`/`<room>`/`<pieceOfFurniture>`/...) et
+  conversion vers un `.sh3d` réel via `java/Conv.java`, factorisé hors de
+  `build_home.py` pour être réutilisé par `interieur_init.py` et
+  `fusion_interieur.py`.
 - Chemins centralisés dans `sitegeo.py` : `cg.DATA` `cg.ASSETS` `cg.DOCS`
   `cg.JAVA` `cg.VERIF` `cg.HOME_SH3D` `cg.ENV_ROOT`. `cg.GEO` == `cg.DATA` (alias).
 
 ## Points durs
 
+- **Plan 2D intérieur séparé de la modélisation 3D extérieure** (`interieur_init.py`,
+  `fusion_interieur.py`) : le pipeline de génération ne modélise que
+  l'extérieur géoréférencé (parcelle/terrain/bâtis/végétation) -- l'agencement
+  intérieur réel d'un bâtiment (pièces, cloisons, mobilier) n'a aucune source
+  IGN et se dessine à la main. `interieur_init.py` crée un `.sh3d` PAR
+  bâtiment propriété (`interieur/<id>.sh3d`, un niveau par étage BD TOPO,
+  repli à 1 si absent/NaN) avec un `<room>` "guide" par niveau reproduisant
+  l'emprise exacte du bâtiment (même géométrie que le `<room>` "Emprise
+  `<id>`" de `build_home.py`) -- convention de calage visuelle, PAS un
+  verrou : SH3D n'a pas de mécanisme de lock sur `<room>`, rien n'empêche une
+  suppression/modification accidentelle. Ne réécrit **jamais** un fichier
+  déjà présent (travail manuel utilisateur). **Même repère plan absolu** (cm,
+  origine Lambert-93 du site) que `Plan 3D.sh3d` -- pas de repère local par
+  bâtiment : les murs dessinés dans l'appli native atterrissent directement à
+  la bonne position réelle, ce qui évite toute translation de coordonnées à
+  la fusion (le point le plus fragile d'un tel mécanisme).
+  `fusion_interieur.py` fusionne ponctuellement (jamais dans `run.sh`/
+  `generation.yml` par défaut, jamais automatique) les `interieur/*.sh3d`
+  dans `Plan 3D.sh3d` -> **nouveau fichier séparé** `Plan 3D (avec
+  interieur).sh3d`, ne modifie jamais `Plan 3D.sh3d` lui-même (cycles de vie
+  découplés : génération extérieure automatique vs édition intérieure
+  manuelle). Format XML natif **vérifié avant d'écrire le parseur** (JDK +
+  `SweetHome3D.jar`, programme Java jetable) plutôt que supposé : un objet
+  (`<wall>`/`<pieceOfFurniture>`/`<room>`) porte un attribut `level='...'`
+  explicite dès qu'il y a plusieurs niveaux dans le fichier (absent
+  seulement si un seul niveau existe -- cas alors sans ambiguïté) ; un
+  meuble de catalogue embarque sa propre copie de modèle/icône dans le zip
+  sous forme d'entrées numériques (`model='1'`, `icon='0'`), jamais une
+  référence catalogue pure -- `fusion_interieur.py` ne copie donc que les
+  entrées zip réellement référencées par les éléments retenus (jamais
+  `Home`/`ContentDigests`, artefacts internes à l'écriture Conv.java du
+  fichier source), sous un préfixe par bâtiment, et réécrit les attributs
+  `model=`/`icon=`/`planIcon=`/`image=`/`texture=` en conséquence.
+  `elevationIndex` (ordre d'affichage des niveaux, sans rapport avec la
+  géométrie -- confirmé par le gabarit `home_template.xml`, 5 niveaux à la
+  même `elevation='0.0'` mais des `elevationIndex` différents) est
+  réattribué en continu après le plus grand déjà utilisé côté extérieur ;
+  chaque niveau/élément intérieur reçoit un id UUID frais, stratégie
+  purement additive qui ne touche jamais aux niveaux/emprises extérieurs
+  existants. **Validé de bout en bout** dans une session Claude Code
+  distante (JDK + mirror `SweetHome3D.jar` du dépôt) sur une fixture
+  synthétique : 2 bâtiments (l'un multi-ring), murs joints (`wallAtStart`)
+  et meuble de catalogue ajoutés via l'API Java (simulant une édition native
+  réelle), fusion puis relecture via `HomeFileRecorder` -- tous les niveaux,
+  murs et meubles résolus au bon niveau, contenu du meuble catalogue
+  correctement copié/résolu. **Pas encore validé sur un site réel** (pas de
+  site configuré dans cette session, confidentialité) : à reprendre au
+  prochain run complet avec un vrai bâtiment édité dans l'appli desktop.
 - **Repère plan figé** : `data/meta.json`, origine Lambert-93 calculée en Phase 1,
   réutilisée telle quelle partout. `verif.py` la contrôle.
 - **`sitegeo.META`** est un proxy paresseux (`meta.json` n'existe pas au 1er run).

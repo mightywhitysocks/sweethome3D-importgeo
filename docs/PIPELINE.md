@@ -77,6 +77,41 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
 (Cadastre / Terrain / Bâti voisinage / Bâti propriété / Végétation) + un
 calque *Emprise <id>* par bâtiment propriété (cf. point 6 ci-dessus).
 
+## Plan 2D intérieur (optionnel, séparé du pipeline principal)
+
+`interieur_init.py`/`fusion_interieur.py` (cf. CLAUDE.md > Points durs pour
+le détail complet) permettent de dessiner à la main, dans l'appli Sweet
+Home 3D native, le plan intérieur d'un bâtiment (pièces, cloisons,
+mobilier) -- absent du pipeline de génération extérieur, qui n'a aucune
+source IGN pour l'agencement intérieur réel.
+
+1. `interieur_init.py` (après `phase1_cadastre`/`terrain`/`bati.py`) crée
+   `interieur/<id>.sh3d` -- un fichier par bâtiment propriété (par
+   emprise/ring), un niveau par étage BD TOPO, un `<room>` guide par niveau
+   reproduisant l'emprise exacte. Même repère plan absolu que `Plan 3D.sh3d`
+   (pas de repère local par bâtiment). Ne réécrit jamais un fichier déjà
+   présent.
+2. Édition manuelle dans l'appli Sweet Home 3D native (murs, pièces,
+   mobilier).
+3. `fusion_interieur.py`, à la main, ponctuellement : lit chaque
+   `interieur/<id>.sh3d` (son entrée `Home.xml`, écrite par le même
+   `Conv.java` que ci-dessus grâce à `preferXmlEntry=true`), retient les
+   éléments portés par un niveau (`room`/`wall`/`pieceOfFurniture`/
+   `furnitureGroup`/`dimensionLine`/`polyline`/`label`), réattribue à
+   chaque niveau un id frais et un `elevationIndex` continu après celui de
+   `Plan 3D.sh3d`, copie les éventuelles entrées de contenu (modèles/icônes
+   de mobilier) référencées sous un préfixe par bâtiment, puis réinjecte le
+   tout dans le `Home.xml` de `Plan 3D.sh3d` et repasse par `Conv.java` ->
+   **nouveau fichier** `Plan 3D (avec interieur).sh3d`. Ne modifie jamais
+   `Plan 3D.sh3d` lui-même.
+
+**Limite connue, non couverte** : un mur qui référencerait (`wallAtStart`/
+`wallAtEnd`) un mur d'un AUTRE fichier `interieur/*.sh3d` casserait la
+fusion (identifiants de murs non résolubles au-delà de leur propre fichier)
+-- ne devrait pas se produire en usage normal de l'appli (chaque bâtiment a
+son propre fichier indépendant), mais n'est pas détecté ni signalé
+explicitement si ça arrivait.
+
 ## Étape 3 (optionnelle) : rendu photo headless (`verif.py --render`, `preview.py`)
 
 `java/RenderPhoto.java` (`com.eteks.sweethome3d.utilities.RenderPhoto`) rend
