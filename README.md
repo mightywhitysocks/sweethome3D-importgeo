@@ -282,6 +282,9 @@ la demande). Marche à suivre :
 │                        arbaro_species/*.xml pour la variété des arbres)
 ├── docs/
 │   ├── PIPELINE.md          détail de la génération du .sh3d + limitations
+│   ├── journal-technique.md historique chronologique des investigations
+│   │                        (Points durs de CLAUDE.md), à consulter à la
+│   │                        demande, non chargé par défaut en session
 │   └── exploration_socle.md revue des alternatives open source au code
 │                             maison (LiDAR, terrain, cadastre, .sh3d) :
 │                             conclusion, rien à remplacer à ce jour

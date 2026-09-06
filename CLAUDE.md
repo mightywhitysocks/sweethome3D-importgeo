@@ -203,7 +203,10 @@ des fichiers édités à la main, jamais versionnés.
   `tree.obj/.mtl` gabarit d'arbre historique, `arbaro_species/*.xml` presets
   de variété des arbres).
 - `config/` : `environment.yml` + `site.example.toml` (versionnés) / `site.local.toml` (non).
-- `docs/` : `PIPELINE.md` (détail `.sh3d` + limites). `notice_calage.md` est généré.
+- `docs/` : `PIPELINE.md` (détail `.sh3d` + limites), `journal-technique.md`
+  (historique chronologique des investigations, extrait des Points durs
+  ci-dessous pour garder ce fichier centré sur l'état courant -- consulté à
+  la demande, pas chargé par défaut). `notice_calage.md` est généré.
 - `data/` : **toutes** les sorties. Ne pas éditer à la main, ne pas versionner.
 - `interieur/` : projets `.sh3d` intérieurs par bâtiment propriété (un
   fichier par emprise/ring, nommé par son id), créés par `interieur_init.py`
@@ -220,716 +223,484 @@ des fichiers édités à la main, jamais versionnés.
 
 ## Points durs
 
-- **Plan 2D intérieur séparé de la modélisation 3D extérieure** (`interieur_init.py`,
-  `fusion_interieur.py`, `.github/workflows/interieur.yml`) : le pipeline de
-  génération ne modélise que l'extérieur géoréférencé
-  (parcelle/terrain/bâtis/végétation) -- l'agencement intérieur réel d'un
-  bâtiment (pièces, cloisons, mobilier) n'a aucune source IGN et se dessine à
-  la main. `interieur.yml` (`workflow_dispatch`) télécharge le dernier
-  artefact `Plan 3D` de `generation.yml` (`data/meta.json`/`bati.json`/
-  `bati_propriete_ref.json`, ajoutés à cet artefact pour ce besoin -- même
-  niveau de sensibilité que le reste, déjà la géométrie exacte du site),
-  lance `interieur_init.py` dans l'image CI et publie `interieur/*.sh3d` en
-  artefact `Interieurs` -- aucun secret de site requis (même principe que
-  `render.yml` : valeurs fictives, seul le parsing de `sitegeo.py` l'exige).
-  Ne couvre QUE la création initiale : l'édition et la fusion
-  (`fusion_interieur.py`) restent toujours locales, ces étapes ont besoin des
-  fichiers édités à la main (jamais versionnés, jamais publiés en CI).
-  `interieur_init.py` crée un `.sh3d` PAR
-  bâtiment propriété (`interieur/<id>.sh3d`, un niveau par étage BD TOPO,
-  repli à 1 si absent/NaN) avec un `<room>` "guide" par niveau reproduisant
-  l'emprise exacte du bâtiment (même géométrie que le `<room>` "Emprise
-  `<id>`" de `build_home.py`) -- convention de calage visuelle, PAS un
-  verrou : SH3D n'a pas de mécanisme de lock sur `<room>`, rien n'empêche une
-  suppression/modification accidentelle. Ne réécrit **jamais** un fichier
-  déjà présent (travail manuel utilisateur). **Même repère plan absolu** (cm,
-  origine Lambert-93 du site) que `Plan 3D.sh3d` -- pas de repère local par
-  bâtiment : les murs dessinés dans l'appli native atterrissent directement à
-  la bonne position réelle, ce qui évite toute translation de coordonnées à
-  la fusion (le point le plus fragile d'un tel mécanisme).
-  `fusion_interieur.py` fusionne ponctuellement (jamais dans `run.sh`/
-  `generation.yml` par défaut, jamais automatique) les `interieur/*.sh3d`
-  dans `Plan 3D.sh3d` -> **nouveau fichier séparé** `Plan 3D (avec
-  interieur).sh3d`, ne modifie jamais `Plan 3D.sh3d` lui-même (cycles de vie
-  découplés : génération extérieure automatique vs édition intérieure
-  manuelle). Format XML natif **vérifié avant d'écrire le parseur** (JDK +
-  `SweetHome3D.jar`, programme Java jetable) plutôt que supposé : un objet
-  (`<wall>`/`<pieceOfFurniture>`/`<room>`) porte un attribut `level='...'`
-  explicite dès qu'il y a plusieurs niveaux dans le fichier (absent
-  seulement si un seul niveau existe -- cas alors sans ambiguïté) ; un
-  meuble de catalogue embarque sa propre copie de modèle/icône dans le zip
-  sous forme d'entrées numériques (`model='1'`, `icon='0'`), jamais une
-  référence catalogue pure -- `fusion_interieur.py` ne copie donc que les
-  entrées zip réellement référencées par les éléments retenus (jamais
-  `Home`/`ContentDigests`, artefacts internes à l'écriture Conv.java du
-  fichier source), sous un préfixe par bâtiment, et réécrit les attributs
-  `model=`/`icon=`/`planIcon=`/`image=`/`texture=` en conséquence.
-  `elevationIndex` (ordre d'affichage des niveaux, sans rapport avec la
-  géométrie -- confirmé par le gabarit `home_template.xml`, 5 niveaux à la
-  même `elevation='0.0'` mais des `elevationIndex` différents) est
-  réattribué en continu après le plus grand déjà utilisé côté extérieur ;
-  chaque niveau/élément intérieur reçoit un id UUID frais (pas seulement les
-  niveaux -- y compris `<room>`/`<wall>`/`<pieceOfFurniture>`/
-  `<furnitureGroup>`, `wallAtStart`/`wallAtEnd` réécrits en conséquence),
-  stratégie purement additive qui ne touche jamais aux niveaux/emprises
-  extérieurs existants. Nécessaire même si les ids source sont des UUID a
-  priori uniques : un `interieur/<id>.sh3d` dupliqué à la main (copie du
-  fichier lui-même) pour amorcer un 2e bâtiment reproduirait des ids
-  identiques -- sans ce remap, deux fichiers source distincts pourraient
-  collisionner sur le même id dans le `Home.xml` fusionné et casser la
-  résolution de `wallAtStart`/`wallAtEnd` par `HomeXMLHandler`. `Plan 3D
-  (avec interieur).sh3d` existant est sauvegardé en `.sh3d.bak` avant
-  réécriture, même logique que `Plan 3D.sh3d`/`build_home.py`.
-  Sauvegarde normale (Ctrl+S) dans l'appli desktop réelle : **confirmé** (pas
-  supposé) par désassemblage de `SweetHome3D.class` dans le `.jar` 7.5 pinné
-  par le `Dockerfile` -- le `HomeFileRecorder` par défaut de l'appli
-  (`getHomeRecorder()`, utilisé pour un enregistrement normal, comme sa
-  variante `COMPRESSED`) passe déjà `preferXmlEntry=true`, exactement comme
-  `java/Conv.java` -- une édition puis sauvegarde native écrira donc bien
-  l'entrée `Home.xml` que `fusion_interieur.py` lit. **Validé de bout en
-  bout** dans une session Claude Code distante (JDK + mirror
-  `SweetHome3D.jar` du dépôt) sur une fixture synthétique : 2 bâtiments
-  (l'un multi-ring), murs joints (`wallAtStart`) et meuble de catalogue
-  ajoutés via l'API Java (simulant une édition native réelle), y compris un
-  cas de fichiers `interieur/*.sh3d` dupliqués (ids source identiques) --
-  fusion puis relecture via `HomeFileRecorder` : tous les niveaux, murs et
-  meubles résolus au bon niveau sans collision, contenu du meuble catalogue
-  correctement copié/résolu. **Pas encore validé sur un site réel** (pas de
-  site configuré dans cette session, confidentialité) : à reprendre au
-  prochain run complet avec un vrai bâtiment édité dans l'appli desktop.
-- **Repère plan figé** : `data/meta.json`, origine Lambert-93 calculée en Phase 1,
-  réutilisée telle quelle partout. `verif.py` la contrôle.
-- **`sitegeo.META`** est un proxy paresseux (`meta.json` n'existe pas au 1er run).
-- **Winding OBJ** : `write_obj` écrit y-up (réflexion) -> faces émises `f c b a`
-  pour ne pas être cullées ; invariant contrôlé par `verif.py`
-  (`_check_closed_mesh` : 0 arête ouverte + volume signé positif, calculé par
-  une formule maison -- `PolyData.volume`/vtkMassProperties ne convient pas,
-  il renvoie une magnitude insensible au winding) sur `terrain.obj`/`haies.obj`
-  (les seuls OBJ garantis fermés par construction).
-- **Ancrage sol** : objets posés à `cg.terrain_z_at(x, y)` = altitude de la
-  **surface du maillage** (pas le MNT brut 0,5 m ; le maillage est à 2 m).
-- **Emprises `<room>` visibles des bâtiments propriété** : un `<room>` SH3D n'a
-  pas d'élévation propre, seulement celle de son niveau (`<level elevation=...>`,
-  partagée par tout ce qui y est placé) -- contrairement à un `<pieceOfFurniture>`
-  qui porte son propre `elevation`. Un niveau *Bâti propriété* unique (élévation
-  0.0, cf. gabarit) suffit pour les pièces de repère invisibles existantes
-  (`floorVisible='false'`, ne servent qu'aux étiquettes 2D -- la vraie géométrie
-  vient de `bati_propriete.obj`, ancré lui via `cg.terrain_z_at` par bâtiment).
-  Mais une emprise VISIBLE (demandée pour matérialiser au sol le contour d'un
-  bâtiment) sur ce même niveau partagé se retrouverait clippée dans le maillage
-  terrain dès que celui-ci dépasse l'élévation du niveau -- constaté sur le site
-  réel : jusqu'à ~2,5 m d'écart de sol entre deux bâtiments propriété. Solution :
-  `bati.py` calcule, par emprise (`bati_propriete_ref.json[footprints[].sol_max_cm]`,
-  même ordre que les commandes `create_room_polygon`), le point de terrain le plus
-  haut sous cette emprise (`cg.terrain_z_at` sur ses sommets) ; `build_home.py` lit
-  cette valeur telle quelle (aucun nouvel appel `cg.terrain_z_at`, conforme à son
-  propre rôle d'assembleur hors-ligne depuis `data/`) et crée un niveau dédié par
-  bâtiment ("Emprise <id>", id privé -- jamais dans `LEVELS`, le registre stable du
-  gabarit, passé explicitement à `_room` via son paramètre `levels`), élévation =
-  `sol_max_cm` + `FOOTPRINT_CLEARANCE_CM` (3 cm) -- jamais clippée, quitte
-  à légèrement flotter au-dessus du terrain sur les coins bas d'une emprise en
-  pente (compromis assumé : une pièce reste un plan plat, pas un maillage suivant
-  le relief).
-- **`.mtl` 100 % mat** : `Ka 0`, `Ks 0`, `Ns 1`, `illum 1` (`write_mtl`).
-- **Génération `.sh3d`** : le loader Sweet Home 3D exige l'entrée `Home`
-  sérialisée Java -> produite par `java/Conv.java` (JDK requis). Un `.sh3d` avec
-  seulement `Home.xml` est rejeté. Voir `docs/PIPELINE.md`.
-- **Plugin MCP Sweet Home 3D** : `load_home` / `get_state` / `save_home`
-  mésaffichent les niveaux (tout sur un calque), bug plugin. La vérité =
-  relecture par `Conv` + ouverture native. Ne pas s'y fier pour vérifier les calques.
-- **`bati.py` `_fnum`** filtre les NaN (BD TOPO `altitude_maximale_toit` souvent
-  absente sur les parcelles voisines) sinon apex de toit NaN -> mesh cassé.
-- **Cache disque WFS/WMS** (`sitegeo._cached`, `data/net_cache/`) : le
-  Géoplateforme IGN limite le nombre d'accès consécutifs (constaté :
-  `ConnectionResetError` répétées en usage normal, PAS une coupure réseau).
-  `wfs_l93`, `wms_getmap` (donc `wms_ortho_rgb`/`wms_raster`) et
-  `lidar_tile_index` mettent leur réponse déjà parsée en cache disque,
-  indéfiniment -- **jamais invalidé automatiquement**. Si les données
-  source changent (nouvelle bbox, nouveau site, données BD TOPO/LiDAR mises
-  à jour côté IGN) : `rm -rf data/net_cache` avant de relancer. Même
-  répertoire `data/` que le reste (git-ignore).
-- **Rendu photo headless** (`verif.py --render`, `src/preview.py`) : `RenderPhoto.java`
-  compilé comme `Conv.java`, moteur SunFlow de Sweet Home 3D. `.jar` et jars de
-  rendu auto-détectés (installeur classique + Microsoft Store). Détails, cas Linux
-  (`xvfb-run`) et limites : `docs/PIPELINE.md`.
-- **`roof_lidar.py`** (ancienne méthode de reconstruction du toit multi-pans
-  de la propriété par RANSAC direct sur le nuage LiDAR ; **plus appelée par
-  `bati.py`**, remplacée par `roofer` -- cf. "Dépendance externe : roofer"
-  ci-dessous -- conservée dans le dépôt uniquement pour référence/comparaison
-  via `roofer_compare.py`) : `MIN_INLIERS` RANSAC et `MIN_COMPONENT_PTS`
-  (repli coin en L) y sont volontairement bas -- un seuil trop haut traite un
-  vrai pan/segment de jonction comme du bruit statistique (constaté : un
-  amas de 3-5 points gagnait par hasard le ratio des valeurs singulières
-  devant un amas réel de 40-80 points). Toujours revalider par cohérence
-  spatiale (composantes connexes), jamais par un seul seuil. `None` en
-  sortie (nuage trop petit, aucun plan, partition non close) -> repli sur le
-  toit pyramidal côté appelant (comportement d'origine, non exercé par le
-  pipeline actuel).
-- **Solide fermé PyVista** : `mesh.volume` (et tout calcul de volume signé)
-  n'est fiable qu'APRÈS `compute_normals(auto_orient_normals=True,
-  consistent_normals=True)` -- `extrude(capping=True)` seul peut laisser des
-  faces à l'envers (constaté : volume 2,3x trop grand avant, correct après).
-- **Dépendance externe : `roofer`** (moteur 3DBAG/TU Delft,
-  https://github.com/3DBAG/roofer, **licence GPLv3**) -- **méthode principale**
-  du toit + mur de TOUS les bâtiments (propriété et voisinage), appelée depuis
-  `bati.py` via `src/roofer_roof.py` (remplace l'ancien `roof_lidar.py`,
-  conservé dans le dépôt pour référence/comparaison avec
-  `src/roofer_compare.py`, plus appelés depuis `bati.py`). Non redistribué
-  dans ce dépôt : appelé en sous-processus CLI (binaire externe, aucun code
-  copié/lié) -- pas de contamination de licence sur le code du dépôt.
-  Installation : script officiel `distribution/install.sh` du dépôt `roofer`
-  (binaire précompilé Linux x86_64, pas de sudo requis, pose
-  `~/.local/bin/roofer`) -- **pas de build Windows officiel** (cf. section
-  Environnement : le pipeline de génération tourne donc en environnement
-  Linux, Windows sert uniquement au rendu/visualisation Sweet Home 3D).
-  Binaire absent ou en échec -> `roofer_roof.run_roofer` renvoie `None`, log
-  explicite, `bati.py` se replie sur le toit pyramidal pour tous les
-  bâtiments (jamais d'exception qui remonte). Entrée attendue : dalle(s) LAZ
-  IGN (déjà ce que télécharge `cg.lidar_points_l93`, dalle brute non filtrée
-  par classe) + empreinte de TOUS les bâtiments du site en un seul
-  GeoPackage EPSG:2154 (colonne `cleabs`, un seul appel CLI pour tout le lot
-  -- `roofer_roof.write_footprint_gpkg`) ; sortie : CityJSONSequence
-  (`*.city.jsonl`), géométrie `Solid` LoD2.2 par bâtiment (portée par le
-  `BuildingPart` enfant, PAS le `Building` parent qui porte `cleabs` -- cf.
-  `roofer_roof._find_roof_geometry`).
-  **`roofer_roof.py` consomme le `Solid` de roofer TEL QUEL** (aucune
-  reconstruction géométrique propre du mur ni regroupement de faces en pans
-  -- ni Union-Find sur les normales, ni ajustement de plan SVD, ni
-  extrapolation) : les semantics CityJSON (`GroundSurface`/`WallSurface`/
-  `RoofSurface`, `_solid_faces`) donnent directement le type de chaque face
-  et son pan d'appartenance (un index de surface `RoofSurface` = un pan
-  complet, roofer ne fragmente jamais un pan en plusieurs faces -- vérifié
-  sur 18 bâtiments réels). Seul ajout : un décalage vertical RIGIDE (une
-  seule translation, jamais de reconstruction par sommet) pour ancrer le
-  solide sous le maillage terrain, avec la même marge de sécurité que les
-  autres types de bâtiments du pipeline (`base_cm`, calculé par `bati.py`).
-  Chaque face est triangulée par éventail-centroïde (ajout du centroïde de
-  la face, un triangle par arête) plutôt que via `.triangulate()` générique
-  -- **constaté sur un bâtiment réel** : `.triangulate()` (VTK) peut laisser
-  un petit trou au milieu d'un pan à forme très étirée/complexe (11 sommets),
-  l'éventail-centroïde couvre par construction tout polygone simple, quelle
-  que soit sa forme. Approche alignée sur la pratique du projet officiel
-  `3DBAG/3dbag-surfaces` (classification par semantics, jamais de
-  reconstruction de mur à part) et sur l'algorithme documenté de roofer
-  (partition de l'empreinte d'entrée puis extrusion -- garantit que
-  l'empreinte du `Solid` en sortie correspond à l'empreinte BD TOPO fournie
-  en entrée, vérifié au cm près). Découpage en groupes de matériau pour
-  l'OBJ multi-matériaux (mur = Ground+Wall, un groupe par pan coloré via
-  `cg.roof_color_from_ortho`) fait sur le solide déjà validé fermé -- ne
-  réintroduit pas de trou (les arêtes de bord entre deux groupes restent
-  géométriquement coïncidentes, cf. vérification empirique : 0 arête ouverte
-  sur les 18 bâtiments reconstruits de cette session, groupes inclus).
-  **Deux garde-fous ajoutés lors d'une revue de code ultérieure** (issues
-  #35/#42) : un bâtiment `MultiPolygon` (parties disjointes) reçoit un
-  identifiant `cleabs` suffixé par polygone (`roofer_roof.cleabs_for`,
-  utilisé à la fois par `write_footprint_gpkg` et par l'appelant de
-  `build_roof` dans `bati.py`) -- sinon toutes les parties récupéraient à
-  tort le `Solid` de la première (même `cleabs` réutilisé) ; un `Solid` avec
-  des faces `RoofSurface` mais aucune `GroundSurface`/`WallSurface` (sortie
-  `roofer` atypique) est désormais traité comme un échec de reconstruction
-  (repli pyramidal) plutôt que de produire un toit flottant sans mur.
-  **Bug confirmé (roofer 1.1.0-beta.1), n'affecte QUE `roofer_compare.py`**
-  (attributs CityJSON `rf_h_*`, pas la géométrie du `Solid` que consomme
-  `roofer_roof.py`) : `rf_h_ground` est exposé relatif à
-  `transform.translate[2]` (translation Z interne du CityJSON, pour la
-  compression des coordonnées), PAS en NGF absolu -- contrairement à
-  `rf_h_roof_min/max/50p/70p`, qui eux le sont bien. Confirmé empiriquement en
-  comparant le nuage rogné par roofer lui-même (`--crop-output`) : le Z réel
-  des points sol retombe à quelques cm de `rf_h_ground + transform.translate[2]`.
-  Écarté : bug connu "garbage value avec plusieurs pointclouds en entrée"
-  (déjà corrigé en v1.0.0-beta.6, testé ici avec 1 seule dalle -- résultat
-  identique). `rf_h_roof_ridge` (hauteur relative au sol) était déjà correct
-  tel quel ; seul `rf_h_ground` manquait ce recalage. Correctif appliqué dans
-  `_roofer_metrics` (`roofer_compare.py`) : lire `transform.translate[2]` sur
-  la ligne de métadonnées du `.city.jsonl` et l'ajouter à `rf_h_ground`.
-  Validé mécaniquement (installation + CLI + parsing CityJSON) sur le jeu de
-  test officiel du projet (`wippolder.zip`, 60 bâtiments, ~2 s), **et exécuté
-  de bout en bout sur les données réelles du site** dans une session Claude
-  Code distante (`config/site.local.toml` renseigné manuellement pour ce test,
-  jamais committé) : 5 bâtiments propriété, résultats cohérents avec
-  `roof_lidar.py` sur les cas simples (écart de quelques cm), divergents sur
-  un cas complexe (nombre de pans) et sur 2 cas limites (chacune des deux
-  méthodes réussit là où l'autre échoue) -- pas de verdict tranché en faveur
-  de l'une ou l'autre à ce stade, juste une confirmation que la comparaison
-  est mécaniquement fiable.
-- **Couverture LiDAR/BD TOPO incomplète en entrée de `roofer` : implémenté
-  (issues #22, #23).** Diagnostic d'origine (comparaison emprise BD TOPO vs
-  union des pans reconstruits, 18 bâtiments) : écarts systémiques, jusqu'à
-  55 % de l'emprise non couverte sur certains bâtiments. Deux causes racines,
-  alignées sur l'exemple officiel IGN
-  [`ignfab/roofer-with-ignf-datasets`](https://github.com/ignfab/roofer-with-ignf-datasets)
-  (Docker-first, PDAL) et sur `roofer --help-all` -- corrigées en préparant
-  l'entrée dans un format que `roofer` sait déjà consommer (paramètres CLI
-  existants), jamais par une reconstruction géométrique ou un calcul
-  d'altitude côté projet (cohérent avec le choix déjà fait de consommer le
-  `Solid` de `roofer` tel quel, cf. plus haut) :
-  - **Classification LiDAR** : les dalles LAZ IGN brutes contiennent des
-    points classés **67 (« Divers -- bâtis »)**, une classe IGN propre,
-    hors nomenclature ASPRS. `roofer` ne regarde que `--bld-class`
-    (défaut **6**) / `--grnd-class` (défaut **2**) -- les points 67 lui
-    sont donc invisibles. `roofer_roof._remap67` (appelée par
-    `lidar_tile_paths`) remap ces points 67 -> 6, en pur laspy/numpy (pas de
-    dépendance PDAL, cf. `config/environment.yml`), sur une copie de chaque
-    dalle mise en cache disque dans `data/lidar_cache/roofer_remap67to6/`
-    (jamais le fichier source, partagé avec `cg.lidar_points_l93`) --
-    reproduit le remap PDAL `filters.assign` **67 -> 6** documenté par
-    `roofer-with-ignf-datasets`. Une dalle dont le remap échoue (LAZ
-    corrompu, backend LAZ absent) est fournie à `roofer` sans remap plutôt
-    qu'écartée -- dégrade la couverture, ne bloque jamais l'appel.
-  - **Attributs de repli d'altitude** : `roofer_roof.write_footprint_gpkg`
-    écrit désormais, en plus de `cleabs` + géométrie, les colonnes
-    `altitude_minimale_sol`/`altitude_maximale_toit` (mêmes noms que
-    `roofer-with-ignf-datasets`), complétées autant que possible par
-    `_complete_altitudes` (toit manquant -> sol + `hauteur` ; sol manquant
-    -> toit - `hauteur` -- cascade simplifiée aux 3 champs BD TOPO déjà
-    extraits par `bati.py`, pas les 4 colonnes min/max complètes du script
-    de référence `set_building_attributes.sh`). `roofer_roof.run_roofer`
-    transmet ces deux colonnes via `--h-terrain-attribute`/
-    `--h-roof-attribute` (confirmés dans `roofer --help-all`), utilisés par
-    `roofer` uniquement quand sa couverture LiDAR est insuffisante pour
-    dériver l'altitude sol/toit d'un bâtiment depuis le nuage. Bonus repéré
-    dans `roofer --help-all`, pas configuré explicitement (comportement par
-    défaut conservé) : avec `--clear-insufficient` (vrai par défaut), un
-    bâtiment à couverture insuffisante SANS `--h-roof-attribute` ne recevait
-    aucun modèle de `roofer` (repli pyramidal maison) ; avec l'attribut
-    désormais fourni, `roofer` produit lui-même une extrusion LoD1.1 -- un
-    cas de plus couvert par `roofer` plutôt que par le repli pyramidal du
-    projet.
-  - Validé mécaniquement (tests unitaires ciblés : remap sur une dalle LAS
-    synthétique avec points classés 67, cascade `_complete_altitudes` sur
-    les 4 combinaisons de valeurs manquantes, écriture GPKG des deux
-    colonnes) dans une session Claude Code distante. **Pas encore revalidé
-    sur données réelles** (pas de site configuré dans cette session,
-    confidentialité) : reprendre la comparaison emprise BD TOPO vs pans
-    reconstruits sur le même jeu de 18 bâtiments qui a servi au diagnostic
-    d'origine, lors d'un prochain run complet sur le site.
-- **Un polygone BD TOPO peut englober une structure du camp opposé, corrigé
-  (dans les deux sens).** Constaté sur ce site : un bâtiment classé
-  `"propriete"` avait 33,7 % de son aire qui débordait en réalité sur une
-  parcelle voisine (points LiDAR classés bâtiment confirmés dans la zone de
-  débordement, aucun autre polygone BD TOPO ne couvrant cette zone -- ce
-  n'est pas un défaut de la règle de classification par aire majoritaire,
-  mais une fusion du polygone source lui-même par la vectorisation
-  automatique IGN à grande échelle) ; symétriquement, un bâtiment classé
-  `"voisinage"` avait 26 % de son aire qui débordait sur la parcelle
-  propriété. Sans correction, ce polygone gonflé se propage tel quel à
-  toute la chaîne : l'empreinte donnée à `roofer` (reconstruction 3D qui
-  semble alors "fusionner" les deux structures), `bati_propriete.obj`/
-  `bati_voisinage.obj`, et la pièce visible "Emprise `<id>`" (aire gonflée).
-  **Corrigé dans `bati.py`** (boucle de classification, `main()`) : une fois
-  `classe` déterminée, `geom = geom.intersection(prop_zone)` (bâtiment
-  `"propriete"`, garde la partie sur la propriété) ou `geom.difference(prop_zone)`
-  (bâtiment `"voisinage"`, garde la partie hors propriété) -- le seuil de
-  classification (aire majoritaire > 50 %) garantit que ce clip ne peut
-  jamais devenir vide. `_propriete_ref` suffixe désormais l'id/nom par index
-  de ring quand un bâtiment en a plusieurs (même convention que
-  `roofer_roof.cleabs_for`), pour ne jamais faire collisionner deux niveaux
-  SH3D "Emprise `<id>`" si ce clip produit un jour un `MultiPolygon` (pas
-  observé sur ce site aujourd'hui). `verif.py` contrôle désormais, dans les
-  deux sens, que l'empiétement d'un bâtiment sur le camp opposé reste quasi
-  nul (<2 m², pas 26-33 %). Réserve honnête : ce fix corrige à coup sûr
-  l'emprise/l'aire (calcul Python déterministe) et très probablement
-  l'essentiel de la fusion visuelle du toit, mais rien ne garantit à 100 %
-  le comportement interne de `roofer` (boîte noire externe, GPLv3) pour
-  l'ajustement des pans de toit tout près de cette nouvelle limite.
-- **Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
-  dans le dépôt comme filet de comparaison**, pas de purge pour l'instant.
-  Les deux fixes de couverture `roofer` ci-dessus sont désormais appliqués
-  (remap classe 67, attributs d'altitude), mais -- comme noté juste au-dessus
-  -- pas encore revalidés sur données réelles faute de site configuré dans
-  la session qui les a écrits. Tant que cette revalidation (même jeu de 18
-  bâtiments que le diagnostic d'origine) n'a pas eu lieu, purger le filet de
-  comparaison serait prématuré : revisiter cette décision une fois la
-  revalidation faite.
-- **Investigué et écarté pour l'instant (issue #24) : crop LiDAR streamé
-  (COPC) en remplacement du téléchargement de dalle entière.** Les dalles
-  LiDAR HD IGN sont bien diffusées au format COPC (`.copc.laz`, confirmé en
-  inspectant `ignfab/roofer-with-ignf-datasets` : `readers.copc` PDAL ciblé
-  sur la même colonne `url` que celle que `cg.lidar_tile_index` lit déjà) --
-  un crop spatial est donc structurellement possible côté serveur. Mais :
-  - `copclib` (bindings Python du moteur COPC, wheels manylinux précompilées
-    sur PyPI pour CPython 3.9-3.13 -- pas de sudo/conda requis, contrairement
-    à PDAL) ne résout PAS le problème réseau visé ici : son unique classe
-    exposée en Python, `FileReader(path)`, ne lit qu'un fichier LOCAL déjà
-    complet -- le constructeur C++ générique sur `std::istream*` (qui
-    permettrait en théorie un flux HTTP custom) n'est pas exposé côté
-    bindings Python (vérifié dans `python/bindings.cpp` du dépôt
-    `RockRobotic/copc-lib`). L'installer n'évite donc pas de télécharger la
-    dalle entière au préalable.
-  - Un vrai crop réseau demanderait un client Range-HTTP maison (parser les
-    VLR COPC info/hiérarchie via `requests`, ne récupérer que les chunks des
-    nœuds octree qui intersectent la bbox, reconstruire un fichier COPC
-    local partiel/sparse pour le passer ensuite à `copclib.FileReader`) :
-    faisable en pur Python (aucune nouvelle dépendance native), mais un
-    travail d'implémentation substantiel et une nouvelle surface de bugs,
-    pour un gain (moins de `ConnectionResetError`) documenté comme
-    "potentiellement lié", jamais mesuré.
-  - Le mécanisme de résilience existant (cache disque permanent
-    `data/net_cache`/`data/lidar_cache`, jamais retéléchargé une fois en
-    cache ; boucle réessayer/sauter/arrêter de `run.sh`/`run.ps1` en cas
-    d'échec réseau) couvre déjà le problème en pratique.
-  - PDAL natif reste écarté pour la raison d'origine (dépendance système,
-    deux échecs déjà documentés sur ce même obstacle d'installation :
-    `ign-pdal-tools`, Entwine).
-  - Décision : ne pas engager ce travail maintenant. À reconsidérer
-    seulement si les erreurs réseau redeviennent un blocage récurrent réel
-    (pas seulement théorique) en usage normal du pipeline.
+Cette section garde l'état **courant** de chaque point dur (ce qu'il faut
+savoir pour travailler correctement dessus). L'historique des investigations
+qui a mené à cet état (essais, mesures, sessions successives, pistes
+rejetées) vit dans `docs/journal-technique.md`, pointé section par section
+ci-dessous quand il existe.
 
-- **Dependance externe optionnelle : `arbaro`** (implementation Java de
-  l'algorithme Weber & Penn de generation procedurale d'arbres,
-  https://github.com/wdiestel/arbaro, **licence GPL-2**) -- variete des
-  arbres (issues #81/#82) : silhouettes conifere/feuillu/arbuste generees
-  par `src/arbaro_tree.py`, appele en sous-processus CLI depuis
-  `vegetation.py`/`build_home.py` (meme principe que roofer : aucun code
-  arbaro copie/lie). Contrairement a roofer, **optionnel** : binaire absent
-  (`arbaro_tree.find_arbaro_jar` -> None) -> `prepare_species_models`
-  renvoie `{}`, tous les arbres reutilisent le gabarit unique historique
-  (`assets/tree.obj`, comportement inchange), jamais bloquant.
-  Pas d'installeur officiel ni de binaire Linux precompile publie (a la
-  difference de roofer) -- a construire depuis les sources (`javac`/`jar`,
-  package `gui/` exclu -- inutile en CLI, memes exclusions que
-  `arbaro_cmd.jar` officiel) ou recuperer l'archive SourceForge `1.9.9` ;
-  chemin renseigne dans `[tools].arbaro_jar` (`config/site.local.toml`).
-  L'image CI (`Dockerfile`) le construit automatiquement depuis un commit
-  git fige (`ARBARO_COMMIT`).
-  **Les 3 presets d'espece** (`assets/arbaro_species/*.xml`) sont des
-  parametres Weber & Penn ORIGINAUX ecrits par ce projet -- PAS une copie
-  des arbres de demonstration du depot arbaro (`trees/*.xml`, ex.
-  `tamarack.xml`) : un preset de demonstration standard (Levels=3, ~75x50
-  branches, CurveRes=8) produit environ 300 000 faces pour un seul arbre
-  (29 Mo en OBJ, mesure dans cette session) -- beaucoup trop lourd pour un
-  objet repete dans une scene SH3D face au gabarit historique (~5000 faces,
-  165 Ko). Les 3 presets (Levels=2, ~25-35 branches, CurveRes=3,
-  `--smooth 0.0`) visent le meme ordre de grandeur (~5000-6000 faces),
-  verifie sur les 3 archetypes lors de cette session.
-  **Bug CLI arbaro confirme dans cette session** (`arbaro.java`, toutes
-  versions du depot a ce jour) : `--uvleaves`/`--uvstems` incrementent
-  l'index d'argument une fois DE TROP (`i++` en plus de l'increment normal
-  de la boucle `for`), ce qui avale silencieusement l'option suivante --
-  observe concretement : place juste avant `-o <fichier>`, ce dernier est
-  saute et le nom du fichier de sortie est pris a tort comme fichier
-  D'ENTREE (`FileNotFoundException` sur le chemin de sortie). Contournement
-  applique dans `arbaro_tree.py` : ces deux options ne sont jamais passees
-  (inutiles ici, les `.mtl` ecrits par ce projet sont des couleurs plates
-  sans texture, cf. convention ".mtl 100% mat" ci-dessus).
-  **Pas de detection d'essence reelle** : `vegetation.py::_classify_essence`
-  est une heuristique grossiere a 2 indices (forme du houppier depuis le MNH
-  + teinte depuis l'ortho) choisissant entre les 3 archetypes ci-dessus,
-  pas une identification botanique -- aucun outil open source mature trouve
-  en recherche documentaire pour aller plus loin (cf. issue #81 §3, vide
-  constate apres recherche).
-  **Bug SweetHome3D confirme sur donnees reelles (run CI `generation.yml`
-  #16) et corrige** : `HomeContentContext.lookupContent` (bibliotheque
-  SweetHome3D, appelee par `HomeXMLHandler`/`Conv.java` lors de la
-  conversion `Home.xml` -> `.sh3d`) cache le `Content` resolu par le
-  PREMIER SEGMENT du chemin `model=`, pas le chemin complet -- confirme par
-  reproduction minimale isolee (faire varier tour a tour name/creator/
-  catalogId/icon/elevation/niveau/ordre de lecture ne change rien, seul le
-  premier segment du chemin importe). Consequence concrete : tant que tous
-  les arbres ecrivaient `model='tree/{model_key}.obj'` (meme premier
-  segment `tree/` pour toutes les variantes), TOUS les arbres du `.sh3d`
-  final heritaient du Content du PREMIER arbre resolu -- silhouette
-  identique partout (verifie par rendu SunFlow HIGH cible sur des arbres de
-  hauteurs tres differentes, meme maillage exact sur les 76 arbres du site
-  reel) malgre un calcul et un embarquement corrects en amont (7 fichiers
-  OBJ distincts bien presents dans le `.sh3d`, jamais utilises). Corrige
-  dans `build_home.py` : chaque modele espece x variante ecrit desormais
-  dans son PROPRE dossier de premier niveau (`{model_key}/{model_key}.obj`
-  + `.mtl` duplique dans ce meme dossier, plus de partage inter-variantes)
-  au lieu d'un dossier `tree/` commun -- verifie par reproduction minimale
-  (7 modeles, 7 objets `Content` distincts apres le fix, contre 1 seul
-  avant), **et confirme sur le run CI reel suivant** (`generation.yml` #17 +
-  `render.yml` #18, apres merge du fix) : les 76 arbres du site reel
-  portent bien chacun leur propre modele espece x variante (verifie par
-  lecture directe du `Home` du `.sh3d` produit).
-  **Feuillage "conifere" quasi invisible au rendu, corrige** : en
-  inspectant les images reelles de `render.yml` #18, des arbres apparaissent
-  reduits a un squelette tronc/branches nu, sans feuillage -- confirme (pas
-  suppose) etre lie a l'archetype "conifere" par rendu comparatif cible
-  (meme `.sh3d`, meme camera/distance/qualite, especes differentes cote a
-  cote) : mesure de l'aire des quads du groupe `leaves` par fichier OBJ,
-  aiguilles du conifere ~20x plus petites en surface que feuillu/arbuste
-  (coherent avec `LeafScale`/`LeafScaleX` 0.10/0.2 contre 0.20/0.8 et
-  0.22/0.8) -- sous le seuil d'echantillonnage SunFlow (qualite `low`,
-  defaut de `render.yml`) a distance de camera normale. Effet d'echelle de
-  l'arbre exclu comme explication unique (teste : un grand conifere,
-  10,8 m, montre un feuillage tout aussi clairseme qu'un petit, 5,1 m, a
-  taille apparente egalisee) ; hypotheses memoire JVM et geometrie
-  corrompue egalement ecartees (cf. `ModelManager.loadModel` source reelle :
-  aucun `Error`/`OutOfMemoryError` intercepte, seulement des exceptions de
-  format ; aucune face degeneree mesuree dans les 7 fichiers OBJ). Corrige
-  dans `assets/arbaro_species/conifere.xml` (`LeafScale` 0.10->0.18,
-  `LeafScaleX` 0.2->0.35, nombre de faces quasi inchange) -- valide par
-  rendu comparatif avant/apres (meme seed, meme distance) dans une session
-  Claude Code distante : feuillage nettement plus couvrant, silhouette
-  "aiguilles" toujours plus fine que feuillu/arbuste. **Revalidee de bout
-  en bout sur le site reel** (`render.yml` #19, apres merge du fix) :
-  meme arbre comparee avant/apres sur les images reelles -- squelette nu
-  au run #18, feuillage clairseme mais visible au run #19.
-  **Densite de branches insuffisante pour les 3 archetypes, etudiee sur
-  sources documentaires** : meme apres le fix LeafScale ci-dessus,
-  utilisateur juge le conifere pas assez dense. Etude systematique des
-  3 presets (`assets/arbaro_species/*.xml`) contre des sources reelles du
-  meme algorithme plutot qu'un reglage a l'oeil :
-  - Article original **Weber & Penn, "Creation and Rendering of Realistic
-    Trees", SIGGRAPH 1995** (PDF recupere et parse par cette session,
-    `pypdf` -- `pdftoppm`/poppler indisponible) : annexe "Parameter List"
-    donne les valeurs completes pour 4 especes reelles (Quaking Aspen,
-    Black Tupelo, Weeping Willow, CA Black Oak). Quaking Aspen ET Black
-    Tupelo s'accordent sur `1Branches=50` (contre 28 dans notre
-    `feuillu.xml` d'origine). Table 2 du meme article (nombre de triangles
-    par niveau selon la distance de vue, sur un Quaking Aspen) : les
-    branches de niveau 2 tombent a 0 triangle au-dela de 30 m, alors que le
-    niveau 1 et les feuilles restent significatifs bien plus loin --
-    justifie de rester sur `Levels=2` pour les 3 archetypes (la densite
-    percue a distance de rendu normale vient du niveau 1 et des feuilles,
-    pas d'un niveau 2 supplementaire) plutot que de chercher a reproduire
-    la structure a 3-4 niveaux des especes reelles.
-  - Presets communautaires du meme algorithme, `arbaro/trees/*.xml`
-    (clone depuis le commit du `Dockerfile` dans une session Claude Code
-    distante) : `tamarack.xml` (conifere reel, `1Branches=75`, contre 30
-    dans notre preset d'origine) ; `desert_bush.xml` (arbuste/buisson reel,
-    `1Branches=9` mais compense par un niveau 2 a 40 branches).
-  - **Essai rejete** : ajouter un niveau 2 allege (conifere, `Levels=3`,
-    `2Branches=12`, `CurveRes` reduit a 1-2) pour se rapprocher de la
-    structure reelle a plusieurs niveaux : 48139 faces pour un seul arbre
-    (le nombre de feuilles se multiplie par `1Branches x 2Branches`, pas
-    leur somme) -- confirme le probleme deja documente plus haut pour le
-    preset de demo standard arbaro, et coherent avec la Table 2
-    ci-dessus (niveau 2 inutile a distance de rendu normale).
-  - **Corrige** : `1Branches` releve a la valeur reelle exacte pour
-    `conifere.xml` (30->75, `tamarack.xml`) et `feuillu.xml` (28->50,
-    Quaking Aspen/Black Tupelo). `arbuste.xml` **inchange** (`1Branches=22`) :
-    copier litteralement le `9` de `desert_bush.xml` rendrait l'arbuste
-    MOINS dense sans le niveau 2 compensatoire qu'on n'ajoute pas (meme
-    raison que le point precedent) -- deviation deliberee de la source pour
-    cet archetype, arbuste deja juge visuellement adequat dans tous les
-    rendus de cette session. Valide par rendu comparatif avant/apres (meme
-    seed, meme distance, les 5 configurations cote a cote) ET par un rendu
-    complet des 76 arbres du site reel avec les nouveaux modeles substitues
-    (`ContentDigests` du `.sh3d` recalcule normalement par le pipeline reel,
-    contourne uniquement pour ce test ponctuel sur un fichier deja genere) :
-    13,7 s contre environ 11 s avant (qualite low, meme camera), ecart
-    negligeable, aucun artefact ni fouillis visuel constate. **Pas encore
-    revalidee sur le site reel** (pas de site configure dans cette session,
-    confidentialite) : a reprendre lors d'un prochain run complet.
-  - **Revalidee sur le site reel (`generation.yml` #19, post-merge du fix
-    ci-dessus) : le conifere reste juge insuffisamment dense par
-    l'utilisateur -- investigation approfondie, conclusion inattendue.**
-    Methode corrigee par rapport a une comparaison anterieure jugee a tort
-    "sans effet" (portait tres probablement sur un arbuste, jamais
-    retouche, pas un conifere -- 54 % des 76 arbres du site sont des
-    arbustes) : camera `ensemble_rapprochee` recalculee EXACTEMENT depuis
-    les donnees reelles du run (`preview._ensemble_camera` sur
-    `data/bati.json`/`sh3d_payload.json`/`terrain_grid.npz`), positions
-    des 76 arbres extraites du `.sh3d` reel par un outil Java
-    (`HomeFileRecorder`), projection pinhole pour identifier une grappe de
-    VRAIS coniferes dans le rendu CI reel. Validation croisee : un rendu
-    local avec cette camera reconstruite reproduit un compte de pixels de
-    feuillage identique au pixel pres au rendu CI reel (652 px de
-    feuillage sombre dans les deux cas) -- la reconstruction de camera est
-    exacte, pas approximative.
-    - Fix `1Branches` 30->75 ci-dessus : effet reel mesure sur cette
-      grappe (+8,8 % de pixels de feuillage sombre) -- pas nul comme la
-      comparaison anterieure le laissait croire a tort, mais modeste.
-    - Qualite SunFlow `high` au lieu de `low` (meme camera/scene) : +14 %
-      de pixels de feuillage seulement, silhouette toujours clairsemee --
-      ecarte le sous-echantillonnage `low` comme cause principale.
-    - `Levels=3` reequilibre teste (`1Branches=75`, `2Branches=8`,
-      `Leaves=10`/brindille au lieu de 70/branche -- corrige un defaut
-      methodologique de l'essai rejete ci-dessus, qui n'avait pas reduit
-      `Leaves` en ajoutant un niveau, d'ou l'explosion a 48139 faces) :
-      8581 faces (moins cher que l'actuel) mais rendu quasi identique
-      (649 px vs 652) -- les brindilles ne comblent pas les trous percus.
-    - `1Branches=150` teste (x2 de la valeur sourcee `tamarack.xml`,
-      `Levels=2` inchange, 25423 faces contre 12739, faces de feuillage
-      x3,4 car chaque branche ajoutee porte aussi son quota `Leaves=70`) :
-      **655 px de feuillage contre 652 avant -- effet quasi nul**, malgre
-      un quasi-doublement de la geometrie. Patch verifie present dans le
-      `.sh3d` de test (25423 faces confirmees dans l'entree zip) : pas un
-      bug de patch, un vrai plafond.
-    - **Constat** : trois leviers structurellement tres differents
-      (qualite de rendu, structure de branches a `Levels=2` inchange,
-      niveau de ramification supplementaire) produisent tous un effet
-      quasi nul sur le rendu CI reel a qualite `low`/distance normale. Le
-      plafond perçu n'est donc PAS un probleme de configuration arbaro
-      (parametres deja au niveau ou au-dessus de toutes les references
-      documentaires trouvees), mais tres probablement un plafond
-      d'echantillonnage SunFlow a cette qualite/distance : une fois qu'un
-      minimum de geometrie remplit l'enveloppe du houppier a l'ecran,
-      ajouter des branches/feuilles derriere des pixels deja verts ne
-      change rien a un comptage par pixel (SunFlow n'echantillonne pas
-      assez de rayons par pixel a qualite `low` pour distinguer une
-      superposition dense d'une clairsemee).
-    - **Comparaison au houppier reel (ortho IGN, site reel)**, demandee
-      explicitement par l'utilisateur pour trancher si le rendu clairseme
-      correspond a une realite botanique du site ou a un manque du
-      modele : sur 9 conifères reels confiants (hauteur MNH >= 8,5 m,
-      rayon de houppier 4-6 m), coefficient de variation de la luminosite
-      dans le disque du houppier (mesure de solidite/uniformite, insensible
-      a l'exposition -- une mesure par seuil de couleur absolu s'est
-      averee non robuste aux variations d'exposition de la mosaique ortho)
-      median = 0,21 (plage 0,18-0,28), soit une "solidite" 1/(1+CV) ~ 0,83
-      -- **les vrais conifères du site apparaissent bien comme des
-      houppiers pleins/opaques vus du dessus, pas clairsemes**. Confirme
-      que le rendu clairseme du modele arbaro est un ecart reel par
-      rapport a la realite du site, pas une caracteristique botanique
-      attendue -- mais n'aide pas a le corriger, puisque la cause
-      identifiee (plafond d'echantillonnage SunFlow, pas la configuration
-      arbaro) n'est pas addressable cote parametres de l'espece.
-    - **A date, aucun levier cote configuration arbaro (`1Branches`,
-      `Levels`, qualite de rendu jusqu'a `high`) ne resout ce plafond.**
-      Pistes restantes non testees a ce stade : augmenter `LeafScale`/
-      `LeafScaleX` tres au-dela des valeurs botaniques reelles (feuilles
-      artificiellement plus grandes pour depasser le seuil
-      d'echantillonnage, cout : ecart au realisme deja documente comme
-      hors du cadre "source" de cette section) ; ou une qualite de rendu
-      encore superieure a `high` si `PhotoRenderer`/SunFlow l'expose.
-      Aucune des deux n'a ete decidee a ce stade.
-  - **Revalidation confirmee sans changement, puis levier LeafScale non
-    botanique choisi par l'utilisateur et valide -- corrige le plafond.**
-    Un nouveau run reel (`generation.yml` #20 -> `render.yml` #21, commit
-    du merge ci-dessus, aucun changement de code) a ete revalidé avec la
-    meme methode (camera recalculee, meme grappe de coniferes) : 652 px de
-    feuillage, identique au pixel pres a la mesure precedente -- confirme
-    qu'aucune regression ni amelioration n'etait attendue, et que la
-    mesure est reproductible d'un run a l'autre (le seul ecart entre les
-    deux fichiers PNG, 2 octets, est du bruit d'echantillonnage SunFlow,
-    pas un changement de contenu).
-    Face au choix explicite de l'utilisateur ("LeafScale non-botanique"
-    plutot que qualite de rendu superieure), plusieurs paliers testes sur
-    le meme conifere patche dans le `.sh3d` reel (meme camera/grappe de
-    reference), `LeafScale`/`LeafScaleX` relevees ensemble en conservant le
-    rapport largeur/longueur d'origine (silhouette "aiguille" preservee,
-    pas une derive vers une forme en losange) :
-    - 0.18/0.35 (valeur PR#86, reference) : 652 px.
-    - 0.35/0.7 (x2) : 678 px (+4 %).
-    - 0.6/1.2 (x3,3) : 705 px (+8 %).
-    - 1.0/2.0 (x5,5) : 724 px (+11 %) -- gain net et visible en inspection
-      directe du rendu (silhouette nettement plus pleine sur les arbres
-      patches), sans artefact (pas de blocs/losanges visibles).
-    - 1.6/3.2 (x8,9) : 727 px (+11,5 %) -- plateau atteint, gain marginal
-      supplementaire negligeable.
-    **Valeur retenue : `LeafScale`=1.0, `LeafScaleX`=2.0** (le point juste
-    avant le plateau, pas la valeur maximale testee). Contrairement a
-    `1Branches` (qui ajoute de la geometrie, cout en faces/temps de
-    rendu), `LeafScale` ne change que la taille des quads de feuillage
-    deja existants (`Leaves`=70 inchange) : **aucun cout supplementaire de
-    faces ni de temps de rendu** (12739 faces/arbre, identique a avant).
-    **Deviation delibérement non botanique**, assumee et documentee comme
-    telle : ~2,9x plus grand que la reference reelle `tamarack.xml`
-    (0.15/0.35) et ~5,5x la valeur precedente de ce projet (0.18/0.35,
-    elle-meme deja au-dessus du reel pour corriger le sous-echantillonnage,
-    cf. plus haut) -- ne pas reprendre cette valeur comme reference
-    botanique Weber & Penn si ce fichier sert de modele ailleurs. Choisie
-    explicitement par l'utilisateur en connaissance de cause, apres avoir
-    constate qu'aucun levier source (branches, niveaux, qualite de rendu)
-    ne fonctionnait. Pas encore revalidee sur un run `generation.yml`/
-    `render.yml` complet (le test ci-dessus patche un `.sh3d` deja genere,
-    meme methode que les tests precedents de cette section) : a confirmer
-    au prochain run complet du pipeline.
-  - **Revalidee sur un run complet reel (`generation.yml` #21 ->
-    `render.yml` #22, commit du merge ci-dessus) : gain confirme et MEILLEUR
-    que prevu.** 1112 px de feuillage sur la grappe de reference (contre 652
-    avant, et 724 sur le patch-test partiel qui ne modifiait qu'un seul des
-    3 modeles conifere presents dans cette grappe) -- un run complet
-    regenere les 3 variantes (`conifere_0/1/2`) avec la nouvelle valeur, pas
-    une seule, d'ou un gain superieur a l'extrapolation du patch-test.
-    Inspection visuelle directe (grappe ET scene complete) : tous les
-    coniferes du site affichent desormais une silhouette pleine et
-    reconnaissable (forme de sapin classique), sans artefact (pas de bloc ni
-    de losange), coherents entre eux et avec le reste de la vegetation
-    (feuillu/arbuste inchanges). Fix definitivement confirme de bout en
-    bout, plus seulement sur un `.sh3d` patche.
-- **Compatibilite `Plan 3D.sh3d` avec l'appli mobile / Sweet Home 3D
-  Online -- corrigee.** L'appli mobile Sweet Home 3D (eTeks, Google Play/
-  App Store) declare officiellement partager sa compatibilite de format
-  avec **Sweet Home 3D Online** : les deux utilisent le meme moteur JS,
-  `SweetHome3DJS` (transpile depuis le code Java via **JSweet**, projet
-  CINCHEO x eTeks). Ce moteur sait parser du XML (`HomeXMLHandler`
-  transpile) mais **ne sait pas deserialiser l'entree Java `Home`**
-  (`ObjectInputStream`, sans equivalent JS) que `java/Conv.java` ecrivait
-  seule via `HomeFileRecorder` -- confirme empiriquement (pas suppose) en
-  chargeant un `.sh3d` reel dans le **vrai moteur JS officiel eTeks**
-  (memes fichiers `.min.js` que Sweet Home 3D Online, embarques par le
-  paquet npm `@node-projects/sweethome3d-webcomponent`, GPL-2.0) via
-  Chromium headless : echec explicite `No Home.xml entry`, alors que le
-  meme fichier s'ouvre normalement sur le desktop.
-  **Corrige** : `HomeFileRecorder(9, false, null, false, true, false)`
-  (`preferXmlEntry=true`) dans `java/Conv.java` fait ecrire, EN PLUS de
-  l'entree `Home` serialisee (seule lue par le desktop), une entree
-  `Home.xml` via `HomeXMLExporter` -- classe deja integree a
-  `SweetHome3D.jar`, pas une reconstruction maison : les chemins de
-  modeles renumerotes par `ContentDigests` (ex. `cube/cube.obj` ->
-  `1/cube.obj` apres ecriture) y sont donc deja corrects, sans risque de
-  desynchronisation. Sans impact desktop (l'entree `Home` reste lue en
-  priorite) : un seul `.sh3d` reste compatible desktop **et**
-  mobile/Online, sans dupliquer aucun contenu.
-  **Valide de bout en bout** (`tools/mobile_compat_check/`, outil
-  autonome sur le modele de `tools/lidar_view/`) : un plan synthetique
-  committe (`fixture/`, cube + pyramide + 3 niveaux + `furnitureGroup` +
-  `room` + `backgroundImage`, aucune donnee geographique reelle) est
-  assemble en `.sh3d` reel via le meme `java/Conv.java` (`build_fixture.py`,
-  JDK + `SweetHome3D.jar` -- non fournis par le depot), puis charge dans
-  Chromium headless (Playwright) via le vrai moteur JS eTeks
-  (`check.mjs`) : chargement propre (zero erreur), rendu visuellement
-  coherent (capture d'ecran). Integre a `verif.py --mobile-compat` (repli
-  explicite si Node/le paquet npm sont absents, comme les autres
-  dependances externes optionnelles -- mais ECHEC si le chargement
-  lui-meme rapporte une erreur, contrairement a `--render` qui est un
-  simple smoke-test visuel).
-  **Pas encore valide sur un vrai `Plan 3D.sh3d`** d'un site reel (pas de
-  site configure dans la session qui a ecrit ce correctif,
-  confidentialite) : le poids geometrique cumule reel (terrain ~43k
-  faces, toits `roofer` multi-batiments, jusqu'a ~76 arbres `arbaro`) n'a
-  pas ete teste sur ce moteur -- performance/fluidite sur mobile restent
-  a observer sur un run complet (`node tools/mobile_compat_check/check.mjs
-  "Plan 3D.sh3d"`, ou `verif.py --mobile-compat`).
+### Plan 2D intérieur séparé de la modélisation 3D extérieure
 
-- **Visibilite niveau/groupe sur l'appli mobile reelle -- verifie a la
-  main, pas seulement une question de chargement.** Question posee par
-  l'utilisateur : une fois `Plan 3D.sh3d` ouvert sur mobile, peut-on
-  masquer un niveau (ex. Terrain/Vegetation) ou un groupe de mobilier
-  entier, comme sur desktop (`Ctrl+Maj+H` pour un niveau) ? Recherche
-  documentaire d'abord (blog eTeks : l'appli mobile reprend le guide
-  utilisateur desktop sauf impression/photo-video/plugins -- rien
-  d'explicite sur la visibilite ; forum officiel,
-  https://www.sweethome3d.com/support/forum/viewthread_thread,6334 :
-  masquer un element **individuel a l'interieur d'un groupe** sans le
-  degrouper n'a jamais ete implemente, desktop compris -- decision
-  volontaire du developpeur pour eviter de compliquer la gestion de la
-  taille/altitude d'un groupe partiellement visible). Confirme ensuite
-  **empiriquement sur l'appli mobile officielle reelle** (Android,
-  version non consignee -- pas seulement `tools/mobile_compat_check/`, qui
-  teste une bibliotheque JS tierce et ne partage pas forcement la meme
-  interface), avec le fixture synthetique existant de
-  `tools/mobile_compat_check/fixture/` (3 niveaux + un `furnitureGroup`,
-  aucune modification necessaire) :
-  - Masquer un **groupe de mobilier entier** (case "Visible" dans la
-    liste du mobilier) fonctionne sur mobile.
-  - Masquer un **niveau entier** ne fonctionne PAS sur mobile -- aucun
-    equivalent au raccourci desktop `Ctrl+Maj+H` n'est accessible dans
-    l'interface mobile testee.
-  - Masquer un element individuel dans un groupe reste impossible partout
-    (cf. recherche documentaire ci-dessus) -- confirme que l'utilisateur
-    ne faisait rien de travers, c'est la seule granularite de visibilite
-    que ce format/logiciel expose.
-  **Consequence pour une eventuelle "vue mobile" allegee** (pas construite
-  a ce stade) : le seul levier disponible sur mobile est de placer le
-  contenu a masquer/afficher a la demande dans un **groupe de mobilier**,
-  jamais de compter sur le decoupage en niveaux
-  (Cadastre/Terrain/Bati voisinage/Vegetation/"Emprise `<id>`" ne sont pas
-  masquables individuellement sur mobile aujourd'hui). Deux points
-  restent a trancher avant de coder quoi que ce soit dans cette direction :
-  `viewable`/`visible` sont des proprietes du fichier, pas du visionneur --
-  un etat par defaut adapte au mobile s'appliquerait aussi a l'ouverture
-  desktop du meme `Plan 3D.sh3d` (probablement besoin d'un second export
-  dedie plutot que de modifier le fichier canonique) ; et mur + toit d'un
-  meme batiment propriete sortent de `roofer_roof.py`/`bati.py` comme un
-  seul solide multi-materiaux (une seule piece SH3D, cf. "Decoupage en
-  groupes de materiau" plus haut) -- masquer le toit seul en gardant les
-  murs visibles demanderait de scinder ce solide en deux pieces
-  distinctes, hors de portee d'un simple attribut de visibilite.
+`interieur_init.py`, `fusion_interieur.py`, `.github/workflows/interieur.yml` :
+le pipeline de génération ne modélise que l'extérieur géoréférencé
+(parcelle/terrain/bâtis/végétation) -- l'agencement intérieur réel d'un
+bâtiment (pièces, cloisons, mobilier) n'a aucune source IGN et se dessine à
+la main.
+
+`interieur.yml` (`workflow_dispatch`) télécharge le dernier artefact
+`Plan 3D` de `generation.yml` (`data/meta.json`/`bati.json`/
+`bati_propriete_ref.json`, ajoutés à cet artefact pour ce besoin -- même
+niveau de sensibilité que le reste, déjà la géométrie exacte du site),
+lance `interieur_init.py` dans l'image CI et publie `interieur/*.sh3d` en
+artefact `Interieurs` -- aucun secret de site requis (même principe que
+`render.yml` : valeurs fictives, seul le parsing de `sitegeo.py` l'exige).
+Ne couvre QUE la création initiale : l'édition et la fusion
+(`fusion_interieur.py`) restent toujours locales, ces étapes ont besoin des
+fichiers édités à la main (jamais versionnés, jamais publiés en CI).
+
+`interieur_init.py` crée un `.sh3d` PAR bâtiment propriété
+(`interieur/<id>.sh3d`, un niveau par étage BD TOPO, repli à 1 si
+absent/NaN) avec un `<room>` "guide" par niveau reproduisant l'emprise
+exacte du bâtiment (même géométrie que le `<room>` "Emprise `<id>`" de
+`build_home.py`) -- convention de calage visuelle, PAS un verrou : SH3D n'a
+pas de mécanisme de lock sur `<room>`, rien n'empêche une
+suppression/modification accidentelle. Ne réécrit **jamais** un fichier
+déjà présent (travail manuel utilisateur). **Même repère plan absolu** (cm,
+origine Lambert-93 du site) que `Plan 3D.sh3d` -- pas de repère local par
+bâtiment : les murs dessinés dans l'appli native atterrissent directement à
+la bonne position réelle, ce qui évite toute translation de coordonnées à
+la fusion (le point le plus fragile d'un tel mécanisme).
+
+`fusion_interieur.py` fusionne ponctuellement (jamais dans `run.sh`/
+`generation.yml` par défaut, jamais automatique) les `interieur/*.sh3d`
+dans `Plan 3D.sh3d` -> **nouveau fichier séparé** `Plan 3D (avec
+interieur).sh3d`, ne modifie jamais `Plan 3D.sh3d` lui-même (cycles de vie
+découplés : génération extérieure automatique vs édition intérieure
+manuelle). Format XML natif **vérifié avant d'écrire le parseur** (JDK +
+`SweetHome3D.jar`, programme Java jetable) plutôt que supposé : un objet
+(`<wall>`/`<pieceOfFurniture>`/`<room>`) porte un attribut `level='...'`
+explicite dès qu'il y a plusieurs niveaux dans le fichier (absent seulement
+si un seul niveau existe -- cas alors sans ambiguïté) ; un meuble de
+catalogue embarque sa propre copie de modèle/icône dans le zip sous forme
+d'entrées numériques (`model='1'`, `icon='0'`), jamais une référence
+catalogue pure -- `fusion_interieur.py` ne copie donc que les entrées zip
+réellement référencées par les éléments retenus (jamais `Home`/
+`ContentDigests`, artefacts internes à l'écriture Conv.java du fichier
+source), sous un préfixe par bâtiment, et réécrit les attributs `model=`/
+`icon=`/`planIcon=`/`image=`/`texture=` en conséquence. `elevationIndex`
+(ordre d'affichage des niveaux, sans rapport avec la géométrie -- confirmé
+par le gabarit `home_template.xml`, 5 niveaux à la même `elevation='0.0'`
+mais des `elevationIndex` différents) est réattribué en continu après le
+plus grand déjà utilisé côté extérieur ; chaque niveau/élément intérieur
+reçoit un id UUID frais (pas seulement les niveaux -- y compris `<room>`/
+`<wall>`/`<pieceOfFurniture>`/`<furnitureGroup>`, `wallAtStart`/`wallAtEnd`
+réécrits en conséquence), stratégie purement additive qui ne touche jamais
+aux niveaux/emprises extérieurs existants. Nécessaire même si les ids
+source sont des UUID a priori uniques : un `interieur/<id>.sh3d` dupliqué à
+la main (copie du fichier lui-même) pour amorcer un 2e bâtiment
+reproduirait des ids identiques -- sans ce remap, deux fichiers source
+distincts pourraient collisionner sur le même id dans le `Home.xml` fusionné
+et casser la résolution de `wallAtStart`/`wallAtEnd` par `HomeXMLHandler`.
+`Plan 3D (avec interieur).sh3d` existant est sauvegardé en `.sh3d.bak` avant
+réécriture, même logique que `Plan 3D.sh3d`/`build_home.py`.
+
+Sauvegarde normale (Ctrl+S) dans l'appli desktop réelle : **confirmé** (pas
+supposé) par désassemblage de `SweetHome3D.class` dans le `.jar` 7.5 pinné
+par le `Dockerfile` -- le `HomeFileRecorder` par défaut de l'appli
+(`getHomeRecorder()`, utilisé pour un enregistrement normal, comme sa
+variante `COMPRESSED`) passe déjà `preferXmlEntry=true`, exactement comme
+`java/Conv.java` -- une édition puis sauvegarde native écrira donc bien
+l'entrée `Home.xml` que `fusion_interieur.py` lit.
+
+> [!WARNING]
+> Mécanisme validé de bout en bout sur une fixture synthétique (2 bâtiments,
+> murs joints, meuble de catalogue, ids dupliqués -- tous résolus sans
+> collision), mais **pas encore sur un site réel** avec un vrai bâtiment
+> édité dans l'appli desktop. Détail de la validation :
+> `docs/journal-technique.md`.
+
+### Repère plan figé
+
+`data/meta.json`, origine Lambert-93 calculée en Phase 1, réutilisée telle
+quelle partout. `verif.py` la contrôle.
+
+### `sitegeo.META`
+
+Proxy paresseux (`meta.json` n'existe pas au 1er run).
+
+### Winding OBJ
+
+`write_obj` écrit y-up (réflexion) -> faces émises `f c b a` pour ne pas
+être cullées ; invariant contrôlé par `verif.py` (`_check_closed_mesh` :
+0 arête ouverte + volume signé positif, calculé par une formule maison --
+`PolyData.volume`/vtkMassProperties ne convient pas, il renvoie une
+magnitude insensible au winding) sur `terrain.obj`/`haies.obj` (les seuls
+OBJ garantis fermés par construction).
+
+### Ancrage sol
+
+Objets posés à `cg.terrain_z_at(x, y)` = altitude de la **surface du
+maillage** (pas le MNT brut 0,5 m ; le maillage est à 2 m).
+
+### Emprises `<room>` visibles des bâtiments propriété
+
+Un `<room>` SH3D n'a pas d'élévation propre, seulement celle de son niveau
+(`<level elevation=...>`, partagée par tout ce qui y est placé) --
+contrairement à un `<pieceOfFurniture>` qui porte son propre `elevation`.
+Un niveau *Bâti propriété* unique (élévation 0.0, cf. gabarit) suffit pour
+les pièces de repère invisibles existantes (`floorVisible='false'`, ne
+servent qu'aux étiquettes 2D -- la vraie géométrie vient de
+`bati_propriete.obj`, ancré lui via `cg.terrain_z_at` par bâtiment). Mais
+une emprise VISIBLE (demandée pour matérialiser au sol le contour d'un
+bâtiment) sur ce même niveau partagé se retrouverait clippée dans le
+maillage terrain dès que celui-ci dépasse l'élévation du niveau -- constaté
+sur le site réel : jusqu'à ~2,5 m d'écart de sol entre deux bâtiments
+propriété.
+
+Solution : `bati.py` calcule, par emprise
+(`bati_propriete_ref.json[footprints[].sol_max_cm]`, même ordre que les
+commandes `create_room_polygon`), le point de terrain le plus haut sous
+cette emprise (`cg.terrain_z_at` sur ses sommets) ; `build_home.py` lit
+cette valeur telle quelle (aucun nouvel appel `cg.terrain_z_at`, conforme à
+son propre rôle d'assembleur hors-ligne depuis `data/`) et crée un niveau
+dédié par bâtiment ("Emprise `<id>`", id privé -- jamais dans `LEVELS`, le
+registre stable du gabarit, passé explicitement à `_room` via son paramètre
+`levels`), élévation = `sol_max_cm` + `FOOTPRINT_CLEARANCE_CM` (3 cm) --
+jamais clippée, quitte à légèrement flotter au-dessus du terrain sur les
+coins bas d'une emprise en pente (compromis assumé : une pièce reste un
+plan plat, pas un maillage suivant le relief).
+
+### `.mtl` 100 % mat
+
+`Ka 0`, `Ks 0`, `Ns 1`, `illum 1` (`write_mtl`).
+
+### Génération `.sh3d`
+
+Le loader Sweet Home 3D exige l'entrée `Home` sérialisée Java -> produite
+par `java/Conv.java` (JDK requis). Un `.sh3d` avec seulement `Home.xml` est
+rejeté. Voir `docs/PIPELINE.md`.
+
+### Plugin MCP Sweet Home 3D
+
+`load_home` / `get_state` / `save_home` mésaffichent les niveaux (tout sur
+un calque), bug plugin. La vérité = relecture par `Conv` + ouverture
+native. Ne pas s'y fier pour vérifier les calques.
+
+### `bati.py` `_fnum`
+
+Filtre les NaN (BD TOPO `altitude_maximale_toit` souvent absente sur les
+parcelles voisines) sinon apex de toit NaN -> mesh cassé.
+
+### Cache disque WFS/WMS
+
+`sitegeo._cached`, `data/net_cache/` : le Géoplateforme IGN limite le
+nombre d'accès consécutifs (constaté : `ConnectionResetError` répétées en
+usage normal, PAS une coupure réseau). `wfs_l93`, `wms_getmap` (donc
+`wms_ortho_rgb`/`wms_raster`) et `lidar_tile_index` mettent leur réponse
+déjà parsée en cache disque, indéfiniment.
+
+> [!WARNING]
+> Jamais invalidé automatiquement. Si les données source changent (nouvelle
+> bbox, nouveau site, données BD TOPO/LiDAR mises à jour côté IGN) :
+> `rm -rf data/net_cache` avant de relancer. Même répertoire `data/` que le
+> reste (git-ignore).
+
+### Rendu photo headless
+
+`verif.py --render`, `src/preview.py` : `RenderPhoto.java` compilé comme
+`Conv.java`, moteur SunFlow de Sweet Home 3D. `.jar` et jars de rendu
+auto-détectés (installeur classique + Microsoft Store). Détails, cas Linux
+(`xvfb-run`) et limites : `docs/PIPELINE.md`.
+
+### `roof_lidar.py`
+
+Ancienne méthode de reconstruction du toit multi-pans de la propriété par
+RANSAC direct sur le nuage LiDAR ; **plus appelée par `bati.py`**, remplacée
+par `roofer` (cf. "Dépendance externe : `roofer`" ci-dessous) -- conservée
+dans le dépôt uniquement pour référence/comparaison via `roofer_compare.py`.
+`MIN_INLIERS` RANSAC et `MIN_COMPONENT_PTS` (repli coin en L) y sont
+volontairement bas -- un seuil trop haut traite un vrai pan/segment de
+jonction comme du bruit statistique (constaté : un amas de 3-5 points
+gagnait par hasard le ratio des valeurs singulières devant un amas réel de
+40-80 points). Toujours revalider par cohérence spatiale (composantes
+connexes), jamais par un seul seuil. `None` en sortie (nuage trop petit,
+aucun plan, partition non close) -> repli sur le toit pyramidal côté
+appelant (comportement d'origine, non exercé par le pipeline actuel).
+
+### Solide fermé PyVista
+
+`mesh.volume` (et tout calcul de volume signé) n'est fiable qu'APRÈS
+`compute_normals(auto_orient_normals=True, consistent_normals=True)` --
+`extrude(capping=True)` seul peut laisser des faces à l'envers (constaté :
+volume 2,3x trop grand avant, correct après).
+
+### Dépendance externe : `roofer`
+
+Moteur 3DBAG/TU Delft (https://github.com/3DBAG/roofer, **licence GPLv3**)
+-- **méthode principale** du toit + mur de TOUS les bâtiments (propriété et
+voisinage), appelée depuis `bati.py` via `src/roofer_roof.py` (remplace
+l'ancien `roof_lidar.py`, conservé dans le dépôt pour référence/comparaison
+avec `src/roofer_compare.py`, plus appelés depuis `bati.py`). Non
+redistribué dans ce dépôt : appelé en sous-processus CLI (binaire externe,
+aucun code copié/lié) -- pas de contamination de licence sur le code du
+dépôt. Installation : script officiel `distribution/install.sh` du dépôt
+`roofer` (binaire précompilé Linux x86_64, pas de sudo requis, pose
+`~/.local/bin/roofer`) -- **pas de build Windows officiel** (cf. section
+Environnement). Binaire absent ou en échec -> `roofer_roof.run_roofer`
+renvoie `None`, log explicite, `bati.py` se replie sur le toit pyramidal
+pour tous les bâtiments (jamais d'exception qui remonte). Entrée attendue :
+dalle(s) LAZ IGN (déjà ce que télécharge `cg.lidar_points_l93`, dalle brute
+non filtrée par classe) + empreinte de TOUS les bâtiments du site en un
+seul GeoPackage EPSG:2154 (colonne `cleabs`, un seul appel CLI pour tout le
+lot -- `roofer_roof.write_footprint_gpkg`) ; sortie : CityJSONSequence
+(`*.city.jsonl`), géométrie `Solid` LoD2.2 par bâtiment (portée par le
+`BuildingPart` enfant, PAS le `Building` parent qui porte `cleabs` -- cf.
+`roofer_roof._find_roof_geometry`).
+
+**`roofer_roof.py` consomme le `Solid` de roofer TEL QUEL** (aucune
+reconstruction géométrique propre du mur ni regroupement de faces en pans
+-- ni Union-Find sur les normales, ni ajustement de plan SVD, ni
+extrapolation) : les semantics CityJSON (`GroundSurface`/`WallSurface`/
+`RoofSurface`, `_solid_faces`) donnent directement le type de chaque face
+et son pan d'appartenance (un index de surface `RoofSurface` = un pan
+complet, roofer ne fragmente jamais un pan en plusieurs faces -- vérifié
+sur 18 bâtiments réels). Seul ajout : un décalage vertical RIGIDE (une
+seule translation, jamais de reconstruction par sommet) pour ancrer le
+solide sous le maillage terrain, avec la même marge de sécurité que les
+autres types de bâtiments du pipeline (`base_cm`, calculé par `bati.py`).
+Chaque face est triangulée par éventail-centroïde (ajout du centroïde de la
+face, un triangle par arête) plutôt que via `.triangulate()` générique --
+constaté sur un bâtiment réel : `.triangulate()` (VTK) peut laisser un
+petit trou au milieu d'un pan à forme très étirée/complexe (11 sommets),
+l'éventail-centroïde couvre par construction tout polygone simple, quelle
+que soit sa forme. Approche alignée sur la pratique du projet officiel
+`3DBAG/3dbag-surfaces` (classification par semantics, jamais de
+reconstruction de mur à part) et sur l'algorithme documenté de roofer
+(partition de l'empreinte d'entrée puis extrusion -- garantit que
+l'empreinte du `Solid` en sortie correspond à l'empreinte BD TOPO fournie
+en entrée, vérifié au cm près). Découpage en groupes de matériau pour l'OBJ
+multi-matériaux (mur = Ground+Wall, un groupe par pan coloré via
+`cg.roof_color_from_ortho`) fait sur le solide déjà validé fermé -- ne
+réintroduit pas de trou (les arêtes de bord entre deux groupes restent
+géométriquement coïncidentes, 0 arête ouverte sur les 18 bâtiments
+reconstruits testés, groupes inclus).
+
+Deux garde-fous ajoutés lors d'une revue de code ultérieure (issues
+#35/#42) : un bâtiment `MultiPolygon` (parties disjointes) reçoit un
+identifiant `cleabs` suffixé par polygone (`roofer_roof.cleabs_for`, utilisé
+à la fois par `write_footprint_gpkg` et par l'appelant de `build_roof` dans
+`bati.py`) -- sinon toutes les parties récupéraient à tort le `Solid` de la
+première (même `cleabs` réutilisé) ; un `Solid` avec des faces
+`RoofSurface` mais aucune `GroundSurface`/`WallSurface` (sortie `roofer`
+atypique) est désormais traité comme un échec de reconstruction (repli
+pyramidal) plutôt que de produire un toit flottant sans mur.
+
+`roofer_compare.py` corrige un bug connu de roofer 1.1.0-beta.1
+(`rf_h_ground` mal recalé par rapport à `transform.translate[2]`, n'affecte
+que les attributs CityJSON de comparaison, jamais la géométrie que consomme
+`roofer_roof.py`).
+
+`roofer_roof.write_footprint_gpkg` écrit, en plus de `cleabs` + géométrie,
+les colonnes `altitude_minimale_sol`/`altitude_maximale_toit` (mêmes noms
+que le script officiel IGN
+[`ignfab/roofer-with-ignf-datasets`](https://github.com/ignfab/roofer-with-ignf-datasets)),
+complétées autant que possible par `_complete_altitudes` (toit manquant ->
+sol + `hauteur` ; sol manquant -> toit - `hauteur`). `roofer_roof.run_roofer`
+transmet ces deux colonnes via `--h-terrain-attribute`/`--h-roof-attribute`,
+utilisés par `roofer` uniquement quand sa couverture LiDAR est insuffisante
+pour dériver l'altitude sol/toit d'un bâtiment depuis le nuage -- corrige un
+déficit de couverture systémique (jusqu'à 55 % de l'emprise non couverte
+sur certains bâtiments avant ce fix, issues #22/#23). Deuxième cause du
+même diagnostic : les dalles LAZ IGN brutes contiennent des points classés
+**67 (« Divers -- bâtis »)**, hors nomenclature ASPRS, invisibles pour
+`roofer` (qui ne regarde que `--bld-class`/`--grnd-class`, défauts 6/2) --
+`roofer_roof._remap67` (appelée par `lidar_tile_paths`) les remap 67 -> 6 en
+pur laspy/numpy (pas de dépendance PDAL), sur une copie mise en cache disque
+dans `data/lidar_cache/roofer_remap67to6/` (jamais le fichier source). Une
+dalle dont le remap échoue est fournie à `roofer` sans remap plutôt
+qu'écartée -- dégrade la couverture, ne bloque jamais l'appel.
+
+`bati.py` clippe chaque bâtiment à son camp après classification
+(`geom.intersection(prop_zone)` pour `"propriete"`,
+`geom.difference(prop_zone)` pour `"voisinage"`) : un polygone BD TOPO peut
+englober une structure du camp opposé (constaté sur le site réel, jusqu'à
+33,7 %/26 % d'aire débordante selon le sens -- fusion du polygone source par
+la vectorisation IGN à grande échelle, pas un défaut de la règle de
+classification). `_propriete_ref` suffixe l'id/nom par index de ring quand
+un bâtiment en a plusieurs, pour ne jamais faire collisionner deux niveaux
+SH3D "Emprise `<id>`" si ce clip produit un `MultiPolygon`. `verif.py`
+contrôle désormais, dans les deux sens, que l'empiétement d'un bâtiment sur
+le camp opposé reste quasi nul (<2 m², pas 26-33 %).
+
+> [!NOTE]
+> Réserve honnête sur ce dernier fix : corrige à coup sûr l'emprise/l'aire
+> (calcul Python déterministe), mais rien ne garantit à 100 % le
+> comportement interne de `roofer` (boîte noire externe, GPLv3) pour
+> l'ajustement des pans de toit tout près de la nouvelle limite.
+
+> [!IMPORTANT]
+> Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
+> dans le dépôt comme filet de comparaison, pas de purge pour l'instant --
+> à revisiter une fois les fixes de couverture ci-dessus revalidés sur
+> données réelles (pas encore fait, cf. `docs/journal-technique.md`).
+
+> [!NOTE]
+> Crop LiDAR streamé (COPC) en remplacement du téléchargement de dalle
+> entière : investigué et écarté pour l'instant (issue #24, dépendance
+> PDAL/limites des bindings Python `copclib`, cf.
+> `docs/journal-technique.md` pour le détail) -- à reconsidérer seulement
+> si les erreurs réseau redeviennent un blocage récurrent réel.
+
+Historique complet des investigations ci-dessus (bug roofer 1.1.0-beta.1,
+diagnostic de couverture, diagnostic camp-opposé, décision COPC) :
+`docs/journal-technique.md`.
+
+### Dépendance externe optionnelle : `arbaro` (variété des arbres)
+
+Implémentation Java de l'algorithme Weber & Penn de génération procédurale
+d'arbres (https://github.com/wdiestel/arbaro, **licence GPL-2**) -- variété
+des arbres (issues #81/#82) : silhouettes conifère/feuillu/arbuste générées
+par `src/arbaro_tree.py`, appelé en sous-processus CLI depuis
+`vegetation.py`/`build_home.py` (même principe que roofer : aucun code
+arbaro copié/lié). Contrairement à roofer, **optionnel** : binaire absent
+(`arbaro_tree.find_arbaro_jar` -> None) -> `prepare_species_models` renvoie
+`{}`, tous les arbres réutilisent le gabarit unique historique
+(`assets/tree.obj`, comportement inchangé), jamais bloquant. Pas
+d'installeur officiel ni de binaire Linux précompilé publié (à la
+différence de roofer) -- à construire depuis les sources (`javac`/`jar`,
+package `gui/` exclu -- inutile en CLI) ou récupérer l'archive SourceForge
+`1.9.9` ; chemin renseigné dans `[tools].arbaro_jar`
+(`config/site.local.toml`). L'image CI (`Dockerfile`) le construit
+automatiquement depuis un commit git figé (`ARBARO_COMMIT`).
+
+**Les 3 presets d'espèce** (`assets/arbaro_species/*.xml`) sont des
+paramètres Weber & Penn ORIGINAUX écrits par ce projet -- PAS une copie des
+arbres de démonstration du dépôt arbaro : un preset de démonstration
+standard produit environ 300 000 faces pour un seul arbre (beaucoup trop
+lourd pour un objet répété dans une scène SH3D face au gabarit historique,
+~5000 faces). Les 3 presets (`Levels=2`, `CurveRes=3`, `--smooth 0.0`)
+visent le même ordre de grandeur (~5000-6000 faces). **État courant** (cf.
+`docs/journal-technique.md` pour l'historique du réglage) :
+`conifere.xml` `1Branches`=75, `LeafScale`=1.0, `LeafScaleX`=2.0 ;
+`feuillu.xml` `1Branches`=50 ; `arbuste.xml` `1Branches`=22 (inchangé).
+
+> [!WARNING]
+> `LeafScale`/`LeafScaleX` du conifère sont **délibérément non
+> botaniques** (~2,9x la référence réelle `tamarack.xml`) : compensent un
+> plafond d'échantillonnage SunFlow à qualité `low`/distance normale, pas
+> une caractéristique de l'espèce. Ne pas reprendre ces valeurs comme
+> référence Weber & Penn si ce fichier sert de modèle ailleurs -- détail de
+> l'investigation (pourquoi tous les autres leviers ont échoué) dans
+> `docs/journal-technique.md`.
+
+**Bug CLI arbaro confirmé** (`arbaro.java`, toutes versions du dépôt à ce
+jour) : `--uvleaves`/`--uvstems` incrémentent l'index d'argument une fois
+DE TROP (`i++` en plus de l'incrément normal de la boucle `for`), ce qui
+avale silencieusement l'option suivante -- placé juste avant `-o <fichier>`,
+ce dernier est sauté et le nom du fichier de sortie est pris à tort comme
+fichier D'ENTRÉE (`FileNotFoundException` sur le chemin de sortie).
+Contournement appliqué dans `arbaro_tree.py` : ces deux options ne sont
+jamais passées (inutiles ici, les `.mtl` écrits par ce projet sont des
+couleurs plates sans texture, cf. convention ".mtl 100% mat" ci-dessus).
+
+**Pas de détection d'essence réelle** : `vegetation.py::_classify_essence`
+est une heuristique grossière à 2 indices (forme du houppier depuis le MNH
++ teinte depuis l'ortho) choisissant entre les 3 archétypes ci-dessus, pas
+une identification botanique -- aucun outil open source mature trouvé en
+recherche documentaire pour aller plus loin (cf. issue #81 §3).
+
+**Bug SweetHome3D confirmé sur données réelles et corrigé** :
+`HomeContentContext.lookupContent` cache le `Content` résolu par le
+PREMIER SEGMENT du chemin `model=`, pas le chemin complet -- tant que tous
+les arbres écrivaient `model='tree/{model_key}.obj'` (même premier segment
+pour toutes les variantes), tous les arbres du `.sh3d` final héritaient du
+Content du premier arbre résolu (silhouette identique partout, malgré un
+calcul/embarquement corrects en amont). Corrigé dans `build_home.py` :
+chaque modèle espèce x variante écrit désormais dans son PROPRE dossier de
+premier niveau (`{model_key}/{model_key}.obj` + `.mtl` dupliqué dans ce
+même dossier) au lieu d'un dossier `tree/` commun. Confirmé sur un run CI
+réel (76 arbres du site réel, chacun avec son propre modèle espèce x
+variante) -- détail de la reproduction/investigation :
+`docs/journal-technique.md`.
+
+Historique complet du réglage de densité/feuillage (études SIGGRAPH 1995,
+essais rejetés, mesures en pixels sur plusieurs runs CI réels) :
+`docs/journal-technique.md`.
+
+### Compatibilité `Plan 3D.sh3d` avec l'appli mobile / Sweet Home 3D Online
+
+L'appli mobile Sweet Home 3D (eTeks, Google Play/App Store) déclare
+officiellement partager sa compatibilité de format avec **Sweet Home 3D
+Online** : les deux utilisent le même moteur JS, `SweetHome3DJS` (transpilé
+depuis le code Java via **JSweet**, projet CINCHEO x eTeks). Ce moteur sait
+parser du XML (`HomeXMLHandler` transpilé) mais **ne sait pas désérialiser
+l'entrée Java `Home`** (`ObjectInputStream`, sans équivalent JS) que
+`java/Conv.java` écrivait seule via `HomeFileRecorder` -- confirmé
+empiriquement en chargeant un `.sh3d` réel dans le **vrai moteur JS
+officiel eTeks** (mêmes fichiers `.min.js` que Sweet Home 3D Online,
+embarqués par le paquet npm `@node-projects/sweethome3d-webcomponent`,
+GPL-2.0) via Chromium headless : échec explicite `No Home.xml entry`, alors
+que le même fichier s'ouvre normalement sur le desktop.
+
+**Corrigé** : `HomeFileRecorder(9, false, null, false, true, false)`
+(`preferXmlEntry=true`) dans `java/Conv.java` fait écrire, EN PLUS de
+l'entrée `Home` sérialisée (seule lue par le desktop), une entrée
+`Home.xml` via `HomeXMLExporter` -- classe déjà intégrée à
+`SweetHome3D.jar`, pas une reconstruction maison : les chemins de modèles
+renumérotés par `ContentDigests` y sont donc déjà corrects, sans risque de
+désynchronisation. Sans impact desktop (l'entrée `Home` reste lue en
+priorité) : un seul `.sh3d` reste compatible desktop **et** mobile/Online,
+sans dupliquer aucun contenu. `verif.py --mobile-compat` automatise ce
+contrôle via `tools/mobile_compat_check/` (repli explicite si Node/le
+paquet npm sont absents, comme les autres dépendances externes optionnelles
+-- mais ÉCHEC si le chargement lui-même rapporte une erreur, contrairement
+à `--render` qui est un simple smoke-test visuel). L'image CI embarque
+désormais Node.js + `node_modules`/Chromium (cf. `Dockerfile`), et
+`generation.yml` appelle `verif.py --mobile-compat` sur chaque run.
+
+> [!WARNING]
+> Validé de bout en bout sur une fixture synthétique (chargement propre,
+> rendu cohérent) et le build/l'installation Playwright en CI réels ont
+> réussi, mais **pas encore confirmé sur un `Plan 3D.sh3d` de site réel**
+> au poids géométrique complet (terrain ~43k faces, toits `roofer`
+> multi-bâtiments, jusqu'à ~76 arbres `arbaro`) -- performance/fluidité sur
+> mobile restent à observer sur un run complet. Détail :
+> `docs/journal-technique.md`.
+
+### Visibilité niveau/groupe sur l'appli mobile réelle
+
+Une fois `Plan 3D.sh3d` ouvert sur mobile, peut-on masquer un niveau (ex.
+Terrain/Végétation) ou un groupe de mobilier entier, comme sur desktop
+(`Ctrl+Maj+H` pour un niveau) ? Recherche documentaire d'abord (blog eTeks :
+l'appli mobile reprend le guide utilisateur desktop sauf
+impression/photo-vidéo/plugins -- rien d'explicite sur la visibilité ;
+[forum officiel](https://www.sweethome3d.com/support/forum/viewthread_thread,6334) :
+masquer un élément **individuel à l'intérieur d'un groupe** sans le
+dégrouper n'a jamais été implémenté, desktop compris -- décision volontaire
+du développeur pour éviter de compliquer la gestion de la taille/altitude
+d'un groupe partiellement visible). Confirmé ensuite **empiriquement sur
+l'appli mobile officielle réelle** (Android, version non consignée -- pas
+seulement `tools/mobile_compat_check/`, qui teste une bibliothèque JS tierce
+et ne partage pas forcément la même interface), avec le fixture synthétique
+existant de `tools/mobile_compat_check/fixture/` (3 niveaux + un
+`furnitureGroup`, aucune modification nécessaire) :
+
+- Masquer un **groupe de mobilier entier** (case "Visible" dans la liste du
+  mobilier) fonctionne sur mobile.
+- Masquer un **niveau entier** ne fonctionne PAS sur mobile -- aucun
+  équivalent au raccourci desktop `Ctrl+Maj+H` n'est accessible dans
+  l'interface mobile testée.
+- Masquer un élément individuel dans un groupe reste impossible partout
+  (cf. recherche documentaire ci-dessus).
+
+**Conséquence pour une éventuelle "vue mobile" allégée** (pas construite à
+ce stade) : le seul levier disponible sur mobile est de placer le contenu à
+masquer/afficher à la demande dans un **groupe de mobilier**, jamais de
+compter sur le découpage en niveaux (Cadastre/Terrain/Bâti voisinage/
+Végétation/"Emprise `<id>`" ne sont pas masquables individuellement sur
+mobile aujourd'hui).
+
+> [!NOTE]
+> Deux points restent à trancher avant de coder quoi que ce soit dans cette
+> direction : `viewable`/`visible` sont des propriétés du fichier, pas du
+> visionneur -- un état par défaut adapté au mobile s'appliquerait aussi à
+> l'ouverture desktop du même `Plan 3D.sh3d` (probablement besoin d'un
+> second export dédié plutôt que de modifier le fichier canonique) ; et mur
+> + toit d'un même bâtiment propriété sortent de `roofer_roof.py`/`bati.py`
+> comme un seul solide multi-matériaux (une seule pièce SH3D) -- masquer le
+> toit seul en gardant les murs visibles demanderait de scinder ce solide
+> en deux pièces distinctes, hors de portée d'un simple attribut de
+> visibilité.
 
 ## git
 
