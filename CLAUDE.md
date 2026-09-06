@@ -12,51 +12,62 @@ les commentaires, les docs ou les messages de commit. Avant tout commit :
 `git grep -iE "<commune>|<insee>"` doit être vide. Tout `data/` est git-ignored
 (géométrie exacte du site). `interieur/` (projets `.sh3d` intérieurs par
 bâtiment, cf. Arborescence) et `Plan 3D (avec interieur).sh3d` (sortie de
-`fusion_interieur.py`) le sont aussi -- un plan intérieur réel dévoile
+`fusion_interieur.py`) le sont aussi : un plan intérieur réel dévoile
 l'agencement d'un bâtiment habité, tout aussi sensible que la géométrie
 exacte du site.
 
 ## Environnement
 
-**Le pipeline de génération complet tourne sur Linux/macOS ET Windows**
-(`phase1_cadastre.py` -> `terrain.py` -> `bati.py` -> `vegetation.py` ->
-`courbes.py` -> `build_home.py`, via `./run.sh` ou `.\run.ps1` -- les deux
+**Le pipeline de génération complet tourne sur Linux/macOS et Windows**
+(`phase1_cadastre.py` → `terrain.py` → `bati.py` → `vegetation.py` →
+`courbes.py` → `build_home.py`, via `./run.sh` ou `.\run.ps1`). Les deux
 lancent par défaut, sans argument, exactement les mêmes six étapes dans le
-même ordre). **Seule différence entre les deux OS : le toit des bâtiments
-propriété.** `bati.py` appelle `roofer` (cf. "Points durs" > roofer) pour le
-toit multi-pans, et `roofer` n'a pas de build Windows officiel -- sur
-Windows, `roofer_roof.find_roofer_bin()` renvoie `None` (binaire introuvable)
-et `bati.py` se replie silencieusement sur un toit pyramidal simple pour
-TOUS les bâtiments, **sans planter et sans affecter le reste du pipeline**
-(comportement déjà écrit pour ce cas, pas un contournement ad hoc). Aucun
-autre écart connu : `courbes.py` (`gdal_contour`, cf. `_gdal_contour_cmd`)
-et `build_home.py`/`sh3d_xml.py` (JDK, `java`/`javac` sur le `PATH`)
-fonctionnent nativement sur les deux OS ; `arbaro` (variété des arbres) est
-optionnel des deux côtés, même repli gracieux (gabarit d'arbre unique) s'il
-est absent. `.\run.ps1` (sans argument) lance donc bien le pipeline complet,
-au même titre que `./run.sh` -- seul le toit obtenu diffère (multi-pans vs
-pyramidal). Correction affirmée par lecture de code (`roofer_roof.py`,
-`courbes.py::_gdal_contour_cmd`, `run.ps1`), **pas encore revalidée par un
-run réel sur une machine Windows** dans une session Claude Code (cette
-session tourne sur un conteneur Linux, cf. point 3 ci-dessous) : à confirmer
-au premier retour d'un contributeur Windows.
+même ordre.
+
+> [!NOTE]
+> **Seule différence entre les deux OS : le toit des bâtiments propriété.**
+> `bati.py` appelle `roofer` (cf. Points durs > roofer) pour le toit
+> multi-pans, et `roofer` n'a pas de build Windows officiel. Sur Windows,
+> `roofer_roof.find_roofer_bin()` renvoie `None` (binaire introuvable) et
+> `bati.py` se replie silencieusement sur un toit pyramidal simple pour
+> **tous** les bâtiments, sans planter et sans affecter le reste du pipeline
+> (comportement déjà écrit pour ce cas, pas un contournement ad hoc).
+>
+> Aucun autre écart connu : `courbes.py` (`gdal_contour`, cf.
+> `_gdal_contour_cmd`) et `build_home.py`/`sh3d_xml.py` (JDK, `java`/`javac`
+> sur le `PATH`) fonctionnent nativement sur les deux OS ; `arbaro` (variété
+> des arbres) est optionnel des deux côtés, même repli gracieux (gabarit
+> d'arbre unique) s'il est absent. `.\run.ps1` (sans argument) lance donc
+> bien le pipeline complet, au même titre que `./run.sh` : seul le toit
+> obtenu diffère (multi-pans vs pyramidal).
+>
+> Constat établi par lecture de code (`roofer_roof.py`,
+> `courbes.py::_gdal_contour_cmd`, `run.ps1`), **pas encore revalidé par un
+> run réel sur une machine Windows** dans une session Claude Code (cette
+> session tourne sur un conteneur Linux, cf. point 3 ci-dessous) : à
+> confirmer au premier retour d'un contributeur Windows.
 
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
-- **Jamais** `py` (Python système). **Jamais** `conda run` (casse le multi-lignes).
-- **Ne jamais installer `matplotlib`** dans **cet env conda Windows précisément**
-  -> crash DLL Windows (exit `-1066598273`) : un conflit de bibliothèque
-  natives propre à cette combinaison conda-forge/Windows, sans équivalent
-  connu sous Linux/macOS. `pyvista` OK tant qu'on ne touche pas
-  `pyvista.plotting` / `Plotter` / `.plot()`. `pv.Plane()` casse (même cause) ->
-  `solidify` utilise extrusion + `capping`. **Règle sans objet côté
-  Linux/macOS/Docker** : `pyvista` y déclare `matplotlib` comme dépendance
-  PyPI inconditionnelle (confirmé sur le manifeste `0.48.4`, pas un extra
-  optionnel) — `pip install pyvista` l'installe donc forcément, visible dans
-  les logs de `Dockerfile`/`run.sh`. Sans risque : jamais importé par le code
-  du dépôt (`pyvista.plotting` non plus, cf. ci-dessus), et le crash est
-  structurellement absent sur ces OS. Ne pas essayer de l'exclure
-  (`--no-deps` sur `pyvista` casserait ses autres dépendances réelles).
+- **Jamais** `py` (Python système). **Jamais** `conda run` (casse le
+  multi-lignes).
+- **Ne jamais installer `matplotlib`** dans cet env conda Windows
+  précisément : crash DLL Windows (exit `-1066598273`), un conflit de
+  bibliothèques natives propre à cette combinaison conda-forge/Windows, sans
+  équivalent connu sous Linux/macOS. `pyvista` OK tant qu'on ne touche pas
+  `pyvista.plotting`/`Plotter`/`.plot()`. `pv.Plane()` casse (même cause),
+  d'où `solidify` qui utilise extrusion + `capping`.
+
+  > [!NOTE]
+  > Règle sans objet côté Linux/macOS/Docker : `pyvista` y déclare
+  > `matplotlib` comme dépendance PyPI inconditionnelle (confirmé sur le
+  > manifeste `0.48.4`, pas un extra optionnel). `pip install pyvista`
+  > l'installe donc forcément, visible dans les logs de
+  > `Dockerfile`/`run.sh`. Sans risque : jamais importé par le code du dépôt
+  > (`pyvista.plotting` non plus, cf. ci-dessus), et le crash est
+  > structurellement absent sur ces OS. Ne pas essayer de l'exclure
+  > (`--no-deps` sur `pyvista` casserait ses autres dépendances réelles).
+
 - Les aperçus se font en PIL.
 - **Versions harmonisées** entre `environment.yml` (conda Windows) et
   `requirements-venv.txt` (venv pip Linux/macOS/Docker) : mêmes numéros de
@@ -68,50 +79,55 @@ au premier retour d'un contributeur Windows.
 - **Détection des montées de version** : `.github/dependabot.yml`
   (écosystèmes `pip` sur `config/requirements-venv.txt` et `github-actions`
   sur `.github/workflows/`, chacun groupé en une seule PR mensuelle plutôt
-  qu'une par paquet — réduit le nombre d'allers-retours manuels) ouvre des
-  PR de mise à jour, sans jamais reconstruire ni publier d'image *depuis
-  Dependabot lui-même*. `build-image.yml` reste déclenché par push sur
+  qu'une par paquet, ce qui réduit le nombre d'allers-retours manuels) ouvre
+  des PR de mise à jour, sans jamais reconstruire ni publier d'image
+  *depuis Dependabot lui-même*.
+
+  `build-image.yml` reste déclenché par push sur
   `Dockerfile`/`requirements-venv.txt`, manuellement, ou (depuis l'ajout du
   tag `:<sha>` et de la validation sur PR, ci-dessous) sur toute PR touchant
-  ces mêmes chemins — construction seule, sans publication, pour détecter
-  une PR Dependabot cassante avant le merge plutôt qu'après ; jamais
-  planifié (un rebuild périodique n'apporterait qu'un gain marginal —
-  apt/Debian, seul pan non épinglé du Dockerfile — pour un coût réel). Deux
-  tags publiés hors PR : `:latest` (mutable, seul tag consommé par
+  ces mêmes chemins : construction seule, sans publication, pour détecter
+  une PR Dependabot cassante avant le merge plutôt qu'après. Jamais
+  planifié (un rebuild périodique n'apporterait qu'un gain marginal,
+  apt/Debian étant le seul pan non épinglé du Dockerfile, pour un coût réel).
+
+  Deux tags publiés hors PR : `:latest` (mutable, seul tag consommé par
   `generation.yml`/`render.yml` via le workflow réutilisable
-  `image-name.yml`) et `:<sha>` (immutable) — le risque de tag mono-`latest`
+  `image-name.yml`) et `:<sha>` (immutable). Le risque de tag mono-`latest`
   sans rollback, qui justifiait autrefois ce choix de ne jamais planifier de
   reconstruction, est désormais mitigé par ce second tag (rollback manuel
-  possible sur un commit précis en attendant un correctif). **Toute PR
-  Dependabot sur `requirements-venv.txt` doit être répercutée à la main
-  dans `environment.yml`** (Dependabot ne couvre pas conda). Restent hors
-  périmètre de Dependabot, à vérifier manuellement et occasionnellement :
-  `environment.yml` lui-même, et les pins durs du `Dockerfile` (roofer,
-  Sweet Home 3D — volontairement non automatisés, cf. "Points durs" >
-  roofer).
+  possible sur un commit précis en attendant un correctif).
+
+  > [!IMPORTANT]
+  > Toute PR Dependabot sur `requirements-venv.txt` doit être répercutée à
+  > la main dans `environment.yml` (Dependabot ne couvre pas conda).
+
+  Restent hors périmètre de Dependabot, à vérifier manuellement et
+  occasionnellement : `environment.yml` lui-même, et les pins durs du
+  `Dockerfile` (roofer, Sweet Home 3D, volontairement non automatisés, cf.
+  Points durs > roofer).
 
 ### Trois façons de lancer la génération complète (toit multi-pans)
 
-1. **`./run.sh`** (nouveau, Linux/macOS local ou distant) : port bash de
-   `run.ps1` (mêmes menus, même boucle réessayer/sauter/arrêter), sur
-   `config/requirements-venv.txt` (`.venv/`, créé automatiquement). C'est
-   maintenant le point d'entrée général pour **tout** environnement
-   Linux/macOS, y compris une session Claude Code distante (conteneur Linux
-   éphémère) — qui n'est qu'un cas particulier de ce mode, plus besoin de
-   procédure séparée pour elle. Dans une session Claude Code (pas de
-   terminal interactif persistant entre les appels), préférer
-   `./run.sh --non-interactive` ou appeler `src/*.py` directement plutôt que
-   le menu interactif.
-2. **`.github/workflows/generation.yml`** (GitHub Actions, `workflow_dispatch`) :
-   génère dans une image Docker dédiée (`Dockerfile`, publiée par
-   `build-image.yml` sur `ghcr.io`), sur un runner éphémère à la demande —
-   aucune machine Linux locale requise. Détail complet (secrets, modèle
-   « un repo privé par utilisateur ») dans le README, section « Génération à
-   la demande ».
+1. **`./run.sh`** (Linux/macOS local ou distant) : port bash de `run.ps1`
+   (mêmes menus, même boucle réessayer/sauter/arrêter), sur
+   `config/requirements-venv.txt` (`.venv/`, créé automatiquement). C'est le
+   point d'entrée général pour **tout** environnement Linux/macOS, y compris
+   une session Claude Code distante (conteneur Linux éphémère), qui n'est
+   qu'un cas particulier de ce mode, sans procédure séparée. Dans une
+   session Claude Code (pas de terminal interactif persistant entre les
+   appels), préférer `./run.sh --non-interactive` ou appeler `src/*.py`
+   directement plutôt que le menu interactif.
+2. **`.github/workflows/generation.yml`** (GitHub Actions,
+   `workflow_dispatch`) : génère dans une image Docker dédiée (`Dockerfile`,
+   publiée par `build-image.yml` sur `ghcr.io`), sur un runner éphémère à la
+   demande, aucune machine Linux locale requise. Détail complet (secrets,
+   modèle « un repo privé par utilisateur ») dans le README, section
+   « Génération à la demande ».
 3. **Session Claude Code distante (conteneur Linux éphémère)** : le JDK et
-   le rendu photo headless Sweet Home 3D y fonctionnent — validé de bout en
-   bout (`build_home.py` -> `.sh3d` -> rendu SunFlow réel via
-   `RenderPhoto.java`/`xvfb-run`), à ne pas supposer impossible par défaut :
+   le rendu photo headless Sweet Home 3D y fonctionnent, validé de bout en
+   bout (`build_home.py` → `.sh3d` → rendu SunFlow réel via
+   `RenderPhoto.java`/`xvfb-run`). À ne pas supposer impossible par défaut :
    - JDK (java + javac) déjà présent dans ce type de conteneur.
    - `SweetHome3D.jar` + jars de rendu (`sunflow-*.jar`, `j3dcore.jar`,
      `j3dutils.jar`, `vecmath.jar`, `batik-svgpathparser-*.jar`)
@@ -122,14 +138,17 @@ au premier retour d'un contributeur Windows.
    - `xvfb-run` disponible et nécessaire (cf. limitation Linux dans
      `docs/PIPELINE.md`).
    - `./run.sh` (ou un venv pip manuel) y fonctionne pour lancer `src/*.py`
-     directement, **`verif.py` compris** — validé de bout en bout côté
+     directement, **`verif.py` compris**, validé de bout en bout côté
      imports/exécution avant l'harmonisation des versions ci-dessus (Python
-     3.11 à l'époque, `courbes.py` sauté faute de `gdal_contour`). **Non
-     revalidé depuis** le passage à Python 3.14 harmonisé : si le `python3`
-     par défaut de ce type de conteneur est resté à 3.11, `requirements-venv.txt`
-     (qui exige maintenant Python >=3.12, numpy 2.5.\*) n'installera pas tel
-     quel — prévoir un `python3.12`+ explicite dans ce cas plutôt que
-     supposer que le défaut du conteneur suffit.
+     3.11 à l'époque, `courbes.py` sauté faute de `gdal_contour`).
+
+     > [!WARNING]
+     > **Non revalidé depuis** le passage à Python 3.14 harmonisé. Si le
+     > `python3` par défaut de ce type de conteneur est resté à 3.11,
+     > `requirements-venv.txt` (qui exige maintenant Python >= 3.12,
+     > numpy 2.5.\*) n'installera pas tel quel : prévoir un `python3.12`+
+     > explicite dans ce cas plutôt que supposer que le défaut du conteneur
+     > suffit.
 
 Le hook `SessionStart` (`.claude/hooks/session-start.sh`) reflète cette
 distinction ; le corriger si elle redevient trop générale.
@@ -139,37 +158,37 @@ distinction ; le corriger si elle redevient trop générale.
 Génération complète (toit multi-pans) : `./run.sh` (Linux/macOS, cf.
 Environnement) ou GitHub Actions (`generation.yml`, cf. README). `.\run.ps1`
 ne sert qu'à ouvrir/rendre `Plan 3D.sh3d` sous Windows, ou à lancer un seul
-script isolément (cf. Environnement) — pas la génération complète.
+script isolément (cf. Environnement), pas la génération complète.
 
-```
+```bash
 ./run.sh              # complet : phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home
 ./run.sh verif        # contrôle lecture seule
 ./run.sh terrain bati
 ./run.sh --site x.toml
 ```
 
-```
+```powershell
 .\run.ps1            # idem, mais toit pyramidal seulement (roofer absent sous Windows)
 .\run.ps1 verif      # contrôle lecture seule
 .\run.ps1 terrain bati
 .\run.ps1 -Site x.toml
 ```
 
-**Plan 2D intérieur** (séparé de la génération 3D extérieure, cf. "Points
-durs" > plan 2D intérieur) : jamais dans la génération complète par défaut,
+**Plan 2D intérieur** (séparé de la génération 3D extérieure, cf. Points
+durs > plan 2D intérieur) : jamais dans la génération complète par défaut,
 toujours à la main.
 
-```
-./run.sh phase1_cadastre terrain bati   # prerequis (sol_max_cm par batiment)
-./run.sh interieur_init                 # cree interieur/<id>.sh3d (jamais les existants)
-# ... edition manuelle dans l'appli Sweet Home 3D native ...
+```bash
+./run.sh phase1_cadastre terrain bati   # prérequis (sol_max_cm par bâtiment)
+./run.sh interieur_init                 # crée interieur/<id>.sh3d (jamais les existants)
+# ... édition manuelle dans l'appli Sweet Home 3D native ...
 ./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
 ```
 
 Sans machine Linux/macOS locale : `.github/workflows/interieur.yml`
 (`workflow_dispatch`) fait uniquement la création (`interieur_init.py`), à
 partir du dernier artefact `Plan 3D` déjà publié par `generation.yml` (comme
-`render.yml`, aucun secret de site requis) -> artefact `Interieurs` à
+`render.yml`, aucun secret de site requis) → artefact `Interieurs` à
 télécharger et dézipper dans `interieur/` avant édition locale. La fusion
 (`fusion_interieur.py`) reste toujours locale, jamais en CI : elle a besoin
 des fichiers édités à la main, jamais versionnés.
@@ -182,13 +201,13 @@ des fichiers édités à la main, jamais versionnés.
   optionnel).
 - `assets/` : gabarits stables versionnés (`home_template.xml` neutre,
   `tree.obj/.mtl` gabarit d'arbre historique, `arbaro_species/*.xml` presets
-  de variete des arbres).
+  de variété des arbres).
 - `config/` : `environment.yml` + `site.example.toml` (versionnés) / `site.local.toml` (non).
 - `docs/` : `PIPELINE.md` (détail `.sh3d` + limites). `notice_calage.md` est généré.
 - `data/` : **toutes** les sorties. Ne pas éditer à la main, ne pas versionner.
 - `interieur/` : projets `.sh3d` intérieurs par bâtiment propriété (un
   fichier par emprise/ring, nommé par son id), créés par `interieur_init.py`
-  puis **édités à la main** dans l'appli Sweet Home 3D native -- à l'inverse
+  puis **édités à la main** dans l'appli Sweet Home 3D native, à l'inverse
   de `data/`, jamais réécrit automatiquement par le pipeline de génération
   extérieur (`interieur_init.py` ne touche jamais un fichier déjà présent).
   Git-ignoré (cf. Confidentialité). `src/sh3d_xml.py` : génération de
