@@ -98,21 +98,28 @@ l'agencement intérieur réel.
 1. `interieur_init.py` (après `phase1_cadastre`/`terrain`/`bati.py`) crée
    `interieur/<id>.sh3d`, un fichier par bâtiment propriété (par
    emprise/ring), un niveau par étage BD TOPO, un `<room>` guide par niveau
-   reproduisant l'emprise exacte. Même repère plan absolu que
-   `Plan 3D.sh3d` (pas de repère local par bâtiment). Ne réécrit jamais un
+   reproduisant l'emprise exacte. **Repère LOCAL propre à chaque bâtiment**
+   (pas le repère absolu du site) : l'emprise est ramenée près de l'origine
+   du fichier et alignée sur son rectangle englobant minimal, pour rester
+   visible et pratique à l'édition dans l'appli native (murs sur la grille).
+   La transformation (rotation + translation) est écrite une seule fois dans
+   `interieur/<id>.transform.json`, à côté du `.sh3d`. Ne réécrit jamais un
    fichier déjà présent.
 2. Édition manuelle dans l'appli Sweet Home 3D native (murs, pièces,
    mobilier).
 3. `fusion_interieur.py`, à la main, ponctuellement : lit chaque
    `interieur/<id>.sh3d` (son entrée `Home.xml`, écrite par le même
-   `Conv.java` grâce à `preferXmlEntry=true`), retient les éléments portés
-   par un niveau (`room`/`wall`/`pieceOfFurniture`/`furnitureGroup`/
-   `dimensionLine`/`polyline`/`label`), réattribue à chaque niveau un id
-   frais et un `elevationIndex` continu après celui de `Plan 3D.sh3d`, copie
-   les éventuelles entrées de contenu (modèles/icônes de mobilier)
-   référencées sous un préfixe par bâtiment, puis réinjecte le tout dans le
-   `Home.xml` de `Plan 3D.sh3d` et repasse par `Conv.java` → **nouveau
-   fichier** `Plan 3D (avec interieur).sh3d`. Ne modifie jamais
+   `Conv.java` que ci-dessus grâce à `preferXmlEntry=true`) et son
+   `interieur/<id>.transform.json` (repli sur la transformation identité si
+   absent), retient les éléments portés par un niveau (`room`/`wall`/
+   `pieceOfFurniture`/`furnitureGroup`/`dimensionLine`/`polyline`/`label`,
+   à l'exclusion de la pièce-repère de l'emprise, reconnue par son nom),
+   leur applique la transformation inverse repère local → absolu, réattribue
+   à chaque niveau un id frais et un `elevationIndex` continu après celui de
+   `Plan 3D.sh3d`, copie les éventuelles entrées de contenu (modèles/icônes
+   de mobilier) référencées sous un préfixe par bâtiment, puis réinjecte le
+   tout dans le `Home.xml` de `Plan 3D.sh3d` et repasse par `Conv.java` →
+   **nouveau fichier** `Plan 3D (avec interieur).sh3d`. Ne modifie jamais
    `Plan 3D.sh3d` lui-même.
 
 > [!NOTE]

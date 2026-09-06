@@ -252,14 +252,40 @@ fichiers édités à la main (jamais versionnés, jamais publiés en CI).
 (`interieur/<id>.sh3d`, un niveau par étage BD TOPO, repli à 1 si
 absent/NaN) avec un `<room>` "guide" par niveau reproduisant l'emprise
 exacte du bâtiment (même géométrie que le `<room>` "Emprise `<id>`" de
-`build_home.py`) -- convention de calage visuelle, PAS un verrou : SH3D n'a
-pas de mécanisme de lock sur `<room>`, rien n'empêche une
-suppression/modification accidentelle. Ne réécrit **jamais** un fichier
-déjà présent (travail manuel utilisateur). **Même repère plan absolu** (cm,
-origine Lambert-93 du site) que `Plan 3D.sh3d` -- pas de repère local par
-bâtiment : les murs dessinés dans l'appli native atterrissent directement à
-la bonne position réelle, ce qui évite toute translation de coordonnées à
-la fusion (le point le plus fragile d'un tel mécanisme).
+`build_home.py`, nom `sh3d_xml.GUIDE_ROOM_NAME`) -- convention de calage
+visuelle, PAS un verrou : SH3D n'a pas de mécanisme de lock sur `<room>`,
+rien n'empêche une suppression/modification accidentelle (cette pièce est
+de toute façon exclue automatiquement du résultat de la fusion, cf.
+plus bas). Ne réécrit **jamais** un fichier déjà présent (travail manuel
+utilisateur).
+
+**Repère LOCAL par bâtiment** (pas le repère absolu du site, contrairement
+au choix initial de ce mécanisme) : `interieur_init.py::_local_frame`
+aligne l'emprise sur son rectangle englobant minimal
+(`shapely.oriented_envelope`, rotating calipers) et la ramène près de
+l'origine du fichier -- la plupart des bâtiments étant globalement
+rectangulaires/en L, cela aligne aussi l'essentiel de leurs murs sur la
+grille du plan 2D de l'appli. Contrepartie assumée (le point que le choix
+initial cherchait justement à éviter) : `fusion_interieur.py` doit
+connaître cette transformation pour la défaire à la fusion -- écrite une
+seule fois par `interieur_init.py`, jamais réécrite (même règle que le
+`.sh3d` lui-même), dans un fichier annexe `interieur/<id>.transform.json`
+(`angle_rad`/`x0_cm`/`y0_cm`) ; absent (un `interieur/<id>.sh3d` créé par
+une version antérieure, en repère absolu) -> repli sur la transformation
+identité. Schéma des éléments à transformer **vérifié empiriquement** (JDK
++ `SweetHome3D.jar`, même méthode que le reste de ce mécanisme) :
+`<room>`/`<polyline>` portent leurs points en `<point x= y=/>` imbriqués ;
+`<wall>`/`<dimensionLine>` ont `xStart`/`yStart`/`xEnd`/`yEnd` (`offset`
+d'une cote est une distance perpendiculaire à la ligne, invariante par
+rotation -- aucune correction) ; `<pieceOfFurniture>`/`<furnitureGroup>`/
+`<label>` ont `x`/`y` + un `angle` en **radians** (confirmé :
+`angle='0.7853982'` pour 45°) ; `<room>` porte aussi `areaAngle`/
+`nameAngle` (radians, même confirmation). Le `<compass>` du fichier
+intérieur reçoit un `northDirection` décalé du même angle
+(`sh3d_xml.compass_tag(north_direction_rad=...)`) -- effet cosmétique
+seulement (orientation du soleil dans l'aperçu 3D pendant l'édition, sans
+aucun impact sur la géométrie), sens/convention exact non revalidé
+empiriquement.
 
 `fusion_interieur.py` fusionne ponctuellement (jamais dans `run.sh`/
 `generation.yml` par défaut, jamais automatique) les `interieur/*.sh3d`
@@ -291,6 +317,10 @@ la main (copie du fichier lui-même) pour amorcer un 2e bâtiment
 reproduirait des ids identiques -- sans ce remap, deux fichiers source
 distincts pourraient collisionner sur le même id dans le `Home.xml` fusionné
 et casser la résolution de `wallAtStart`/`wallAtEnd` par `HomeXMLHandler`.
+La pièce-repère de l'emprise (`sh3d_xml.GUIDE_ROOM_NAME`, cf. plus haut) est
+**exclue** de la fusion -- reconnue par son nom exact avant remap/
+transformation ; limite assumée : perdue si l'utilisateur la renomme (repli
+sûr, fusionnée comme un élément normal, pas un crash).
 `Plan 3D (avec interieur).sh3d` existant est sauvegardé en `.sh3d.bak` avant
 réécriture, même logique que `Plan 3D.sh3d`/`build_home.py`.
 
@@ -305,8 +335,9 @@ l'entrée `Home.xml` que `fusion_interieur.py` lit.
 > [!WARNING]
 > Mécanisme validé de bout en bout sur une fixture synthétique (2 bâtiments,
 > murs joints, meuble de catalogue, ids dupliqués -- tous résolus sans
-> collision), mais **pas encore sur un site réel** avec un vrai bâtiment
-> édité dans l'appli desktop. Détail de la validation :
+> collision ; repère local + transformation inverse également validés sur
+> une emprise tournée), mais **pas encore sur un site réel** avec un vrai
+> bâtiment édité dans l'appli desktop. Détail de la validation :
 > `docs/journal-technique.md`.
 
 ### Repère plan figé
