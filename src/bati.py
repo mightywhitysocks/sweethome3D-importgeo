@@ -47,6 +47,19 @@ def _fnum(v):
         return None
 
 
+def _flatten_polys(geom):
+    """Polygones (recursif) contenus dans une geometrie shapely quelconque --
+    une intersection/difference pres d'une limite peut renvoyer un Polygon
+    isole, un MultiPolygon (parties disjointes), ou une GeometryCollection
+    melangeant polygones et artefacts de dimension inferieure (point, ligne),
+    jamais garanti homogene."""
+    if geom.geom_type == "Polygon":
+        return [geom] if not geom.is_empty else []
+    if geom.geom_type in ("MultiPolygon", "GeometryCollection"):
+        return [p for g in geom.geoms for p in _flatten_polys(g)]
+    return []
+
+
 def _pyramidal_mesh(poly, ring, haut, alt_toit, z_min):
     """Toit pyramidal simple (apex au centroide) : repli utilise pour le
     voisinage, et pour la propriete quand la reconstruction LiDAR echoue."""
@@ -72,15 +85,38 @@ def main() -> None:
     all_bldgs = []
     for _, row in g.iterrows():
         geom = row.geometry
-        polys = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+        rid = row.get("cleabs") or f"b{len(bat)}"
         # PROPRIETE seulement si la MAJORITE de l'emprise est sur la parcelle propriete
         # (sinon un batiment d'une parcelle voisine qui longe la limite serait mal classe).
-        on020 = geom.intersection(prop_zone).area
-        classe = "propriete" if on020 > 0.5 * geom.area else "voisinage"
+        on_prop = geom.intersection(prop_zone)
+        classe = "propriete" if on_prop.area > 0.5 * geom.area else "voisinage"
+        # le polygone BD TOPO d'un batiment peut englober une structure reelle de
+        # la parcelle du camp oppose (vectorisation automatique a grande echelle,
+        # pas une classification erronee : la regle d'aire majoritaire ci-dessus
+        # reste correcte) -- constate sur ce site jusqu'a 33,7 % de l'aire d'un
+        # batiment propriete deborde sur une parcelle voisine, et jusqu'a 26 %
+        # dans l'autre sens (batiment voisinage debordant sur la propriete).
+        # Coupe a la limite cadastrale, cote par cote, pour que roofer/l'emprise/
+        # le mesh de chaque camp ne modelisent plus jamais la structure de l'autre.
+        # Le seuil > 50 % ci-dessus garantit que ce clip ne peut jamais etre vide.
+        # Reutilise on_prop (deja calcule ci-dessus) plutot que de relancer une
+        # 2e intersection GEOS identique pour les batiments propriete.
+        geom = on_prop if classe == "propriete" else geom.difference(prop_zone)
+        # un clip pres d'une limite cadastrale peut laisser, en plus du vrai
+        # batiment, un fragment residuel de quelques cm2 (imprecision GEOS) --
+        # meme seuil que le filtre de maillage plus bas, applique ici pour ne
+        # pas polluer bati.json / l'empreinte roofer / la piece "Emprise" avec
+        # un polygone qui n'est pas un batiment.
+        polys = [p for p in _flatten_polys(geom) if p.area >= 4]
+        if not polys:
+            continue
+        for p in polys:
+            if p.interiors:
+                print(f"  bati {rid} : trou dans le contour ignore apres clip "
+                      f"(cas rare, cf. CLAUDE.md)")
         haut = _fnum(row.get("hauteur"))
         alt_sol = _fnum(row.get("altitude_minimale_sol"))
         alt_toit = _fnum(row.get("altitude_maximale_toit"))
-        rid = row.get("cleabs") or f"b{len(bat)}"
 
         rings_cm = []
         for poly in polys:
@@ -208,13 +244,20 @@ def _propriete_ref(props) -> None:
     # propriete du meme site).
     footprints = []
     for b in props:
-        for ring in b["rings_cm"]:
+        n_rings = len(b["rings_cm"])
+        for i, ring in enumerate(b["rings_cm"]):
+            # meme convention (et meme fonction) que pour l'identifiant roofer
+            # (write_footprint_gpkg / build_roof) : suffixe uniquement si le
+            # batiment a plusieurs rings, pour ne jamais donner le meme nom/id
+            # -> meme niveau SH3D "Emprise <id>" a deux emprises distinctes
+            # (cf. build_home.py, footprint_levels).
+            fid = roofer_roof.cleabs_for(b["id"][-4:], i, n_rings)
             cmds.append({"action": "create_room_polygon", "params": {
                 "points": [{"x": x, "y": y} for x, y in ring],
-                "name": f"bati propriete {b['id'][-4:]}",
+                "name": f"bati propriete {fid}",
                 "floorVisible": False, "ceilingVisible": False, "areaVisible": False,
                 "floorColor": "#B0A48F"}})
-            footprints.append({"id": b['id'][-4:],
+            footprints.append({"id": fid,
                                 "sol_max_cm": round(max(cg.terrain_z_at(x, y) for x, y in ring), 1)})
         pts = [p for r in b["rings_cm"] for p in r]
         cx = sum(p[0] for p in pts) / len(pts)
