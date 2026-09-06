@@ -70,16 +70,11 @@ permissions:
 
 jobs:
   # cf. generation.yml : meme calcul (minuscules requises par GHCR/OCI),
-  # duplique ici car `container:` du job render est evalue avant toute step.
+  # desormais factorise dans image-name.yml (workflow reutilisable) plutot
+  # que duplique -- `container:` du job render est evalue avant toute step,
+  # d'ou ce job separe.
   image-name:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      image: ${{ steps.compute.outputs.image }}
-    steps:
-      - name: Minuscules (requis par OCI/GHCR)
-        id: compute
-        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/image-name.yml
 
   find-run:
     runs-on: ubuntu-latest
@@ -125,15 +120,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # xvfb-run absent de l'image CI (generation.yml n'en a jamais eu besoin :
-      # verif.py --render y est desactive faute de jars de rendu embarques
-      # dans l'image). sitegeo.render_photo() l'exige sous Linux (Java3D veut
-      # un display meme en noop). xauth est requis par xvfb-run lui-meme
-      # (genere le fichier d'autorite X du display virtuel) -- sans lui :
-      # "xvfb-run: error: xauth command not found" (constate en CI reelle,
-      # xvfb seul ne suffit pas).
-      - name: Installer xvfb
-        run: apt-get update && apt-get install -y --no-install-recommends xvfb xauth
+      # xvfb + xauth : bakes dans l'image CI (Dockerfile) depuis que
+      # generation.yml en a aussi l'usage potentiel (verif.py --mobile-compat
+      # a mis en evidence que les jars de rendu SunFlow etaient deja
+      # embarques -- seul xvfb manquait). Plus d'apt-get ici a chaque run.
 
       # ffmpeg (assemblage MP4 de src/orbit_render.py) : seulement installe si
       # l'animation est demandee, cout apt evite sinon.

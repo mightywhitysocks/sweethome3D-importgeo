@@ -30,20 +30,12 @@ permissions:
   packages: read
 
 jobs:
-  # `container:` (job generation ci-dessous) est evalue AVANT toute step de
-  # ce job -- impossible d'y calculer les minuscules dans une step normale.
-  # Job separe uniquement pour ca : `github.repository` peut contenir des
-  # majuscules (ex. "sweethome3D-importgeo"), interdites dans un chemin
-  # GHCR/OCI (push/pull echoueraient sinon avec "must be lowercase").
+  # Workflow reutilisable (image-name.yml) : `container:` (job generation
+  # ci-dessous) est evalue AVANT toute step de ce job -- impossible d'y
+  # calculer les minuscules requises par GHCR/OCI dans une step normale,
+  # d'ou ce job separe. Meme calcul que render.yml, desormais factorise.
   image-name:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      image: ${{ steps.compute.outputs.image }}
-    steps:
-      - name: Minuscules (requis par OCI/GHCR)
-        id: compute
-        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/image-name.yml
 
   generation:
     needs: image-name
@@ -131,9 +123,20 @@ jobs:
       - name: build_home.py
         run: python3 src/build_home.py
 
+      # node_modules/ de tools/mobile_compat_check/ est bake dans l'image a
+      # un chemin fixe (Dockerfile), hors de l'arborescence du depot (pas
+      # encore checkoutee a la construction de l'image) -- recopie ici,
+      # une fois le vrai checkout en place, pour que la resolution ESM de
+      # Node le trouve a cote de check.mjs (elle ne consulte pas le PATH).
+      # Absence de ce dossier ne bloque rien : verif.py --mobile-compat
+      # (_mobile_compat()) ignore proprement le controle si node_modules/
+      # manque, cf. Dockerfile.
+      - name: Copier node_modules/ de tools/mobile_compat_check/ (bake image)
+        run: cp -a /opt/mobile_compat_check/node_modules tools/mobile_compat_check/node_modules
+
       - name: verif.py (contrôle, non bloquant)
         continue-on-error: true
-        run: python3 src/verif.py
+        run: python3 src/verif.py --mobile-compat
 
       # Si une étape plante en cours de route, rien n'est publié par défaut
       # (job en échec = pas d'artefact) : aucune visibilité sur ce qui a
