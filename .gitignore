@@ -1,8 +1,12 @@
 # --- livrable & donnees : jamais versionnes ---
 /Plan 3D.sh3d
+/Plan 3D (avec interieur).sh3d
 Plan 3D.sh3d.bak
 *.sh3d.bak
 /data/
+# projets .sh3d intérieurs par bâtiment (interieur_init.py/fusion_interieur.py) :
+# édités à la main, aussi sensibles que data/ (agencement réel d'un bâtiment)
+/interieur/
 /docs/notice_calage.md
 # log brut du CLI roofer (ecrit a la racine, hors data/) -- contient les
 # coordonnees L93 reelles de la parcelle en clair, cf. CLAUDE.md

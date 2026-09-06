@@ -108,7 +108,10 @@ def cleabs_for(rid: str, i: int, n_polys: int) -> str:
     inchange, cas majoritaire). `write_footprint_gpkg` et l'appelant de
     `build_roof` (bati.py) DOIVENT utiliser le meme identifiant pour un meme
     polygone -- sinon toit duplique/mal place sur les batiments MultiPolygon
-    (cf. issue #35)."""
+    (cf. issue #35). Duplique volontairement (fonction pure d'une ligne) dans
+    interieur_init.py::_cleabs_for -- pour ne pas tirer pyvista/shapely dans
+    un script qui n'a sinon besoin d'aucune dependance geometrique -- tenir
+    les deux en synchro."""
     return rid if n_polys == 1 else f"{rid}_{i}"
 
 
