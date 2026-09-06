@@ -20,12 +20,16 @@ La parcelle cible **n'est pas codée dans le dépôt** : elle se règle dans
 ## Prérequis
 
 Le pipeline de **génération** (`phase1_cadastre` -> ... -> `build_home`)
-suppose désormais un **environnement Linux/macOS** : `bati.py` appelle
-l'outil externe `roofer` (toit multi-pans), qui n'a pas de build Windows
-officiel (cf. CLAUDE.md section Environnement). Sans lui, `bati.py` se
-replie silencieusement sur un toit pyramidal simple pour tous les bâtiments,
-sans planter — donc sans avertissement visible si vous ne le remarquez pas.
-Trois façons d'obtenir un vrai toit multi-pans, au choix :
+tourne en entier sur **Linux/macOS ET Windows** — `./run.sh` comme
+`.\run.ps1`, sans argument, lancent les mêmes six étapes dans le même
+ordre. La seule différence entre les deux OS est le toit des bâtiments
+propriété : `bati.py` appelle l'outil externe `roofer` (toit multi-pans),
+qui n'a pas de build Windows officiel (cf. CLAUDE.md section Environnement).
+**Sur Windows uniquement**, `bati.py` se replie donc silencieusement sur un
+toit pyramidal simple pour tous les bâtiments — comportement prévu, pas un
+plantage, mais sans avertissement visible si vous ne le remarquez pas.
+Trois façons d'obtenir un vrai toit multi-pans (Windows seul n'en fait pas
+partie, pour cette seule raison) :
 
 1. **Une machine Linux/macOS déjà là** (ou WSL2/Docker) : `./run.sh`, un
    venv pip (`config/requirements-venv.txt`) + `roofer` installé (script
@@ -37,9 +41,13 @@ Trois façons d'obtenir un vrai toit multi-pans, au choix :
 2. **Aucune machine Linux/macOS disponible** : générer à la demande via
    GitHub Actions (voir « Génération à la demande » ci-dessous) — un runner
    Linux éphémère fait tout le travail, rien à installer localement.
-3. **Windows + PowerShell + Anaconda/Miniconda** (`.\run.ps1`) : suffit pour
-   **ouvrir/rendre** `Plan 3D.sh3d` dans l'application Sweet Home 3D native,
-   mais pas pour la génération avec toit multi-pans (cf. ci-dessus).
+3. **WSL2/Docker sous Windows** (rejoint le cas 1 ci-dessus) : seule façon
+   d'obtenir le toit multi-pans directement sur une machine Windows.
+
+**Windows + PowerShell + Anaconda/Miniconda** (`.\run.ps1`, sans WSL2/Docker)
+lance donc bien le **pipeline complet**, toit pyramidal simple pour les
+bâtiments propriété (repli automatique, `roofer` absent) — pas seulement
+l'ouverture/le rendu de `Plan 3D.sh3d` dans l'application native.
 
 Dans tous les cas : un **JDK** (`java` et `javac` sur le `PATH`), p.ex.
 Oracle JDK 21 (assemblage/relecture du `.sh3d`, rendu photo headless), et

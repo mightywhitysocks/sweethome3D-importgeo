@@ -18,17 +18,28 @@ exacte du site.
 
 ## Environnement
 
-**Le pipeline de génération suppose désormais un environnement Linux/macOS**
+**Le pipeline de génération complet tourne sur Linux/macOS ET Windows**
 (`phase1_cadastre.py` -> `terrain.py` -> `bati.py` -> `vegetation.py` ->
-`courbes.py` -> `build_home.py`) : `bati.py` appelle `roofer` (cf. "Points
-durs" > roofer) pour le toit multi-pans des bâtiments propriété, et `roofer`
-n'a pas de build Windows officiel. **Windows + conda `sitegeo` sert
-uniquement à ouvrir/rendre `Plan 3D.sh3d` dans l'application Sweet Home 3D
-native** — pas à relancer le pipeline de génération : `bati.py` s'y
-replierait silencieusement sur le toit pyramidal (binaire `roofer`
-introuvable), sans planter. `.\run.ps1` reste documenté dans le README pour
-un lancement partiel (un seul script, ex. `terrain.py` seul) ou historique,
-pas comme méthode principale de génération.
+`courbes.py` -> `build_home.py`, via `./run.sh` ou `.\run.ps1` -- les deux
+lancent par défaut, sans argument, exactement les mêmes six étapes dans le
+même ordre). **Seule différence entre les deux OS : le toit des bâtiments
+propriété.** `bati.py` appelle `roofer` (cf. "Points durs" > roofer) pour le
+toit multi-pans, et `roofer` n'a pas de build Windows officiel -- sur
+Windows, `roofer_roof.find_roofer_bin()` renvoie `None` (binaire introuvable)
+et `bati.py` se replie silencieusement sur un toit pyramidal simple pour
+TOUS les bâtiments, **sans planter et sans affecter le reste du pipeline**
+(comportement déjà écrit pour ce cas, pas un contournement ad hoc). Aucun
+autre écart connu : `courbes.py` (`gdal_contour`, cf. `_gdal_contour_cmd`)
+et `build_home.py`/`sh3d_xml.py` (JDK, `java`/`javac` sur le `PATH`)
+fonctionnent nativement sur les deux OS ; `arbaro` (variété des arbres) est
+optionnel des deux côtés, même repli gracieux (gabarit d'arbre unique) s'il
+est absent. `.\run.ps1` (sans argument) lance donc bien le pipeline complet,
+au même titre que `./run.sh` -- seul le toit obtenu diffère (multi-pans vs
+pyramidal). Correction affirmée par lecture de code (`roofer_roof.py`,
+`courbes.py::_gdal_contour_cmd`, `run.ps1`), **pas encore revalidée par un
+run réel sur une machine Windows** dans une session Claude Code (cette
+session tourne sur un conteneur Linux, cf. point 3 ci-dessous) : à confirmer
+au premier retour d'un contributeur Windows.
 
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
