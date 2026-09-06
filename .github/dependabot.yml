@@ -19,8 +19,18 @@ updates:
     directory: "/config"
     schedule:
       interval: "monthly"
+    # Une seule PR groupée plutôt qu'une par paquet : chacune doit de toute
+    # façon être répercutée à la main dans config/environment.yml
+    # (Dependabot ne couvre pas conda, cf. CLAUDE.md section Environnement)
+    # -- grouper réduit d'autant le nombre d'allers-retours manuels.
+    groups:
+      requirements-venv:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]

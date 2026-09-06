@@ -17,6 +17,25 @@ FROM python:3.14.7-slim-trixie
 # openjdk-21-jdk-headless et gdal-bin sont natifs sur trixie (absents sur
 # bookworm, cf. recherches du plan) -- java/javac et gdal_contour deja sur
 # le PATH apres cette etape, pas de JAVA_HOME a bricoler.
+#
+# xvfb + xauth : requis par le rendu photo headless (sitegeo.render_photo(),
+# cf. CLAUDE.md "Rendu photo headless" -- Java3D interroge un
+# GraphicsEnvironment au demarrage meme en `-Dj3d.rend=noop`, et xvfb-run
+# lui-meme exige xauth pour generer le fichier d'autorite X du display
+# virtuel). Bake ici plutot que reinstalle a chaque run de render.yml
+# (etait avant sa seule etape "Installer xvfb" -- desormais superflue) :
+# les jars de rendu SunFlow sont deja embarques dans l'archive Sweet
+# Home 3D ci-dessous, seul xvfb manquait pour que le rendu marche partout
+# ou l'image est utilisee, generation.yml compris.
+#
+# nodejs + npm : requis par `verif.py --mobile-compat`
+# (tools/mobile_compat_check/, cf. CLAUDE.md "Compatibilite appli mobile") --
+# jusqu'ici jamais exerce en CI faute de Node dans l'image, alors que
+# CLAUDE.md/docs/PIPELINE.md documentent explicitement ce controle comme
+# restant a valider sur un vrai Plan 3D.sh3d. Le paquet Debian suffit (pas
+# besoin de la derniere version Node, seulement de faire tourner Playwright
+# 1.56 + un peu d'ESM) -- coherent avec le choix deja fait de ne pas
+# executer de script d'installation tiers (curl|bash) pour un outil externe.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         openjdk-21-jdk-headless \
         gdal-bin \
@@ -24,6 +43,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         gzip \
         git \
+        xvfb \
+        xauth \
+        nodejs \
+        npm \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -133,5 +156,50 @@ RUN git clone --quiet https://github.com/wdiestel/arbaro.git /tmp/arbaro-src \
          -C /tmp/arbaro-bin net/sourceforge/arbaro/tree \
     && rm -rf /tmp/arbaro-src /tmp/arbaro-bin /tmp/arbaro-manifest.txt \
     && test -f /opt/arbaro/arbaro_cmd.jar
+
+# tools/mobile_compat_check : node_modules + navigateur Chromium de Playwright
+# pour `verif.py --mobile-compat`, bakes ici pour eviter ~300 Mo de
+# telechargement (paquets npm + binaire Chromium) a chaque run de
+# generation.yml -- meme logique que roofer/Sweet Home 3D/arbaro ci-dessus,
+# meme si cet outil est concu pour etre autonome/decouple du pipeline
+# principal (cf. son propre README.md) : son cout d'installation justifie
+# de le mutualiser dans l'image comme le reste du toolchain.
+#
+# `npm ci` (pas `npm install`) : respecte package-lock.json a l'identique,
+# coherent avec le "aucun latest" du reste de ce Dockerfile. Le repertoire
+# du depot n'existe pas encore a la construction de l'image (seulement au
+# checkout de generation.yml) -- package.json/package-lock.json sont donc
+# copies isolement ici, et node_modules/ construit a un chemin FIXE hors
+# de l'arborescence du depot ; generation.yml le recopie au bon endroit
+# apres son propre checkout (la resolution ESM de Node exige que
+# node_modules/ vive a cote de check.mjs, pas seulement sur le PATH).
+# `playwright install --with-deps` (pas juste `install`) : installe aussi
+# les bibliotheques systeme que Chromium headless requiert sur une base
+# Debian minimale (absentes de python:3.14.7-slim-trixie de base).
+#
+# RISQUE CONNU, NON VERIFIE LOCALEMENT : le daemon Docker n'est pas
+# disponible dans la session qui a ecrit ce bloc (sandbox sans acces aux
+# capabilities requises -- `docker build` y echoue avant meme de
+# demarrer), donc cette etape n'a pu etre validee que par lecture, pas par
+# un vrai build. Playwright liste Debian 13 (trixie) comme supporte, mais
+# plusieurs rapports amont documentent des bibliotheques manquantes malgre
+# `--with-deps` sur cette version precise (libicu*/libvpx*/libavif*, cf.
+# github.com/microsoft/playwright issues #38689 et #36916) -- detection de
+# distribution potentiellement encore imparfaite pour trixie selon la
+# version de Playwright. Si le premier vrai run de build-image.yml echoue
+# ici (ou si Chromium plante au lancement avec une erreur de bibliotheque
+# partagee cote verif.py --mobile-compat), le repli est le meme principe
+# que roofer/Sweet Home 3D ci-dessus : diagnostiquer sur un run CI reel et
+# completer manuellement les paquets manquants plutot que de deviner.
+# Filet de securite deja en place independamment de ce risque : `verif.py
+# --mobile-compat` (_mobile_compat(), src/verif.py) se contente d'ignorer
+# le controle si node_modules/ est absent -- seul un echec de CHARGEMENT
+# reel (Node/Chromium presents mais .sh3d rejete) fait echouer le controle,
+# jamais un simple outil absent/casse en amont de l'appel.
+COPY tools/mobile_compat_check/package.json tools/mobile_compat_check/package-lock.json /opt/mobile_compat_check/
+RUN cd /opt/mobile_compat_check \
+    && npm ci \
+    && npx playwright install --with-deps chromium \
+    && test -d node_modules/playwright
 
 WORKDIR /workspace

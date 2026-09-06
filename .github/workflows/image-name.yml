@@ -1,0 +1,29 @@
+# Workflow reutilisable (workflow_call uniquement, jamais declenche seul) :
+# calcule le nom de l'image CI publiee par build-image.yml, en minuscules
+# (`github.repository` peut contenir des majuscules -- ex.
+# "sweethome3D-importgeo" -- interdites dans un chemin GHCR/OCI, un
+# push/pull echouerait sinon avec "must be lowercase").
+#
+# Factorise une duplication exacte qui existait entre generation.yml et
+# render.yml : chacun a besoin de ce calcul dans un job SEPARE, car
+# `container:` (job qui consomme l'image) est evalue avant toute step de
+# ce job -- impossible de le calculer dans une step normale du meme job.
+name: (interne) Nom d'image CI
+
+on:
+  workflow_call:
+    outputs:
+      image:
+        description: "ghcr.io/<repo en minuscules>/ci:latest"
+        value: ${{ jobs.compute.outputs.image }}
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.compute.outputs.image }}
+    steps:
+      - name: Minuscules (requis par OCI/GHCR)
+        id: compute
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"

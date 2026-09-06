@@ -30,6 +30,10 @@ permissions:
 jobs:
   confidentialite:
     runs-on: ubuntu-latest
+    # Seul workflow du depot sans timeout explicite jusqu'ici (les 3 autres
+    # en ont un) -- ajoute par coherence/defense en profondeur, pas parce
+    # qu'un run reel a jamais traine (git ls-files/git grep sont rapides).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -69,6 +73,7 @@ jobs:
 
   verifs-legeres:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

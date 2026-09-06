@@ -4,12 +4,20 @@
 #
 # N'ecrit ni ne lit aucune donnee de site : uniquement le toolchain (JDK,
 # GDAL, roofer, Sweet Home 3D, paquets Python), aucun secret necessaire ici.
+#
+# Declenchement pull_request (memes paths) : construit SANS publier
+# (push: false ci-dessous) -- valide qu'un Dockerfile/requirements-venv.txt
+# modifie construit encore avant le merge, plutot que de le decouvrir apres
+# coup sur le push vers main (seul moment ou l'image etait testee jusqu'ici).
+# Utile en particulier pour une PR Dependabot sur requirements-venv.txt.
 name: Construire l'image CI
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths: ['Dockerfile', 'config/requirements-venv.txt']
+  pull_request:
     paths: ['Dockerfile', 'config/requirements-venv.txt']
 
 concurrency:
@@ -37,9 +45,20 @@ jobs:
       # `github.repository` peut contenir des majuscules (ex.
       # "sweethome3D-importgeo"), interdites dans un chemin GHCR/OCI --
       # push echouerait sinon avec "must be lowercase".
+      #
+      # Deux tags publies (hors PR, cf. `push:` plus bas) : `:latest`
+      # (mutable, seul tag consomme par generation.yml/render.yml) et
+      # `:<sha>` (immutable, jamais reecrit) -- permet de figer un
+      # generation.yml cassé sur un commit precis (`ghcr.io/.../ci:<sha>`)
+      # en attendant un correctif, plutot que de dependre uniquement du
+      # dernier `:latest` pousse (mono-tag sans rollback, risque deja note
+      # dans CLAUDE.md section Environnement).
       - name: Minuscules (requis par OCI/GHCR)
         id: image
-        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+        run: |
+          repo="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "latest=ghcr.io/${repo}/ci:latest" >> "$GITHUB_OUTPUT"
+          echo "sha=ghcr.io/${repo}/ci:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       # Requis par cache-to/cache-from: type=gha ci-dessous : sur un runner
       # GitHub-hosted standard, docker/build-push-action utilise par defaut le
@@ -56,11 +75,15 @@ jobs:
       # `mode=max` cache aussi les layers intermediaires (pas seulement la
       # couche finale), pour maximiser la reutilisation sur les etapes
       # roofer/Sweet Home 3D qui changent rarement.
-      - name: Build + push ${{ steps.image.outputs.name }}
+      # push: false sur pull_request -- construit pour valider seulement,
+      # ne publie jamais depuis une PR (cf. commentaire d'en-tete).
+      - name: Build ${{ github.event_name == 'pull_request' && '(validation, sans publier)' || '+ push' }} ${{ steps.image.outputs.latest }}
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          push: true
-          tags: ${{ steps.image.outputs.name }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.image.outputs.latest }}
+            ${{ steps.image.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
