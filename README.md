@@ -209,7 +209,14 @@ la géométrie exacte du site. Détail complet : `docs/PIPELINE.md` et
 ├── java/                Conv.java (assemble le .sh3d) + RenderPhoto.java (rendu photo)
 ├── assets/              gabarits stables (home_template.xml, tree.obj/.mtl,
 │                        arbaro_species/*.xml pour la variété des arbres)
-├── docs/PIPELINE.md     détail de la génération du .sh3d + limitations
+├── docs/
+│   ├── PIPELINE.md          détail de la génération du .sh3d + limitations
+│   └── exploration_socle.md revue des alternatives open source au code
+│                             maison (LiDAR, terrain, cadastre, .sh3d) —
+│                             conclusion : rien à remplacer à ce jour
+├── tools/               utilitaires autonomes, indépendants du pipeline principal
+│   ├── lidar_view/          inspecter le nuage LiDAR HD brut (avant reconstruction)
+│   └── mobile_compat_check/ vérifie qu'un .sh3d s'ouvre sur l'appli mobile / SH3D Online
 ├── data/                toutes les sorties (git-ignored)
 ├── interieur/           plans .sh3d intérieurs par bâtiment, édités à la main (git-ignored)
 └── README.md  CLAUDE.md  LICENSE  NOTICE

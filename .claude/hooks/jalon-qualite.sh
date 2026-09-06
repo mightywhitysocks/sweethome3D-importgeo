@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # PostToolUse (matcher: Bash) — jamais bloquant.
 #
-# Repère l'exécution du contrôle qualité du projet (`src/verif.py` ou
-# `.\run.ps1 verif`) et pose/retire un fichier jalon dans .git/ selon le
-# succès ou l'échec, pour que bilan.sh (hook Stop) puisse dire si le
-# contrôle a été rejoué depuis la dernière édition de src/.
+# Repère l'exécution du contrôle qualité du projet (`src/verif.py`,
+# `.\run.ps1 verif` ou `./run.sh verif`) et pose/retire un fichier jalon
+# dans .git/ selon le succès ou l'échec, pour que bilan.sh (hook Stop)
+# puisse dire si le contrôle a été rejoué depuis la dernière édition de
+# src/.
 
 set -uo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -18,7 +19,7 @@ JALON="$CLAUDE_PROJECT_DIR/.git/sitegeo-qualite-ok"
 entree="$(cat)"
 commande="$(jq -r '.tool_input.command // empty' <<< "$entree" 2>/dev/null || true)"
 
-if ! grep -qP '(verif\.py|run\.ps1\s+verif)\b' <<< "$commande"; then
+if ! grep -qP '(verif\.py|run\.(ps1|sh)\s+verif)\b' <<< "$commande"; then
     journaliser_usage "jalon-qualite" "hors-perimetre" "commande non liée à verif"
     exit 0
 fi

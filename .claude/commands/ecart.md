@@ -4,8 +4,9 @@ disable-model-invocation: true
 ---
 
 Ce projet n'a pas de cahier des charges séparé — la référence est la
-section `## Limitations connues` de `docs/PIPELINE.md` (11 points
-numérotés à ce jour). Journaliser un écart consiste à maintenir 3
+section `## Limitations connues` de `docs/PIPELINE.md` (13 points
+numérotés à ce jour — vérifier ce nombre avant de citer un numéro, il
+évolue). Journaliser un écart consiste à maintenir 3
 emplacements synchronisés dans ce seul fichier (au lieu de 4 fichiers
 séparés, l'échelle du projet ne le justifie pas) :
 
