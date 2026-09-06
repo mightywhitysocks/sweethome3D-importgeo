@@ -164,9 +164,11 @@ jobs:
           # bati_propriete_ref.json, terrain_stats.json : requis par
           # cg.walk_camera_xyz() (src/orbit_render.py, panoramique circulaire) --
           # meme camera que l'observerCamera du .sh3d, toujours ecrits par
-          # bati.py/terrain.py sur un run complet. Ne change rien au niveau de
-          # sensibilite : deja la geometrie exacte du site, comme le .sh3d
-          # lui-meme.
+          # bati.py/terrain.py sur un run complet. meta.json : requis par
+          # sh3d_xml.compass_tag() (longitude/latitude du site) -- consomme par
+          # .github/workflows/interieur.yml (interieur_init.py) sans reseau IGN.
+          # Ne change rien au niveau de sensibilite : deja la geometrie exacte
+          # du site, comme le .sh3d lui-meme.
           path: |
             Plan 3D.sh3d
             data/bati.json
@@ -174,6 +176,7 @@ jobs:
             data/terrain_grid.npz
             data/bati_propriete_ref.json
             data/terrain_stats.json
+            data/meta.json
           if-no-files-found: error
           # Minimise la fenêtre de rétention d'un artefact contenant la
           # géométrie exacte du site, même sur une copie privée.

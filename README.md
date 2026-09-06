@@ -181,9 +181,19 @@ extérieure — jamais dans le pipeline complet ci-dessus :
 ./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
 ```
 
+Sans machine Linux/macOS locale, `.github/workflows/interieur.yml`
+(`workflow_dispatch`) fait juste la création initiale (`interieur_init.py`) à
+partir du dernier `Plan 3D` déjà publié par `generation.yml` — aucun secret
+de site requis (même principe que le rendu, ci-dessus). Télécharger
+l'artefact `Interieurs`, en dézipper le contenu dans `interieur/` à la racine
+du dépôt, éditer localement dans l'appli Sweet Home 3D native, puis fusionner
+en local (`fusion_interieur.py` reste toujours local : il lui faut les
+fichiers édités à la main, jamais versionnés).
+
 `interieur/` et `Plan 3D (avec interieur).sh3d` sont git-ignorés : un plan
 intérieur réel dévoile l'agencement d'un bâtiment habité, aussi sensible que
-la géométrie exacte du site. Détail complet : `docs/PIPELINE.md` et
+la géométrie exacte du site — même mise en garde confidentialité que
+ci-dessus pour `interieur.yml`. Détail complet : `docs/PIPELINE.md` et
 `CLAUDE.md` (section « Points durs »).
 
 ## Arborescence

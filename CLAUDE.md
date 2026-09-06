@@ -145,6 +145,14 @@ toujours à la main.
 ./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
 ```
 
+Sans machine Linux/macOS locale : `.github/workflows/interieur.yml`
+(`workflow_dispatch`) fait uniquement la création (`interieur_init.py`), à
+partir du dernier artefact `Plan 3D` déjà publié par `generation.yml` (comme
+`render.yml`, aucun secret de site requis) -> artefact `Interieurs` à
+télécharger et dézipper dans `interieur/` avant édition locale. La fusion
+(`fusion_interieur.py`) reste toujours locale, jamais en CI : elle a besoin
+des fichiers édités à la main, jamais versionnés.
+
 ## Arborescence
 
 - `src/` : Python (lancé en scripts ; `import sitegeo as cg`).
@@ -173,10 +181,21 @@ toujours à la main.
 ## Points durs
 
 - **Plan 2D intérieur séparé de la modélisation 3D extérieure** (`interieur_init.py`,
-  `fusion_interieur.py`) : le pipeline de génération ne modélise que
-  l'extérieur géoréférencé (parcelle/terrain/bâtis/végétation) -- l'agencement
-  intérieur réel d'un bâtiment (pièces, cloisons, mobilier) n'a aucune source
-  IGN et se dessine à la main. `interieur_init.py` crée un `.sh3d` PAR
+  `fusion_interieur.py`, `.github/workflows/interieur.yml`) : le pipeline de
+  génération ne modélise que l'extérieur géoréférencé
+  (parcelle/terrain/bâtis/végétation) -- l'agencement intérieur réel d'un
+  bâtiment (pièces, cloisons, mobilier) n'a aucune source IGN et se dessine à
+  la main. `interieur.yml` (`workflow_dispatch`) télécharge le dernier
+  artefact `Plan 3D` de `generation.yml` (`data/meta.json`/`bati.json`/
+  `bati_propriete_ref.json`, ajoutés à cet artefact pour ce besoin -- même
+  niveau de sensibilité que le reste, déjà la géométrie exacte du site),
+  lance `interieur_init.py` dans l'image CI et publie `interieur/*.sh3d` en
+  artefact `Interieurs` -- aucun secret de site requis (même principe que
+  `render.yml` : valeurs fictives, seul le parsing de `sitegeo.py` l'exige).
+  Ne couvre QUE la création initiale : l'édition et la fusion
+  (`fusion_interieur.py`) restent toujours locales, ces étapes ont besoin des
+  fichiers édités à la main (jamais versionnés, jamais publiés en CI).
+  `interieur_init.py` crée un `.sh3d` PAR
   bâtiment propriété (`interieur/<id>.sh3d`, un niveau par étage BD TOPO,
   repli à 1 si absent/NaN) avec un `<room>` "guide" par niveau reproduisant
   l'emprise exacte du bâtiment (même géométrie que le `<room>` "Emprise
