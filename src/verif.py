@@ -2,7 +2,8 @@
 verif.py : controle complet du pipeline (lecture seule).
 
   1. Parcelles : API Carto (live) vs sh3d_payload.json (contenance, aire, 1er sommet)
-  2. Topologie : pas de recouvrement, emprise dans la bbox du fond
+  2. Topologie : pas de recouvrement, emprise dans la bbox du fond, batiments
+     sans empietement sur le camp oppose (propriete/voisinage)
   3. Fond : georeferencement de data/ortho.tif (CRS L93, bbox, resolution)
   4. Repere : origin_l93 == coin NO bbox, marge
   5. Maillages fermes (terrain.obj, haies.obj) : 0 arete ouverte, volume signe
@@ -131,6 +132,32 @@ def main() -> None:
     b = union.bounds
     check("emprise dans la bbox du fond",
           b[0] >= e0 - 0.01 and b[1] >= n0 - 0.01 and b[2] <= e1 + 0.01 and b[3] <= n1 + 0.01)
+
+    bati_path = GEO / "bati.json"
+    if bati_path.exists():
+        # Garde-fou contre la fusion BD TOPO d'un batiment avec une structure du
+        # camp oppose (constate sur ce site : jusqu'a 33,7 % de l'aire d'un
+        # batiment propriete deborde sur une parcelle voisine, et jusqu'a 26 %
+        # dans l'autre sens -- cf. CLAUDE.md). bati.py clippe deja chaque
+        # batiment a son camp (intersection/difference de prop_zone) ; ce
+        # controle verifie que ce clip a bien eu lieu, dans les deux sens.
+        prop_zone = cg.property_polygon_l93()
+        bat = json.loads(bati_path.read_text(encoding="utf-8"))["batiments"]
+        max_empiet, n_skipped = 0.0, 0
+        for bd in bat:
+            for ring in bd["rings_cm"]:
+                poly = cg.ring_cm_to_polygon_l93(ring)
+                if not poly.is_valid or poly.area == 0:
+                    n_skipped += 1
+                    continue
+                empiet = (poly.difference(prop_zone).area if bd["classe"] == "propriete"
+                          else poly.intersection(prop_zone).area)
+                max_empiet = max(max_empiet, empiet)
+        detail = f"max {max_empiet:.2f} m2"
+        if n_skipped:
+            detail += f" ({n_skipped} ring(s) invalide(s)/vide(s) ignore(s))"
+        check("batiments : pas d'empietement sur le camp oppose (<2 m2)",
+              max_empiet < 2.0 and n_skipped == 0, detail)
 
     print("\n=== 3. Fond : georeferencement (ortho.tif) ===")
     with rasterio.open(GEO / "ortho.tif") as ds:

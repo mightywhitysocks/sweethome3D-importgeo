@@ -353,6 +353,35 @@ script isolément (cf. Environnement) — pas la génération complète.
     confidentialité) : reprendre la comparaison emprise BD TOPO vs pans
     reconstruits sur le même jeu de 18 bâtiments qui a servi au diagnostic
     d'origine, lors d'un prochain run complet sur le site.
+- **Un polygone BD TOPO peut englober une structure du camp opposé, corrigé
+  (dans les deux sens).** Constaté sur ce site : un bâtiment classé
+  `"propriete"` avait 33,7 % de son aire qui débordait en réalité sur une
+  parcelle voisine (points LiDAR classés bâtiment confirmés dans la zone de
+  débordement, aucun autre polygone BD TOPO ne couvrant cette zone -- ce
+  n'est pas un défaut de la règle de classification par aire majoritaire,
+  mais une fusion du polygone source lui-même par la vectorisation
+  automatique IGN à grande échelle) ; symétriquement, un bâtiment classé
+  `"voisinage"` avait 26 % de son aire qui débordait sur la parcelle
+  propriété. Sans correction, ce polygone gonflé se propage tel quel à
+  toute la chaîne : l'empreinte donnée à `roofer` (reconstruction 3D qui
+  semble alors "fusionner" les deux structures), `bati_propriete.obj`/
+  `bati_voisinage.obj`, et la pièce visible "Emprise `<id>`" (aire gonflée).
+  **Corrigé dans `bati.py`** (boucle de classification, `main()`) : une fois
+  `classe` déterminée, `geom = geom.intersection(prop_zone)` (bâtiment
+  `"propriete"`, garde la partie sur la propriété) ou `geom.difference(prop_zone)`
+  (bâtiment `"voisinage"`, garde la partie hors propriété) -- le seuil de
+  classification (aire majoritaire > 50 %) garantit que ce clip ne peut
+  jamais devenir vide. `_propriete_ref` suffixe désormais l'id/nom par index
+  de ring quand un bâtiment en a plusieurs (même convention que
+  `roofer_roof.cleabs_for`), pour ne jamais faire collisionner deux niveaux
+  SH3D "Emprise `<id>`" si ce clip produit un jour un `MultiPolygon` (pas
+  observé sur ce site aujourd'hui). `verif.py` contrôle désormais, dans les
+  deux sens, que l'empiétement d'un bâtiment sur le camp opposé reste quasi
+  nul (<2 m², pas 26-33 %). Réserve honnête : ce fix corrige à coup sûr
+  l'emprise/l'aire (calcul Python déterministe) et très probablement
+  l'essentiel de la fusion visuelle du toit, mais rien ne garantit à 100 %
+  le comportement interne de `roofer` (boîte noire externe, GPLv3) pour
+  l'ajustement des pans de toit tout près de cette nouvelle limite.
 - **Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
   dans le dépôt comme filet de comparaison**, pas de purge pour l'instant.
   Les deux fixes de couverture `roofer` ci-dessus sont désormais appliqués

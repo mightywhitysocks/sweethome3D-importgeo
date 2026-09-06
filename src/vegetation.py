@@ -93,7 +93,7 @@ def main() -> None:
         return _resolve_model_key(species_models, essence, variant)
 
     bati = json.loads((GEO / "bati.json").read_text(encoding="utf-8"))["batiments"]
-    bati_l93 = unary_union([_ring_l93(ring) for b in bati for ring in b["rings_cm"]
+    bati_l93 = unary_union([cg.ring_cm_to_polygon_l93(ring) for b in bati for ring in b["rings_cm"]
                             if len(ring) >= 3])
     # meme emprise que le bati voisinage (bati.py : cg.wfs_l93 sur META.bbox_wgs84,
     # equivalent a META.bbox_l93 ici) -- pas les seules parcelles listees dans
@@ -320,14 +320,6 @@ def _spine(pr, pc, T):
     b = max(lengths.items(), key=lambda kv: kv[1])[0]
     pts = [(T.c + (c + .5) * T.a, T.f + (r + .5) * T.e) for r, c in paths[b]]
     return LineString(pts).simplify(0.6)
-
-
-def _ring_l93(ring_cm):
-    from shapely.geometry import Polygon
-    xs = np.array([p[0] for p in ring_cm])
-    ys = np.array([p[1] for p in ring_cm])
-    E, N = cg.plan_cm_to_l93(xs, ys)
-    return Polygon(zip(E, N))
 
 
 if __name__ == "__main__":

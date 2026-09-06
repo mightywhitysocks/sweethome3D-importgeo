@@ -305,6 +305,13 @@ def plan_cm_to_l93(x, y):
     return E, N
 
 
+def ring_cm_to_polygon_l93(ring_cm):
+    """[[x, y], ...] repere plan (cm) -> Polygon shapely en Lambert-93 (m)."""
+    from shapely.geometry import Polygon
+    E, N = plan_cm_to_l93(np.array([p[0] for p in ring_cm]), np.array([p[1] for p in ring_cm]))
+    return Polygon(zip(E, N))
+
+
 # --------------------------------------------------------------------------- #
 # Vecteurs : parcelles (API Carto) et couches BD TOPO (WFS) via geopandas
 # --------------------------------------------------------------------------- #
