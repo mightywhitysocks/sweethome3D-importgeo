@@ -143,6 +143,24 @@ Sans `run.ps1`/`run.sh` : `conda activate sitegeo` puis `python src\<script>.py`
 (Windows), ou `.venv/bin/python src/<script>.py` (Linux/macOS). **Ne pas**
 utiliser `py` (Python système) ni `conda run`.
 
+### Plan 2D intérieur (optionnel, à la main)
+
+L'agencement intérieur réel d'un bâtiment (pièces, cloisons, mobilier) n'a
+aucune source IGN et se dessine à la main, séparément de la génération 3D
+extérieure — jamais dans le pipeline complet ci-dessus :
+
+```bash
+./run.sh phase1_cadastre terrain bati   # prerequis (sol_max_cm par batiment)
+./run.sh interieur_init                 # cree interieur/<id>.sh3d (jamais les existants)
+# ... edition manuelle dans l'appli Sweet Home 3D native ...
+./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
+```
+
+`interieur/` et `Plan 3D (avec interieur).sh3d` sont git-ignorés : un plan
+intérieur réel dévoile l'agencement d'un bâtiment habité, aussi sensible que
+la géométrie exacte du site. Détail complet : `docs/PIPELINE.md` et
+`CLAUDE.md` (section « Points durs »).
+
 ## Arborescence
 
 ```
@@ -163,21 +181,26 @@ utiliser `py` (Python système) ni `conda run`.
 │                        arbaro_species/*.xml pour la variété des arbres)
 ├── docs/PIPELINE.md     détail de la génération du .sh3d + limitations
 ├── data/                toutes les sorties (git-ignored)
+├── interieur/           plans .sh3d intérieurs par bâtiment, édités à la main (git-ignored)
 └── README.md  CLAUDE.md  LICENSE  NOTICE
 ```
 
 | Script | Rôle |
 |--------|------|
 | `src/sitegeo.py` | module commun : chemins, config, accès IGN, `terrain_z_at`, primitives PyVista, écriture OBJ/MTL |
+| `src/sh3d_xml.py` | module commun : génération des fragments XML SH3D (niveaux/pièces/meubles) et conversion vers `.sh3d` via `java/Conv.java`, factorisé hors de `build_home.py`, réutilisé par `interieur_init.py`/`fusion_interieur.py` |
 | `src/phase1_cadastre.py` | fond ortho + cadastre + parcelles ; **définit le repère plan** (`data/meta.json`) |
 | `src/terrain.py` | terrain 3D solide (PyVista) + ortho drapée + grille d'ancrage |
 | `src/bati.py` | BD TOPO -> bâtiments voisinage (prisme + toit) ; emprises 2D de la propriété |
 | `src/vegetation.py` | arbres (maxima MNH) + haies taillées éventuelles |
 | `src/courbes.py` | courbes de niveau 1 m (`gdal_contour`) |
 | `src/build_home.py` | assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`) |
+| `src/interieur_init.py` | crée `interieur/<id>.sh3d` (plan 2D intérieur à dessiner à la main, un fichier par bâtiment propriété) — jamais dans le pipeline complet, n'écrase jamais un fichier déjà présent, cf. « Plan 2D intérieur » ci-dessous |
+| `src/fusion_interieur.py` | fusion ponctuelle des `interieur/*.sh3d` édités à la main dans `Plan 3D (avec interieur).sh3d` — ne modifie jamais `Plan 3D.sh3d` |
 | `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d` ; `--mobile-compat` : compatibilité appli mobile / Sweet Home 3D Online, cf. `tools/mobile_compat_check/`) |
 | `src/preview.py` | aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`), via `python src/preview.py [larg haut [low\|high]]` |
 | `src/orbit_render.py` | panoramique circulaire MP4 (caméra fixe sur la parcelle propriété, 360° de yaw, `data/verif/orbit.mp4`), option du job CI *Rendu* — via `python src/orbit_render.py [larg haut [low\|high] [images] [secondes]]` (cf. `docs/PIPELINE.md`) |
+| `src/roof_focus_render.py` | rendu oblique par bâtiment propriété pour lire la géométrie du toit reconstruit par `roofer` (`data/verif/roof_*.png`), outil de diagnostic ponctuel, à invoquer à la main — via `python src/roof_focus_render.py [larg haut [low\|high]]` |
 
 Ordre : `phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home`.
 
