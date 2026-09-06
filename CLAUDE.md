@@ -18,17 +18,28 @@ exacte du site.
 
 ## Environnement
 
-**Le pipeline de génération suppose désormais un environnement Linux/macOS**
+**Le pipeline de génération complet tourne sur Linux/macOS ET Windows**
 (`phase1_cadastre.py` -> `terrain.py` -> `bati.py` -> `vegetation.py` ->
-`courbes.py` -> `build_home.py`) : `bati.py` appelle `roofer` (cf. "Points
-durs" > roofer) pour le toit multi-pans des bâtiments propriété, et `roofer`
-n'a pas de build Windows officiel. **Windows + conda `sitegeo` sert
-uniquement à ouvrir/rendre `Plan 3D.sh3d` dans l'application Sweet Home 3D
-native** — pas à relancer le pipeline de génération : `bati.py` s'y
-replierait silencieusement sur le toit pyramidal (binaire `roofer`
-introuvable), sans planter. `.\run.ps1` reste documenté dans le README pour
-un lancement partiel (un seul script, ex. `terrain.py` seul) ou historique,
-pas comme méthode principale de génération.
+`courbes.py` -> `build_home.py`, via `./run.sh` ou `.\run.ps1` -- les deux
+lancent par défaut, sans argument, exactement les mêmes six étapes dans le
+même ordre). **Seule différence entre les deux OS : le toit des bâtiments
+propriété.** `bati.py` appelle `roofer` (cf. "Points durs" > roofer) pour le
+toit multi-pans, et `roofer` n'a pas de build Windows officiel -- sur
+Windows, `roofer_roof.find_roofer_bin()` renvoie `None` (binaire introuvable)
+et `bati.py` se replie silencieusement sur un toit pyramidal simple pour
+TOUS les bâtiments, **sans planter et sans affecter le reste du pipeline**
+(comportement déjà écrit pour ce cas, pas un contournement ad hoc). Aucun
+autre écart connu : `courbes.py` (`gdal_contour`, cf. `_gdal_contour_cmd`)
+et `build_home.py`/`sh3d_xml.py` (JDK, `java`/`javac` sur le `PATH`)
+fonctionnent nativement sur les deux OS ; `arbaro` (variété des arbres) est
+optionnel des deux côtés, même repli gracieux (gabarit d'arbre unique) s'il
+est absent. `.\run.ps1` (sans argument) lance donc bien le pipeline complet,
+au même titre que `./run.sh` -- seul le toit obtenu diffère (multi-pans vs
+pyramidal). Correction affirmée par lecture de code (`roofer_roof.py`,
+`courbes.py::_gdal_contour_cmd`, `run.ps1`), **pas encore revalidée par un
+run réel sur une machine Windows** dans une session Claude Code (cette
+session tourne sur un conteneur Linux, cf. point 3 ci-dessous) : à confirmer
+au premier retour d'un contributeur Windows.
 
 - Conda `sitegeo` (`config/environment.yml`). Appeler
   `<conda>\envs\sitegeo\python.exe` **directement**.
@@ -145,6 +156,14 @@ toujours à la main.
 ./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
 ```
 
+Sans machine Linux/macOS locale : `.github/workflows/interieur.yml`
+(`workflow_dispatch`) fait uniquement la création (`interieur_init.py`), à
+partir du dernier artefact `Plan 3D` déjà publié par `generation.yml` (comme
+`render.yml`, aucun secret de site requis) -> artefact `Interieurs` à
+télécharger et dézipper dans `interieur/` avant édition locale. La fusion
+(`fusion_interieur.py`) reste toujours locale, jamais en CI : elle a besoin
+des fichiers édités à la main, jamais versionnés.
+
 ## Arborescence
 
 - `src/` : Python (lancé en scripts ; `import sitegeo as cg`).
@@ -173,10 +192,21 @@ toujours à la main.
 ## Points durs
 
 - **Plan 2D intérieur séparé de la modélisation 3D extérieure** (`interieur_init.py`,
-  `fusion_interieur.py`) : le pipeline de génération ne modélise que
-  l'extérieur géoréférencé (parcelle/terrain/bâtis/végétation) -- l'agencement
-  intérieur réel d'un bâtiment (pièces, cloisons, mobilier) n'a aucune source
-  IGN et se dessine à la main. `interieur_init.py` crée un `.sh3d` PAR
+  `fusion_interieur.py`, `.github/workflows/interieur.yml`) : le pipeline de
+  génération ne modélise que l'extérieur géoréférencé
+  (parcelle/terrain/bâtis/végétation) -- l'agencement intérieur réel d'un
+  bâtiment (pièces, cloisons, mobilier) n'a aucune source IGN et se dessine à
+  la main. `interieur.yml` (`workflow_dispatch`) télécharge le dernier
+  artefact `Plan 3D` de `generation.yml` (`data/meta.json`/`bati.json`/
+  `bati_propriete_ref.json`, ajoutés à cet artefact pour ce besoin -- même
+  niveau de sensibilité que le reste, déjà la géométrie exacte du site),
+  lance `interieur_init.py` dans l'image CI et publie `interieur/*.sh3d` en
+  artefact `Interieurs` -- aucun secret de site requis (même principe que
+  `render.yml` : valeurs fictives, seul le parsing de `sitegeo.py` l'exige).
+  Ne couvre QUE la création initiale : l'édition et la fusion
+  (`fusion_interieur.py`) restent toujours locales, ces étapes ont besoin des
+  fichiers édités à la main (jamais versionnés, jamais publiés en CI).
+  `interieur_init.py` crée un `.sh3d` PAR
   bâtiment propriété (`interieur/<id>.sh3d`, un niveau par étage BD TOPO,
   repli à 1 si absent/NaN) avec un `<room>` "guide" par niveau reproduisant
   l'emprise exacte du bâtiment (même géométrie que le `<room>` "Emprise

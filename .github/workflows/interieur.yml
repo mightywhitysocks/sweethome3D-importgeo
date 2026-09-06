@@ -1,0 +1,158 @@
+# Bootstrap interieur/<id>.sh3d (un fichier par batiment propriete, cf.
+# src/interieur_init.py) a partir du DERNIER artefact "Plan 3D" deja publie
+# par generation.yml -- ne relance jamais le pipeline IGN/LiDAR/roofer, juste
+# la creation des projets .sh3d intérieurs (niveaux + <room> guide par étage).
+# A la demande uniquement.
+#
+# Ne fait QUE la creation initiale : l'edition (murs, pieces, mobilier) se
+# fait a la main, en local, dans l'appli Sweet Home 3D native, apres avoir
+# telecharge et dezippe l'artefact "Interieurs" publie ici dans interieur/ a
+# la racine du depot. La fusion ponctuelle (fusion_interieur.py) reste elle
+# aussi locale : jamais de CI pour cette etape, qui a besoin des fichiers
+# edites a la main (jamais versionnes, cf. .gitignore).
+#
+# Prerequis : au moins un run reussi de generation.yml ayant publie
+# l'artefact "Plan 3D" (Plan 3D.sh3d + data/bati.json + data/meta.json +
+# data/bati_propriete_ref.json entre autres, cf. generation.yml) et une image
+# CI deja construite (build-image.yml).
+#
+# Contrairement a generation.yml, AUCUN secret de site necessaire ici :
+# config/site.local.toml n'est requis que pour satisfaire le parsing de
+# sitegeo.py au chargement (INSEE/section/parcelles) -- des valeurs fictives
+# suffisent, interieur_init.py ne relit ni le cadastre ni aucune donnee IGN,
+# seulement les fichiers deja publies par generation.yml (meme principe que
+# render.yml).
+name: Intérieur
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID de generation.yml a utiliser (vide = dernier run reussi)"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  # cf. generation.yml : meme calcul (minuscules requises par GHCR/OCI),
+  # duplique ici car `container:` du job interieur est evalue avant toute step.
+  image-name:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.compute.outputs.image }}
+    steps:
+      - name: Minuscules (requis par OCI/GHCR)
+        id: compute
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/ci:latest" >> "$GITHUB_OUTPUT"
+
+  # cf. render.yml : meme logique (run_id explicite, ou dernier run reussi de
+  # generation.yml), duplique ici -- pas de workflow reutilisable pour eviter
+  # un refactor transverse aux 3 workflows hors perimetre de cette PR.
+  find-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      - name: Run source (input, ou dernier run reussi de generation.yml)
+        id: find
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const input = ${{ toJSON(inputs.run_id) }};
+            if (input) {
+              core.setOutput('run_id', input);
+              return;
+            }
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'generation.yml',
+              status: 'success',
+              per_page: 1,
+            });
+            if (data.workflow_runs.length === 0) {
+              core.setFailed("Aucun run reussi de generation.yml -- lancez-le d'abord.");
+              return;
+            }
+            core.setOutput('run_id', String(data.workflow_runs[0].id));
+
+  interieur:
+    needs: [image-name, find-run]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ${{ needs.image-name.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Télécharger l'artefact "Plan 3D" du run source
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: "Plan 3D"
+          path: _plan3d
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.find-run.outputs.run_id }}
+
+      # Seuls meta.json (compass), bati.json (etages) et bati_propriete_ref.json
+      # (footprints/sol_max_cm) sont necessaires a interieur_init.py -- pas
+      # Plan 3D.sh3d lui-meme ni les autres fichiers de l'artefact.
+      - name: Placer les données bâti/terrain
+        run: |
+          mkdir -p data
+          mv _plan3d/data/meta.json data/meta.json
+          mv _plan3d/data/bati.json data/bati.json
+          mv _plan3d/data/bati_propriete_ref.json data/bati_propriete_ref.json
+          rm -rf _plan3d
+
+      # Valeurs fictives : interieur_init.py ne relit ni le cadastre ni aucune
+      # donnee IGN (seulement les JSON deja publies), donc n'importe quelle
+      # parcelle syntaxiquement valide suffit a satisfaire sitegeo._load_site()
+      # au chargement du module. [tools].sweethome3d_jar : chemin fixe de
+      # l'image CI (cf. Dockerfile), requis par sh3d_xml.convert_to_sh3d
+      # (java/Conv.java).
+      - name: Écrire config/site.local.toml (valeurs fictives, [tools] = chemin CI)
+        run: |
+          cat > config/site.local.toml <<'TOML'
+          [parcelle]
+          insee           = "00000"
+          section         = "AA"
+          parcels         = ["0001"]
+          property_parcel = "0001"
+
+          [tools]
+          sweethome3d_jar = "/opt/sweethome3d/lib/SweetHome3D.jar"
+          TOML
+
+      - name: src/interieur_init.py
+        run: python3 src/interieur_init.py
+
+      - name: Vérifier qu'au moins un fichier a été produit
+        run: |
+          if ! find interieur -maxdepth 1 -name '*.sh3d' -print -quit | grep -q .; then
+            echo "::error::aucun interieur/*.sh3d produit (aucun batiment propriete sur ce site ?)"
+            exit 1
+          fi
+
+      - name: Publier interieur/*.sh3d
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: "Interieurs"
+          path: interieur/
+          if-no-files-found: error
+          # Meme politique que "Plan 3D" (generation.yml) : un <room> guide
+          # reproduit l'emprise exacte d'un batiment, geometrie tout aussi
+          # sensible que le reste du site.
+          retention-days: 7
