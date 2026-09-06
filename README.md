@@ -30,7 +30,10 @@ Trois façons d'obtenir un vrai toit multi-pans, au choix :
 1. **Une machine Linux/macOS déjà là** (ou WSL2/Docker) : `./run.sh`, un
    venv pip (`config/requirements-venv.txt`) + `roofer` installé (script
    officiel du dépôt `roofer`, licence GPLv3, cf. CLAUDE.md) +
-   `gdal-bin` (apt) / `gdal` (Homebrew) pour `courbes.py`.
+   `gdal-bin` (apt) / `gdal` (Homebrew) pour `courbes.py`. Une **session
+   Claude Code distante** (conteneur Linux éphémère) est un cas particulier
+   de ce mode, validé de bout en bout (pipeline complet + rendu SunFlow
+   réel) : cf. CLAUDE.md, section « Environnement », point 3.
 2. **Aucune machine Linux/macOS disponible** : générer à la demande via
    GitHub Actions (voir « Génération à la demande » ci-dessous) — un runner
    Linux éphémère fait tout le travail, rien à installer localement.
@@ -85,6 +88,28 @@ parcelle — pensez à réduire la rétention par défaut
 suffisent) et à ne jamais ajouter de collaborateur externe à une copie qui a
 déjà tourné sans d'abord évaluer l'historique des runs (il resterait
 visible pour ce nouveau collaborateur).
+
+### Rendu à la demande (sans relancer le pipeline)
+
+`.github/workflows/render.yml` (`workflow_dispatch`) rend en photo, via
+SunFlow, le dernier `Plan 3D.sh3d` déjà publié par un run de
+`generation.yml` — sans jamais relancer le pipeline IGN/LiDAR/`roofer`.
+Aucun secret de site n'est requis (seul le parsing de `sitegeo.py` exige un
+`config/site.local.toml`, des valeurs fictives suffisent). Option
+`animation` : panoramique circulaire MP4 en plus des 3 vues fixes (cf.
+`docs/PIPELINE.md`, `src/orbit_render.py`).
+
+### Backstop confidentialité en CI
+
+`.github/workflows/confidentialite.yml` (à chaque push sur `main` et sur
+chaque PR) vérifie mécaniquement que `config/site.local.toml` et `data/` ne
+sont jamais versionnés — en miroir du hook local
+`.claude/hooks/avant-livraison.sh`. Ce n'est qu'un filet de sécurité
+mécanique : la règle de fond (jamais de commune / code INSEE / section /
+numéro de parcelle / coordonnées en clair dans le code, les docs ou les
+messages de commit — `git grep -iE "<commune>|<insee>"` doit rester vide
+avant tout commit) reste détaillée dans `CLAUDE.md`, section
+« Confidentialité : dépôt public ».
 
 ## Démarrage
 
@@ -167,12 +192,17 @@ la géométrie exacte du site. Détail complet : `docs/PIPELINE.md` et
 ├── run.ps1              point d'entrée Windows (ouverture/rendu)
 ├── run.sh               point d'entrée Linux/macOS (génération complète)
 ├── Dockerfile            image CI (toolchain figé), publiée par build-image.yml
-├── .github/workflows/
-│   ├── build-image.yml  construit + publie l'image CI sur ghcr.io
-│   └── generation.yml   lance le pipeline à la demande dans cette image
+├── .github/
+│   ├── dependabot.yml       PR de mise à jour (pip + github-actions), jamais de build/publish
+│   └── workflows/
+│       ├── build-image.yml     construit + publie l'image CI sur ghcr.io
+│       ├── generation.yml      lance le pipeline à la demande dans cette image
+│       ├── render.yml          rendu photo/vidéo à la demande depuis un run generation.yml existant
+│       └── confidentialite.yml backstop CI : site.local.toml/data/ jamais versionnés
 ├── config/
 │   ├── environment.yml       env conda `sitegeo` (Windows)
-│   ├── requirements-venv.txt venv pip (Linux/macOS/Docker)
+│   ├── requirements-venv.txt venv pip (Linux/macOS/Docker) — versions harmonisées
+│   │                          avec environment.yml (cf. CLAUDE.md > Environnement)
 │   ├── site.example.toml     gabarit de config
 │   └── site.local.toml       VOTRE parcelle (git-ignored, créé au 1er lancement)
 ├── src/                 le pipeline Python
@@ -210,6 +240,18 @@ Origine = coin **nord-ouest** de la bounding box (parcelles + marge). Axes
 **X = est, Y = sud**, unité **centimètre**. Altitude `z = altitude_NGF - z_min`.
 Les coordonnées Lambert-93 de l'origine sont calculées en Phase 1 et écrites dans
 `data/meta.json` (git-ignored), réutilisées telles quelles par toutes les étapes.
+
+## Maintenance
+
+`.github/dependabot.yml` ouvre des PR de mise à jour sur `config/requirements-venv.txt`
+(pip) et `.github/workflows/` (SHA d'actions) — jamais de build/publish
+automatique. **Toute PR Dependabot sur `requirements-venv.txt` doit être
+répercutée à la main dans `config/environment.yml`** (Dependabot ne couvre
+pas conda) pour garder les deux environnements en versions harmonisées.
+Restent hors périmètre Dependabot, à vérifier manuellement et
+occasionnellement : `environment.yml` lui-même, et les pins durs du
+`Dockerfile` (`roofer`, Sweet Home 3D). Détail complet : CLAUDE.md, section
+« Environnement ».
 
 ## Licence
 
