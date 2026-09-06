@@ -67,18 +67,28 @@ au premier retour d'un contributeur Windows.
   paquet différents par nature).
 - **Détection des montées de version** : `.github/dependabot.yml`
   (écosystèmes `pip` sur `config/requirements-venv.txt` et `github-actions`
-  sur `.github/workflows/`) ouvre des PR de mise à jour, sans jamais
-  reconstruire ni publier d'image — le comportement de `build-image.yml`
-  (déclenché par push sur `Dockerfile`/`requirements-venv.txt` ou
-  manuellement, jamais planifié : un rebuild périodique n'apporterait
-  qu'un gain marginal — apt/Debian, seul pan non épinglé du Dockerfile —
-  pour un risque réel sur son tag mono-`latest` sans rollback) reste
-  inchangé. **Toute PR Dependabot sur `requirements-venv.txt` doit être
-  répercutée à la main dans `environment.yml`** (Dependabot ne couvre pas
-  conda). Restent hors périmètre de Dependabot, à vérifier manuellement et
-  occasionnellement : `environment.yml` lui-même, et les pins durs du
-  `Dockerfile` (roofer, Sweet Home 3D — volontairement non automatisés,
-  cf. "Points durs" > roofer).
+  sur `.github/workflows/`, chacun groupé en une seule PR mensuelle plutôt
+  qu'une par paquet — réduit le nombre d'allers-retours manuels) ouvre des
+  PR de mise à jour, sans jamais reconstruire ni publier d'image *depuis
+  Dependabot lui-même*. `build-image.yml` reste déclenché par push sur
+  `Dockerfile`/`requirements-venv.txt`, manuellement, ou (depuis l'ajout du
+  tag `:<sha>` et de la validation sur PR, ci-dessous) sur toute PR touchant
+  ces mêmes chemins — construction seule, sans publication, pour détecter
+  une PR Dependabot cassante avant le merge plutôt qu'après ; jamais
+  planifié (un rebuild périodique n'apporterait qu'un gain marginal —
+  apt/Debian, seul pan non épinglé du Dockerfile — pour un coût réel). Deux
+  tags publiés hors PR : `:latest` (mutable, seul tag consommé par
+  `generation.yml`/`render.yml` via le workflow réutilisable
+  `image-name.yml`) et `:<sha>` (immutable) — le risque de tag mono-`latest`
+  sans rollback, qui justifiait autrefois ce choix de ne jamais planifier de
+  reconstruction, est désormais mitigé par ce second tag (rollback manuel
+  possible sur un commit précis en attendant un correctif). **Toute PR
+  Dependabot sur `requirements-venv.txt` doit être répercutée à la main
+  dans `environment.yml`** (Dependabot ne couvre pas conda). Restent hors
+  périmètre de Dependabot, à vérifier manuellement et occasionnellement :
+  `environment.yml` lui-même, et les pins durs du `Dockerfile` (roofer,
+  Sweet Home 3D — volontairement non automatisés, cf. "Points durs" >
+  roofer).
 
 ### Trois façons de lancer la génération complète (toit multi-pans)
 
