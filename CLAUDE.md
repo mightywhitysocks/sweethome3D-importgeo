@@ -209,14 +209,32 @@ toujours à la main.
   géométrie -- confirmé par le gabarit `home_template.xml`, 5 niveaux à la
   même `elevation='0.0'` mais des `elevationIndex` différents) est
   réattribué en continu après le plus grand déjà utilisé côté extérieur ;
-  chaque niveau/élément intérieur reçoit un id UUID frais, stratégie
-  purement additive qui ne touche jamais aux niveaux/emprises extérieurs
-  existants. **Validé de bout en bout** dans une session Claude Code
-  distante (JDK + mirror `SweetHome3D.jar` du dépôt) sur une fixture
-  synthétique : 2 bâtiments (l'un multi-ring), murs joints (`wallAtStart`)
-  et meuble de catalogue ajoutés via l'API Java (simulant une édition native
-  réelle), fusion puis relecture via `HomeFileRecorder` -- tous les niveaux,
-  murs et meubles résolus au bon niveau, contenu du meuble catalogue
+  chaque niveau/élément intérieur reçoit un id UUID frais (pas seulement les
+  niveaux -- y compris `<room>`/`<wall>`/`<pieceOfFurniture>`/
+  `<furnitureGroup>`, `wallAtStart`/`wallAtEnd` réécrits en conséquence),
+  stratégie purement additive qui ne touche jamais aux niveaux/emprises
+  extérieurs existants. Nécessaire même si les ids source sont des UUID a
+  priori uniques : un `interieur/<id>.sh3d` dupliqué à la main (copie du
+  fichier lui-même) pour amorcer un 2e bâtiment reproduirait des ids
+  identiques -- sans ce remap, deux fichiers source distincts pourraient
+  collisionner sur le même id dans le `Home.xml` fusionné et casser la
+  résolution de `wallAtStart`/`wallAtEnd` par `HomeXMLHandler`. `Plan 3D
+  (avec interieur).sh3d` existant est sauvegardé en `.sh3d.bak` avant
+  réécriture, même logique que `Plan 3D.sh3d`/`build_home.py`.
+  Sauvegarde normale (Ctrl+S) dans l'appli desktop réelle : **confirmé** (pas
+  supposé) par désassemblage de `SweetHome3D.class` dans le `.jar` 7.5 pinné
+  par le `Dockerfile` -- le `HomeFileRecorder` par défaut de l'appli
+  (`getHomeRecorder()`, utilisé pour un enregistrement normal, comme sa
+  variante `COMPRESSED`) passe déjà `preferXmlEntry=true`, exactement comme
+  `java/Conv.java` -- une édition puis sauvegarde native écrira donc bien
+  l'entrée `Home.xml` que `fusion_interieur.py` lit. **Validé de bout en
+  bout** dans une session Claude Code distante (JDK + mirror
+  `SweetHome3D.jar` du dépôt) sur une fixture synthétique : 2 bâtiments
+  (l'un multi-ring), murs joints (`wallAtStart`) et meuble de catalogue
+  ajoutés via l'API Java (simulant une édition native réelle), y compris un
+  cas de fichiers `interieur/*.sh3d` dupliqués (ids source identiques) --
+  fusion puis relecture via `HomeFileRecorder` : tous les niveaux, murs et
+  meubles résolus au bon niveau sans collision, contenu du meuble catalogue
   correctement copié/résolu. **Pas encore validé sur un site réel** (pas de
   site configuré dans cette session, confidentialité) : à reprendre au
   prochain run complet avec un vrai bâtiment édité dans l'appli desktop.

@@ -28,6 +28,7 @@ les referencent.
 """
 from __future__ import annotations
 
+import shutil
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -42,7 +43,18 @@ OUT_SH3D = cg.ROOT / "Plan 3D (avec interieur).sh3d"
 LEVEL_SCOPED_TAGS = {"room", "wall", "pieceOfFurniture", "furnitureGroup",
                      "dimensionLine", "polyline", "label"}
 CONTENT_ATTRS = {"model", "icon", "planIcon", "image", "texture"}
+WALL_REF_ATTRS = ("wallAtStart", "wallAtEnd")
 SKIP_ENTRIES = {"Home.xml", "Home", "ContentDigests"}
+
+
+def _home_xml(zf: zipfile.ZipFile, label: str) -> ET.Element:
+    try:
+        data = zf.read("Home.xml")
+    except KeyError:
+        raise SystemExit(
+            f"{label} : aucune entree Home.xml dans ce .sh3d -- format inattendu "
+            "(version de Sweet Home 3D tres ancienne ?), impossible de fusionner.")
+    return ET.fromstring(data)
 
 
 def _content_entries(zf: zipfile.ZipFile) -> set[str]:
@@ -63,23 +75,48 @@ def _rewrite_content_refs(elem: ET.Element, prefix: str, known: set[str]) -> Non
                 e.attrib[k] = f"{prefix}/{v}"
 
 
+def _remap_ids(children: list[ET.Element]) -> None:
+    """Reassigne un id frais a CHAQUE element id= des sous-arbres retenus (pas
+    seulement les niveaux) et met a jour les references croisees connues
+    (wallAtStart/wallAtEnd) en consequence. Necessaire meme si les ids sources
+    sont des UUID a priori uniques : un fichier interieur/*.sh3d duplique a la
+    main (copie du fichier lui-meme) pour amorcer un 2e batiment reproduirait
+    des ids identiques -- sans ce remap, deux <room>/<wall> de fichiers source
+    differents pourraient collisionner sur le meme id dans le Home.xml fusionne,
+    ce qui casserait la resolution de wallAtStart/wallAtEnd par HomeXMLHandler."""
+    id_map: dict[str, str] = {}
+    for child in children:
+        for e in child.iter():
+            old = e.get("id")
+            if old is not None:
+                id_map[old] = sh3d_xml.uid(e.tag)
+    for child in children:
+        for e in child.iter():
+            old = e.get("id")
+            if old in id_map:
+                e.set("id", id_map[old])
+            for attr in WALL_REF_ATTRS:
+                ref = e.get(attr)
+                if ref in id_map:
+                    e.set(attr, id_map[ref])
+
+
 def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
                 out_entries: dict[str, bytes]) -> tuple[int, int, int]:
     """Fusionne un interieur/<fid>.sh3d dans ext_root (in place). Renvoie
     (niveaux ajoutes, elements ajoutes, next_index mis a jour)."""
     fid = path.stem
     with zipfile.ZipFile(path) as zf:
-        root = ET.fromstring(zf.read("Home.xml"))
+        root = _home_xml(zf, path.name)
         known_content = _content_entries(zf)
         levels = root.findall("level")
         solo_level_id = levels[0].get("id") if len(levels) == 1 else None
 
-        id_map: dict[str, str] = {}
+        level_id_map: dict[str, str] = {}
         added_levels = 0
         for lvl in levels:
-            old_id = lvl.get("id")
             new_id = sh3d_xml.uid("level")
-            id_map[old_id] = new_id
+            level_id_map[lvl.get("id")] = new_id
             new_lvl = ET.Element("level", dict(lvl.attrib))
             new_lvl.set("id", new_id)
             new_lvl.set("elevationIndex", str(next_index))
@@ -87,12 +124,13 @@ def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
             next_index += 1
             added_levels += 1
 
+        retained = [c for c in list(root) if c.tag in LEVEL_SCOPED_TAGS]
+        _remap_ids(retained)
+
         added_items = 0
-        for child in list(root):
-            if child.tag not in LEVEL_SCOPED_TAGS:
-                continue
+        for child in retained:
             lvl_id = child.get("level") or solo_level_id
-            if lvl_id is None or lvl_id not in id_map:
+            if lvl_id is None or lvl_id not in level_id_map:
                 print(f"  {path.name} : <{child.tag}> sans niveau resoluble -> ignore")
                 continue
             refs: set[str] = set()
@@ -102,7 +140,7 @@ def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
                 for name in refs:
                     out_entries[f"{prefix}/{name}"] = zf.read(name)
                 _rewrite_content_refs(child, prefix, known_content)
-            child.set("level", id_map[lvl_id])
+            child.set("level", level_id_map[lvl_id])
             ext_root.append(child)
             added_items += 1
 
@@ -119,7 +157,7 @@ def main() -> None:
             "editer au moins un batiment dans l'appli Sweet Home 3D native avant de fusionner.")
 
     with zipfile.ZipFile(SH3D) as ext_zip:
-        ext_root = ET.fromstring(ext_zip.read("Home.xml"))
+        ext_root = _home_xml(ext_zip, SH3D.name)
         ext_entries = {n: ext_zip.read(n) for n in ext_zip.namelist() if n not in SKIP_ENTRIES}
 
     next_index = max((int(l.get("elevationIndex", 0)) for l in ext_root.findall("level")),
@@ -144,6 +182,8 @@ def main() -> None:
         for name, data in out_entries.items():
             z.writestr(name, data)
         z.writestr("Home.xml", home_xml)
+    if OUT_SH3D.exists():
+        shutil.copy2(OUT_SH3D, OUT_SH3D.with_suffix(".sh3d.bak"))
     try:
         sh3d_xml.convert_to_sh3d(raw, OUT_SH3D)
     finally:
