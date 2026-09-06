@@ -195,7 +195,11 @@ la géométrie exacte du site. Détail complet : `docs/PIPELINE.md` et
 ├── .github/
 │   ├── dependabot.yml       PR de mise à jour (pip + github-actions), jamais de build/publish
 │   └── workflows/
-│       ├── build-image.yml     construit + publie l'image CI sur ghcr.io
+│       ├── build-image.yml     construit + publie l'image CI sur ghcr.io (validation
+│       │                        seule, sans publier, sur PR touchant Dockerfile/
+│       │                        requirements-venv.txt)
+│       ├── image-name.yml      interne (workflow_call) : nom d'image GHCR en
+│       │                        minuscules, factorisé entre generation.yml/render.yml
 │       ├── generation.yml      lance le pipeline à la demande dans cette image
 │       ├── render.yml          rendu photo/vidéo à la demande depuis un run generation.yml existant
 │       └── confidentialite.yml backstop CI : site.local.toml/data/ jamais versionnés
