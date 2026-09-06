@@ -5,14 +5,17 @@ description: Lance le contrôle qualité lecture seule du pipeline (verif.py) pl
 Lance, dans cet ordre, sans rien modifier :
 
 1. **Contrôle du pipeline** (lecture seule, ne touche à rien sous `data/`) :
-   - si `pwsh`/`powershell` est disponible : `pwsh -File run.ps1 verif`
-     (ou `.\run.ps1 verif` sous Windows) ;
-   - sinon, invoque directement l'interpréteur conda du projet :
-     `<conda>\envs\sitegeo\python.exe src/verif.py` (jamais `py`, jamais
-     `conda run` — CLAUDE.md §Environnement). Si aucun des deux n'est
-     exécutable dans cette session (ex. session distante sans l'env
-     Windows/conda), dis-le clairement plutôt que d'improviser une
-     alternative.
+   - **Linux/macOS, y compris une session Claude Code distante** (le cas le
+     plus courant ici — cf. CLAUDE.md §Environnement, validé de bout en
+     bout pour `verif.py`) : `./run.sh verif` (ou `.venv/bin/python
+     src/verif.py` si le venv existe déjà) ;
+   - **Windows** : si `pwsh`/`powershell` est disponible, `pwsh -File
+     run.ps1 verif` (ou `.\run.ps1 verif`) ; sinon invoque directement
+     l'interpréteur conda du projet : `<conda>\envs\sitegeo\python.exe
+     src/verif.py` (jamais `py`, jamais `conda run` — CLAUDE.md
+     §Environnement).
+   - Si aucune de ces options n'est exécutable dans cette session, dis-le
+     clairement plutôt que d'improviser une alternative.
 2. **Grep de confidentialité** — construis le motif à partir de ce qui
    existe réellement :
    ```
