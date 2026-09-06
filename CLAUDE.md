@@ -867,6 +867,51 @@ des fichiers édités à la main, jamais versionnés.
   a observer sur un run complet (`node tools/mobile_compat_check/check.mjs
   "Plan 3D.sh3d"`, ou `verif.py --mobile-compat`).
 
+- **Visibilite niveau/groupe sur l'appli mobile reelle -- verifie a la
+  main, pas seulement une question de chargement.** Question posee par
+  l'utilisateur : une fois `Plan 3D.sh3d` ouvert sur mobile, peut-on
+  masquer un niveau (ex. Terrain/Vegetation) ou un groupe de mobilier
+  entier, comme sur desktop (`Ctrl+Maj+H` pour un niveau) ? Recherche
+  documentaire d'abord (blog eTeks : l'appli mobile reprend le guide
+  utilisateur desktop sauf impression/photo-video/plugins -- rien
+  d'explicite sur la visibilite ; forum officiel,
+  https://www.sweethome3d.com/support/forum/viewthread_thread,6334 :
+  masquer un element **individuel a l'interieur d'un groupe** sans le
+  degrouper n'a jamais ete implemente, desktop compris -- decision
+  volontaire du developpeur pour eviter de compliquer la gestion de la
+  taille/altitude d'un groupe partiellement visible). Confirme ensuite
+  **empiriquement sur l'appli mobile officielle reelle** (Android,
+  version non consignee -- pas seulement `tools/mobile_compat_check/`, qui
+  teste une bibliotheque JS tierce et ne partage pas forcement la meme
+  interface), avec le fixture synthetique existant de
+  `tools/mobile_compat_check/fixture/` (3 niveaux + un `furnitureGroup`,
+  aucune modification necessaire) :
+  - Masquer un **groupe de mobilier entier** (case "Visible" dans la
+    liste du mobilier) fonctionne sur mobile.
+  - Masquer un **niveau entier** ne fonctionne PAS sur mobile -- aucun
+    equivalent au raccourci desktop `Ctrl+Maj+H` n'est accessible dans
+    l'interface mobile testee.
+  - Masquer un element individuel dans un groupe reste impossible partout
+    (cf. recherche documentaire ci-dessus) -- confirme que l'utilisateur
+    ne faisait rien de travers, c'est la seule granularite de visibilite
+    que ce format/logiciel expose.
+  **Consequence pour une eventuelle "vue mobile" allegee** (pas construite
+  a ce stade) : le seul levier disponible sur mobile est de placer le
+  contenu a masquer/afficher a la demande dans un **groupe de mobilier**,
+  jamais de compter sur le decoupage en niveaux
+  (Cadastre/Terrain/Bati voisinage/Vegetation/"Emprise `<id>`" ne sont pas
+  masquables individuellement sur mobile aujourd'hui). Deux points
+  restent a trancher avant de coder quoi que ce soit dans cette direction :
+  `viewable`/`visible` sont des proprietes du fichier, pas du visionneur --
+  un etat par defaut adapte au mobile s'appliquerait aussi a l'ouverture
+  desktop du meme `Plan 3D.sh3d` (probablement besoin d'un second export
+  dedie plutot que de modifier le fichier canonique) ; et mur + toit d'un
+  meme batiment propriete sortent de `roofer_roof.py`/`bati.py` comme un
+  seul solide multi-materiaux (une seule piece SH3D, cf. "Decoupage en
+  groupes de materiau" plus haut) -- masquer le toit seul en gardant les
+  murs visibles demanderait de scinder ce solide en deux pieces
+  distinctes, hors de portee d'un simple attribut de visibilite.
+
 ## git
 
 Dépôt publié sur GitHub (`git` via GitHub Desktop). Ne pas `init` / committer /

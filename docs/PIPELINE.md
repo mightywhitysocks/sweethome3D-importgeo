@@ -346,6 +346,33 @@ image exploitable.
     correctif. `verif.py --mobile-compat` automatise ce controle a chaque
     generation (optionnel, ignore si Node.js est absent).
 
+    **Visibilite niveau/groupe sur l'appli mobile reelle (testee sur
+    Android, version non consignee).** Question distincte du chargement
+    ci-dessus : une fois le plan ouvert, quel controle de visibilite reste
+    disponible sur mobile ? Verifie a la main avec le fixture synthetique
+    de `tools/mobile_compat_check/` (3 niveaux + un `furnitureGroup`) sur
+    l'appli mobile officielle (pas le viewer JS headless ci-dessus, qui ne
+    partage pas forcement la meme interface) :
+    - **Masquer un groupe de mobilier entier** (case "Visible" dans la
+      liste du mobilier, colonne `VISIBLE` deja prevue dans
+      `assets/home_template.xml`) fonctionne sur mobile.
+    - **Masquer un niveau entier** ne fonctionne pas sur mobile -- aucune
+      bascule equivalente au raccourci desktop `Ctrl+Maj+H` n'est
+      accessible dans l'interface mobile.
+    - **Masquer un element individuel a l'interieur d'un groupe** (sans le
+      degrouper) n'est possible sur AUCUNE plateforme, desktop compris :
+      decision volontaire du developpeur (forum officiel,
+      https://www.sweethome3d.com/support/forum/viewthread_thread,6334)
+      pour eviter de compliquer la gestion de la taille/altitude d'un
+      groupe partiellement visible -- ce n'est donc pas une limitation
+      mobile specifique.
+
+    Consequence pour ce projet : un contenu qu'on veut pouvoir masquer a
+    la demande sur mobile doit vivre dans un groupe de mobilier, jamais
+    reposer sur le seul decoupage en niveaux (Cadastre/Terrain/Bati
+    voisinage/Vegetation/"Emprise `<id>`" ne sont aujourd'hui PAS
+    masquables individuellement sur mobile).
+
 ## Écarts assumés
 
 1 écart assumé à ce jour.
