@@ -4,124 +4,163 @@ Génère un **plan 3D géoréférencé d'une parcelle cadastrale française** po
 [Sweet Home 3D](https://www.sweethome3d.com/), à partir des données publiques
 **IGN Géoplateforme** :
 
-- **PCI Express** (cadastre) : limites et numéros de parcelles ;
-- **Ortho HR** : photo aérienne 20 cm/px, drapée sur le terrain ;
-- **LIDAR HD** : MNT (relief) et MNH (hauteur de végétation) ;
-- **BD TOPO** : emprises et hauteurs des bâtiments.
+| Source IGN | Contenu |
+|---|---|
+| **PCI Express** | Cadastre : limites et numéros de parcelles |
+| **Ortho HR** | Photo aérienne 20 cm/px, drapée sur le terrain |
+| **LiDAR HD** | MNT (relief) et MNH (hauteur de végétation) |
+| **BD TOPO** | Emprises et hauteurs des bâtiments |
 
-Résultat : `Plan 3D.sh3d`, double-cliquable, avec 5 calques (Cadastre / Terrain /
-Bâti voisinage / Bâti propriété / Végétation) — toit + mur multi-pans de
-chaque bâtiment reconstruits par `roofer` (LiDAR HD IGN), repli sur un toit
+**Résultat** : `Plan 3D.sh3d`, double-cliquable, 5 calques (Cadastre, Terrain,
+Bâti voisinage, Bâti propriété, Végétation). Toit et mur multi-pans de chaque
+bâtiment reconstruits par `roofer` (LiDAR HD IGN), avec repli sur un toit
 pyramidal simple si non exploitable.
 
-La parcelle cible **n'est pas codée dans le dépôt** : elle se règle dans
-`config/site.local.toml` (git-ignored).
+> [!IMPORTANT]
+> La parcelle cible **n'est pas codée dans le dépôt**. Elle se règle dans
+> `config/site.local.toml` (git-ignored).
+
+## Sommaire
+
+- [Prérequis](#prérequis)
+- [Génération à la demande (GitHub Actions)](#génération-à-la-demande-sans-machine-linuxmacos-locale-github-actions)
+- [Rendu à la demande](#rendu-à-la-demande-sans-relancer-le-pipeline)
+- [Backstop confidentialité en CI](#backstop-confidentialité-en-ci)
+- [Démarrage](#démarrage)
+- [Plan 2D intérieur](#plan-2d-intérieur-optionnel-à-la-main)
+- [Arborescence](#arborescence)
+- [Repère plan Sweet Home 3D](#repère-plan-sweet-home-3d)
+- [Maintenance](#maintenance)
+- [Licence](#licence)
 
 ## Prérequis
 
-Le pipeline de **génération** (`phase1_cadastre` -> ... -> `build_home`)
-tourne en entier sur **Linux/macOS ET Windows** — `./run.sh` comme
-`.\run.ps1`, sans argument, lancent les mêmes six étapes dans le même
-ordre. La seule différence entre les deux OS est le toit des bâtiments
-propriété : `bati.py` appelle l'outil externe `roofer` (toit multi-pans),
-qui n'a pas de build Windows officiel (cf. CLAUDE.md section Environnement).
-**Sur Windows uniquement**, `bati.py` se replie donc silencieusement sur un
-toit pyramidal simple pour tous les bâtiments — comportement prévu, pas un
-plantage, mais sans avertissement visible si vous ne le remarquez pas.
-Trois façons d'obtenir un vrai toit multi-pans (Windows seul n'en fait pas
-partie, pour cette seule raison) :
+Le pipeline de **génération** (`phase1_cadastre` → ... → `build_home`) tourne
+en entier sur **Linux/macOS et Windows** : `./run.sh` et `.\run.ps1`, sans
+argument, lancent les mêmes six étapes dans le même ordre.
 
-1. **Une machine Linux/macOS déjà là** (ou WSL2/Docker) : `./run.sh`, un
-   venv pip (`config/requirements-venv.txt`) + `roofer` installé (script
-   officiel du dépôt `roofer`, licence GPLv3, cf. CLAUDE.md) +
-   `gdal-bin` (apt) / `gdal` (Homebrew) pour `courbes.py`. Une **session
-   Claude Code distante** (conteneur Linux éphémère) est un cas particulier
-   de ce mode, validé de bout en bout (pipeline complet + rendu SunFlow
-   réel) : cf. CLAUDE.md, section « Environnement », point 3.
-2. **Aucune machine Linux/macOS disponible** : générer à la demande via
-   GitHub Actions (voir « Génération à la demande » ci-dessous) — un runner
-   Linux éphémère fait tout le travail, rien à installer localement.
-3. **WSL2/Docker sous Windows** (rejoint le cas 1 ci-dessus) : seule façon
-   d'obtenir le toit multi-pans directement sur une machine Windows.
+La seule différence entre les deux OS porte sur le toit des bâtiments
+propriété. `bati.py` appelle l'outil externe `roofer` (toit multi-pans), qui
+n'a pas de build Windows officiel (détail : `CLAUDE.md` > Environnement).
+**Sous Windows uniquement**, `bati.py` se replie donc silencieusement sur un
+toit pyramidal simple pour tous les bâtiments : comportement voulu, pas une
+erreur, mais sans avertissement visible.
+
+Trois façons d'obtenir un vrai toit multi-pans :
+
+1. **Une machine Linux/macOS déjà disponible** (ou WSL2/Docker) : `./run.sh`,
+   un venv pip (`config/requirements-venv.txt`) + `roofer` installé (script
+   officiel du dépôt `roofer`, licence GPLv3, cf. `CLAUDE.md`) +
+   `gdal-bin` (apt) ou `gdal` (Homebrew) pour `courbes.py`.
+
+   > [!NOTE]
+   > Une **session Claude Code distante** (conteneur Linux éphémère) est un
+   > cas particulier de ce mode, validé de bout en bout (pipeline complet +
+   > rendu SunFlow réel). Voir `CLAUDE.md` > Environnement, point 3.
+
+2. **Aucune machine Linux/macOS disponible** : génération à la demande via
+   [GitHub Actions](#génération-à-la-demande-sans-machine-linuxmacos-locale-github-actions).
+   Un runner Linux éphémère fait tout le travail, rien à installer localement.
+3. **WSL2/Docker sous Windows** (rejoint le cas 1) : seule façon d'obtenir le
+   toit multi-pans directement sur une machine Windows.
 
 **Windows + PowerShell + Anaconda/Miniconda** (`.\run.ps1`, sans WSL2/Docker)
-lance donc bien le **pipeline complet**, toit pyramidal simple pour les
-bâtiments propriété (repli automatique, `roofer` absent) — pas seulement
-l'ouverture/le rendu de `Plan 3D.sh3d` dans l'application native.
+lance donc bien le **pipeline complet**, avec toit pyramidal simple pour les
+bâtiments propriété, pas seulement l'ouverture/le rendu de `Plan 3D.sh3d`
+dans l'application native.
 
-Dans tous les cas : un **JDK** (`java` et `javac` sur le `PATH`), p.ex.
-Oracle JDK 21 (assemblage/relecture du `.sh3d`, rendu photo headless), et
-**Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`).
+Dans tous les cas, il faut :
 
-**Optionnel** : `arbaro_cmd.jar` (variété des arbres, silhouettes conifère/
-feuillu/arbuste au lieu d'un gabarit unique répété, cf. issue #82) — aucun
-binaire officiel Linux publié, à construire depuis les sources (`git clone
-https://github.com/wdiestel/arbaro`, licence GPL-2, puis `javac`/`jar`, cf.
-`Dockerfile` pour la séquence exacte), chemin renseigné dans
-`[tools].arbaro_jar` (`config/site.local.toml`). Absent : `vegetation.py` se
-replie sur le gabarit d'arbre unique historique, sans planter. Déjà construit
-automatiquement dans l'image CI (génération à la demande via GitHub Actions,
-ci-dessous).
+- Un **JDK** (`java` et `javac` sur le `PATH`), par exemple Oracle JDK 21
+  (assemblage/relecture du `.sh3d`, rendu photo headless).
+- **Sweet Home 3D** installé (le pipeline lit son `SweetHome3D.jar`).
 
-**Optionnel** : **Node.js** (`node` sur le `PATH`) pour `verif.py
---mobile-compat` (vérifie que `Plan 3D.sh3d` se charge sans erreur dans le
-vrai moteur JS partagé par l'appli mobile Sweet Home 3D et Sweet Home 3D
-Online — cf. `tools/mobile_compat_check/`, `npm install` dans ce dossier au
-préalable). Absent : contrôle ignoré, sans planter.
+<details>
+<summary><strong>Optionnel</strong> : <code>arbaro_cmd.jar</code> (variété des arbres)</summary>
+
+Silhouettes conifère / feuillu / arbuste au lieu d'un gabarit unique répété
+(issue #82). Aucun binaire officiel Linux publié : à construire depuis les
+sources (`git clone https://github.com/wdiestel/arbaro`, licence GPL-2, puis
+`javac`/`jar`, séquence exacte dans `Dockerfile`). Chemin renseigné dans
+`[tools].arbaro_jar` (`config/site.local.toml`).
+
+Absent : `vegetation.py` se replie sur le gabarit d'arbre unique historique,
+sans planter. Déjà construit automatiquement dans l'image CI (génération à la
+demande via GitHub Actions).
+
+</details>
+
+<details>
+<summary><strong>Optionnel</strong> : Node.js (compatibilité appli mobile)</summary>
+
+`node` sur le `PATH`, pour `verif.py --mobile-compat` : vérifie que
+`Plan 3D.sh3d` se charge sans erreur dans le moteur JS partagé par l'appli
+mobile Sweet Home 3D et Sweet Home 3D Online (voir `tools/mobile_compat_check/`,
+`npm install` dans ce dossier au préalable).
+
+Absent : contrôle ignoré, sans planter.
+
+</details>
 
 ### Génération à la demande, sans machine Linux/macOS locale (GitHub Actions)
 
 Ce dépôt est un **template GitHub**. Pour générer sans rien installer
 localement :
 
-1. Bouton **Use this template** sur ce dépôt -> créer votre copie en
-   **Private** (important : voir mise en garde ci-dessous).
+1. Bouton **Use this template** sur ce dépôt → créer votre copie en
+   **Private** (voir mise en garde ci-dessous).
 2. Dans votre copie, `Settings → Secrets and variables → Actions` : créer le
-   secret `SITE_LOCAL_TOML` = contenu d'un `site.local.toml` (comme
-   `config/site.example.toml`, **sans** section `[tools]` — elle est
+   secret `SITE_LOCAL_TOML` = contenu d'un `site.local.toml` (sur le modèle
+   de `config/site.example.toml`, **sans** section `[tools]` : elle est
    ajoutée automatiquement par le workflow).
 3. Onglet **Actions** : lancer une fois *Construire l'image CI*
-   (`build-image.yml`), puis *Génération* (`generation.yml`) à chaque fois
-   que vous voulez un plan.
+   (`build-image.yml`), puis *Génération* (`generation.yml`) à chaque plan
+   souhaité.
 4. Télécharger l'artefact `Plan 3D` depuis la page du run, en extraire
    `Plan 3D.sh3d`, l'ouvrir en local dans Sweet Home 3D (Windows/macOS/Linux).
 
-**Mise en garde confidentialité** : ne créez ce secret et ne déclenchez ce
-workflow que dans une copie **privée** — sur un dépôt public, logs de run et
-artefacts sont visibles par n'importe quel compte GitHub, pas seulement les
-collaborateurs. Même en privé, la sortie normale de `phase1_cadastre.py`
-affiche en clair, dans les logs, la section cadastrale et les numéros de
-parcelle — pensez à réduire la rétention par défaut
-(`Settings → Actions → General → Artifact and log retention`, quelques jours
-suffisent) et à ne jamais ajouter de collaborateur externe à une copie qui a
-déjà tourné sans d'abord évaluer l'historique des runs (il resterait
-visible pour ce nouveau collaborateur).
+> [!WARNING]
+> **Confidentialité.** Ne créez ce secret et ne déclenchez ce workflow que
+> dans une copie **privée** : sur un dépôt public, logs de run et artefacts
+> sont visibles par n'importe quel compte GitHub, pas seulement les
+> collaborateurs.
+>
+> Même en privé, la sortie normale de `phase1_cadastre.py` affiche en clair,
+> dans les logs, la section cadastrale et les numéros de parcelle :
+> - réduisez la rétention par défaut (`Settings → Actions → General →
+>   Artifact and log retention`, quelques jours suffisent) ;
+> - n'ajoutez jamais de collaborateur externe à une copie qui a déjà tourné
+>   sans d'abord purger ou évaluer l'historique des runs (il resterait
+>   visible pour ce nouveau collaborateur).
 
 ### Rendu à la demande (sans relancer le pipeline)
 
 `.github/workflows/render.yml` (`workflow_dispatch`) rend en photo, via
 SunFlow, le dernier `Plan 3D.sh3d` déjà publié par un run de
-`generation.yml` — sans jamais relancer le pipeline IGN/LiDAR/`roofer`.
-Aucun secret de site n'est requis (seul le parsing de `sitegeo.py` exige un
-`config/site.local.toml`, des valeurs fictives suffisent). Option
-`animation` : panoramique circulaire MP4 en plus des 3 vues fixes (cf.
+`generation.yml`, sans jamais relancer le pipeline IGN/LiDAR/`roofer`. Aucun
+secret de site n'est requis (seul le parsing de `sitegeo.py` exige un
+`config/site.local.toml` ; des valeurs fictives suffisent).
+
+Option `animation` : panoramique circulaire MP4 en plus des 3 vues fixes (cf.
 `docs/PIPELINE.md`, `src/orbit_render.py`).
 
 ### Backstop confidentialité en CI
 
 `.github/workflows/confidentialite.yml` (à chaque push sur `main` et sur
 chaque PR) vérifie mécaniquement que `config/site.local.toml` et `data/` ne
-sont jamais versionnés — en miroir du hook local
-`.claude/hooks/avant-livraison.sh`. Ce n'est qu'un filet de sécurité
-mécanique : la règle de fond (jamais de commune / code INSEE / section /
-numéro de parcelle / coordonnées en clair dans le code, les docs ou les
-messages de commit — `git grep -iE "<commune>|<insee>"` doit rester vide
-avant tout commit) reste détaillée dans `CLAUDE.md`, section
-« Confidentialité : dépôt public ».
+sont jamais versionnés, en miroir du hook local
+`.claude/hooks/avant-livraison.sh`.
+
+Ce n'est qu'un filet de sécurité mécanique. La règle de fond reste détaillée
+dans `CLAUDE.md` > « Confidentialité : dépôt public » : jamais de commune,
+code INSEE, section, numéro de parcelle ni coordonnées en clair dans le code,
+les docs ou les messages de commit. `git grep -iE "<commune>|<insee>"` doit
+rester vide avant tout commit.
 
 ## Démarrage
 
-Windows (`.\run.ps1`, ouverture/rendu uniquement — cf. Prérequis) :
+**Windows** (`.\run.ps1`, ouverture/rendu uniquement : voir
+[Prérequis](#prérequis)) :
 
 ```powershell
 # 1. crée l'env conda `sitegeo` et un config/site.local.toml vierge, puis s'arrête
@@ -129,13 +168,13 @@ Windows (`.\run.ps1`, ouverture/rendu uniquement — cf. Prérequis) :
 
 # 2. éditez config/site.local.toml : code INSEE, section, numéros de parcelles
 
-# 3. lance le pipeline complet (menu interactif : Entree = toutes les etapes)
+# 3. lance le pipeline complet (menu interactif : Entrée = toutes les étapes)
 .\run.ps1
 
 # 4. double-cliquez Plan 3D.sh3d
 ```
 
-Linux/macOS (`./run.sh`, génération complète avec toit multi-pans) :
+**Linux/macOS** (`./run.sh`, génération complète avec toit multi-pans) :
 
 ```bash
 # 1. crée .venv/ et un config/site.local.toml vierge, puis s'arrête
@@ -143,17 +182,18 @@ Linux/macOS (`./run.sh`, génération complète avec toit multi-pans) :
 
 # 2. éditez config/site.local.toml : code INSEE, section, numéros de parcelles
 
-# 3. lance le pipeline complet (menu interactif : Entree = toutes les etapes)
+# 3. lance le pipeline complet (menu interactif : Entrée = toutes les étapes)
 ./run.sh
 
 # 4. ouvrez Plan 3D.sh3d dans Sweet Home 3D
 ```
 
-Sans argument, `run.ps1`/`run.sh` proposent un menu (étapes à lancer, et choix
-du site si plusieurs configs existent). En cas d'échec d'une étape, ils
-proposent de réessayer / sauter / arrêter.
+Sans argument, `run.ps1`/`run.sh` proposent un menu (étapes à lancer, choix du
+site si plusieurs configs existent). En cas d'échec d'une étape : réessayer,
+sauter ou arrêter.
 
-Autres usages :
+<details>
+<summary>Autres usages</summary>
 
 ```powershell
 .\run.ps1 verif                 # contrôle seul (parcelles live, calage, topologie), sans menu
@@ -161,70 +201,79 @@ Autres usages :
 .\run.ps1 -Site autre-site.toml # utiliser une autre config sans passer par le menu
 .\run.ps1 -Fresh                # recréer l'env conda
 .\run.ps1 -NonInteractive       # jamais de prompt (toutes les étapes, site.local.toml,
-                                 # arrêt immédiat si une étape échoue) - pour un script/hook
+                                 # arrêt immédiat si une étape échoue) : pour un script/hook
 ```
 
 ```bash
 ./run.sh verif                    # contrôle seul, sans menu
-./run.sh terrain bati             # certaines étapes seulement, sans menu
-./run.sh --site autre-site.toml   # utiliser une autre config sans passer par le menu
-./run.sh --fresh                  # recréer .venv/
-./run.sh --non-interactive        # jamais de prompt - pour un script/hook
+./run.sh terrain bati              # certaines étapes seulement, sans menu
+./run.sh --site autre-site.toml    # utiliser une autre config sans passer par le menu
+./run.sh --fresh                   # recréer .venv/
+./run.sh --non-interactive         # jamais de prompt : pour un script/hook
 ```
 
 Sans `run.ps1`/`run.sh` : `conda activate sitegeo` puis `python src\<script>.py`
-(Windows), ou `.venv/bin/python src/<script>.py` (Linux/macOS). **Ne pas**
-utiliser `py` (Python système) ni `conda run`.
+(Windows), ou `.venv/bin/python src/<script>.py` (Linux/macOS).
+
+> [!CAUTION]
+> Ne jamais utiliser `py` (Python système) ni `conda run`.
+
+</details>
 
 ### Plan 2D intérieur (optionnel, à la main)
 
 L'agencement intérieur réel d'un bâtiment (pièces, cloisons, mobilier) n'a
 aucune source IGN et se dessine à la main, séparément de la génération 3D
-extérieure — jamais dans le pipeline complet ci-dessus :
+extérieure. Jamais inclus dans le pipeline complet ci-dessus.
 
 ```bash
-./run.sh phase1_cadastre terrain bati   # prerequis (sol_max_cm par batiment)
-./run.sh interieur_init                 # cree interieur/<id>.sh3d (jamais les existants)
-# ... edition manuelle dans l'appli Sweet Home 3D native ...
+./run.sh phase1_cadastre terrain bati   # prérequis (sol_max_cm par bâtiment)
+./run.sh interieur_init                 # crée interieur/<id>.sh3d (jamais les existants)
+# ... édition manuelle dans l'appli Sweet Home 3D native ...
 ./run.sh fusion_interieur               # -> "Plan 3D (avec interieur).sh3d", ponctuel
 ```
 
 Sans machine Linux/macOS locale, `.github/workflows/interieur.yml`
-(`workflow_dispatch`) fait juste la création initiale (`interieur_init.py`) à
-partir du dernier `Plan 3D` déjà publié par `generation.yml` — aucun secret
-de site requis (même principe que le rendu, ci-dessus). Télécharger
-l'artefact `Interieurs`, en dézipper le contenu dans `interieur/` à la racine
-du dépôt, éditer localement dans l'appli Sweet Home 3D native, puis fusionner
-en local (`fusion_interieur.py` reste toujours local : il lui faut les
-fichiers édités à la main, jamais versionnés).
+(`workflow_dispatch`) fait uniquement la création initiale
+(`interieur_init.py`), à partir du dernier `Plan 3D` déjà publié par
+`generation.yml`. Aucun secret de site requis (même principe que le rendu à
+la demande). Marche à suivre :
 
-`interieur/` et `Plan 3D (avec interieur).sh3d` sont git-ignorés : un plan
-intérieur réel dévoile l'agencement d'un bâtiment habité, aussi sensible que
-la géométrie exacte du site — même mise en garde confidentialité que
-ci-dessus pour `interieur.yml`. Détail complet : `docs/PIPELINE.md` et
-`CLAUDE.md` (section « Points durs »).
+1. Télécharger l'artefact `Interieurs`.
+2. Dézipper le contenu dans `interieur/` à la racine du dépôt.
+3. Éditer localement dans l'appli Sweet Home 3D native.
+4. Fusionner en local : `fusion_interieur.py` reste toujours local, il lui
+   faut les fichiers édités à la main, jamais versionnés.
+
+> [!IMPORTANT]
+> `interieur/` et `Plan 3D (avec interieur).sh3d` sont git-ignorés. Un plan
+> intérieur réel dévoile l'agencement d'un bâtiment habité, aussi sensible
+> que la géométrie exacte du site (même mise en garde confidentialité que
+> ci-dessus pour `interieur.yml`).
+>
+> Détail complet : `docs/PIPELINE.md` et `CLAUDE.md` > « Points durs ».
 
 ## Arborescence
 
 ```
 ├── run.ps1              point d'entrée Windows (ouverture/rendu)
 ├── run.sh               point d'entrée Linux/macOS (génération complète)
-├── Dockerfile            image CI (toolchain figé), publiée par build-image.yml
+├── Dockerfile           image CI (toolchain figé), publiée par build-image.yml
 ├── .github/
 │   ├── dependabot.yml       PR de mise à jour (pip + github-actions), jamais de build/publish
 │   └── workflows/
 │       ├── build-image.yml     construit + publie l'image CI sur ghcr.io (validation
-│       │                        seule, sans publier, sur PR touchant Dockerfile/
-│       │                        requirements-venv.txt)
+│       │                       seule, sans publier, sur PR touchant Dockerfile/
+│       │                       requirements-venv.txt)
 │       ├── image-name.yml      interne (workflow_call) : nom d'image GHCR en
-│       │                        minuscules, factorisé entre generation.yml/render.yml
+│       │                       minuscules, factorisé entre generation.yml/render.yml
 │       ├── generation.yml      lance le pipeline à la demande dans cette image
 │       ├── render.yml          rendu photo/vidéo à la demande depuis un run generation.yml existant
 │       └── confidentialite.yml backstop CI : site.local.toml/data/ jamais versionnés
 ├── config/
 │   ├── environment.yml       env conda `sitegeo` (Windows)
-│   ├── requirements-venv.txt venv pip (Linux/macOS/Docker) — versions harmonisées
-│   │                          avec environment.yml (cf. CLAUDE.md > Environnement)
+│   ├── requirements-venv.txt venv pip (Linux/macOS/Docker), versions harmonisées
+│   │                         avec environment.yml (cf. CLAUDE.md > Environnement)
 │   ├── site.example.toml     gabarit de config
 │   └── site.local.toml       VOTRE parcelle (git-ignored, créé au 1er lancement)
 ├── src/                 le pipeline Python
@@ -233,9 +282,12 @@ ci-dessus pour `interieur.yml`. Détail complet : `docs/PIPELINE.md` et
 │                        arbaro_species/*.xml pour la variété des arbres)
 ├── docs/
 │   ├── PIPELINE.md          détail de la génération du .sh3d + limitations
+│   ├── journal-technique.md historique chronologique des investigations
+│   │                        (Points durs de CLAUDE.md), à consulter à la
+│   │                        demande, non chargé par défaut en session
 │   └── exploration_socle.md revue des alternatives open source au code
-│                             maison (LiDAR, terrain, cadastre, .sh3d) —
-│                             conclusion : rien à remplacer à ce jour
+│                             maison (LiDAR, terrain, cadastre, .sh3d) :
+│                             conclusion, rien à remplacer à ce jour
 ├── tools/               utilitaires autonomes, indépendants du pipeline principal
 │   ├── lidar_view/          inspecter le nuage LiDAR HD brut (avant reconstruction)
 │   └── mobile_compat_check/ vérifie qu'un .sh3d s'ouvre sur l'appli mobile / SH3D Online
@@ -246,44 +298,53 @@ ci-dessus pour `interieur.yml`. Détail complet : `docs/PIPELINE.md` et
 
 | Script | Rôle |
 |--------|------|
-| `src/sitegeo.py` | module commun : chemins, config, accès IGN, `terrain_z_at`, primitives PyVista, écriture OBJ/MTL |
-| `src/sh3d_xml.py` | module commun : génération des fragments XML SH3D (niveaux/pièces/meubles) et conversion vers `.sh3d` via `java/Conv.java`, factorisé hors de `build_home.py`, réutilisé par `interieur_init.py`/`fusion_interieur.py` |
-| `src/phase1_cadastre.py` | fond ortho + cadastre + parcelles ; **définit le repère plan** (`data/meta.json`) |
-| `src/terrain.py` | terrain 3D solide (PyVista) + ortho drapée + grille d'ancrage |
-| `src/bati.py` | BD TOPO -> bâtiments voisinage (prisme + toit) ; emprises 2D de la propriété |
-| `src/vegetation.py` | arbres (maxima MNH) + haies taillées éventuelles |
-| `src/courbes.py` | courbes de niveau 1 m (`gdal_contour`) |
-| `src/build_home.py` | assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`) |
-| `src/interieur_init.py` | crée `interieur/<id>.sh3d` (plan 2D intérieur à dessiner à la main, un fichier par bâtiment propriété) — jamais dans le pipeline complet, n'écrase jamais un fichier déjà présent, cf. « Plan 2D intérieur » ci-dessous |
-| `src/fusion_interieur.py` | fusion ponctuelle des `interieur/*.sh3d` édités à la main dans `Plan 3D (avec interieur).sh3d` — ne modifie jamais `Plan 3D.sh3d` |
-| `src/verif.py` | contrôle lecture seule (`--overlay` : parcelles sur l'ortho ; `--render` : rendu photo headless du `.sh3d` ; `--mobile-compat` : compatibilité appli mobile / Sweet Home 3D Online, cf. `tools/mobile_compat_check/`) |
-| `src/preview.py` | aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`), via `python src/preview.py [larg haut [low\|high]]` |
-| `src/orbit_render.py` | panoramique circulaire MP4 (caméra fixe sur la parcelle propriété, 360° de yaw, `data/verif/orbit.mp4`), option du job CI *Rendu* — via `python src/orbit_render.py [larg haut [low\|high] [images] [secondes]]` (cf. `docs/PIPELINE.md`) |
-| `src/roof_focus_render.py` | rendu oblique par bâtiment propriété pour lire la géométrie du toit reconstruit par `roofer` (`data/verif/roof_*.png`), outil de diagnostic ponctuel, à invoquer à la main — via `python src/roof_focus_render.py [larg haut [low\|high]]` |
+| `src/sitegeo.py` | Module commun : chemins, config, accès IGN, `terrain_z_at`, primitives PyVista, écriture OBJ/MTL. |
+| `src/sh3d_xml.py` | Module commun : génération des fragments XML SH3D (niveaux/pièces/meubles) et conversion vers `.sh3d` via `java/Conv.java`. Factorisé hors de `build_home.py`, réutilisé par `interieur_init.py`/`fusion_interieur.py`. |
+| `src/phase1_cadastre.py` | Fond ortho + cadastre + parcelles. **Définit le repère plan** (`data/meta.json`). |
+| `src/terrain.py` | Terrain 3D solide (PyVista) + ortho drapée + grille d'ancrage. |
+| `src/bati.py` | BD TOPO → bâtiments voisinage (prisme + toit) ; emprises 2D de la propriété. |
+| `src/vegetation.py` | Arbres (maxima MNH) + haies taillées éventuelles. |
+| `src/courbes.py` | Courbes de niveau 1 m (`gdal_contour`). |
+| `src/build_home.py` | Assemble `Plan 3D.sh3d` hors-ligne (voir `docs/PIPELINE.md`). |
+| `src/interieur_init.py` | Crée `interieur/<id>.sh3d` : plan 2D intérieur à dessiner à la main, un fichier par bâtiment propriété. Jamais dans le pipeline complet, n'écrase jamais un fichier déjà présent (cf. [Plan 2D intérieur](#plan-2d-intérieur-optionnel-à-la-main)). |
+| `src/fusion_interieur.py` | Fusion ponctuelle des `interieur/*.sh3d` édités à la main dans `Plan 3D (avec interieur).sh3d`. Ne modifie jamais `Plan 3D.sh3d`. |
+| `src/verif.py` | Contrôle lecture seule : `--overlay` (parcelles sur l'ortho), `--render` (rendu photo headless du `.sh3d`), `--mobile-compat` (compatibilité appli mobile / Sweet Home 3D Online, cf. `tools/mobile_compat_check/`). |
+| `src/preview.py` | Aperçus photo depuis chaque bâtiment de la propriété + vue d'ensemble (`data/verif/preview_*.png`). Usage : `python src/preview.py [larg haut [low\|high]]`. |
+| `src/orbit_render.py` | Panoramique circulaire MP4 (caméra fixe sur la parcelle propriété, 360° de yaw, `data/verif/orbit.mp4`), option du job CI *Rendu*. Usage : `python src/orbit_render.py [larg haut [low\|high] [images] [secondes]]` (cf. `docs/PIPELINE.md`). |
+| `src/roof_focus_render.py` | Rendu oblique par bâtiment propriété pour lire la géométrie du toit reconstruit par `roofer` (`data/verif/roof_*.png`). Outil de diagnostic ponctuel, à invoquer à la main. Usage : `python src/roof_focus_render.py [larg haut [low\|high]]`. |
 
-Ordre : `phase1_cadastre -> terrain -> bati -> vegetation -> courbes -> build_home`.
+Ordre : `phase1_cadastre` → `terrain` → `bati` → `vegetation` → `courbes` →
+`build_home`.
 
 ## Repère plan Sweet Home 3D
 
-Origine = coin **nord-ouest** de la bounding box (parcelles + marge). Axes
-**X = est, Y = sud**, unité **centimètre**. Altitude `z = altitude_NGF - z_min`.
-Les coordonnées Lambert-93 de l'origine sont calculées en Phase 1 et écrites dans
-`data/meta.json` (git-ignored), réutilisées telles quelles par toutes les étapes.
+- **Origine** : coin nord-ouest de la bounding box (parcelles + marge).
+- **Axes** : X = est, Y = sud.
+- **Unité** : centimètre.
+- **Altitude** : `z = altitude_NGF - z_min`.
+
+Les coordonnées Lambert-93 de l'origine sont calculées en Phase 1 et écrites
+dans `data/meta.json` (git-ignored), réutilisées telles quelles par toutes
+les étapes.
 
 ## Maintenance
 
-`.github/dependabot.yml` ouvre des PR de mise à jour sur `config/requirements-venv.txt`
-(pip) et `.github/workflows/` (SHA d'actions) — jamais de build/publish
-automatique. **Toute PR Dependabot sur `requirements-venv.txt` doit être
-répercutée à la main dans `config/environment.yml`** (Dependabot ne couvre
-pas conda) pour garder les deux environnements en versions harmonisées.
+`.github/dependabot.yml` ouvre des PR de mise à jour sur
+`config/requirements-venv.txt` (pip) et `.github/workflows/` (SHA
+d'actions), jamais de build/publish automatique.
+
+> [!IMPORTANT]
+> Toute PR Dependabot sur `requirements-venv.txt` doit être répercutée à la
+> main dans `config/environment.yml` (Dependabot ne couvre pas conda), pour
+> garder les deux environnements en versions harmonisées.
+
 Restent hors périmètre Dependabot, à vérifier manuellement et
 occasionnellement : `environment.yml` lui-même, et les pins durs du
-`Dockerfile` (`roofer`, Sweet Home 3D). Détail complet : CLAUDE.md, section
-« Environnement ».
+`Dockerfile` (`roofer`, Sweet Home 3D). Détail complet : `CLAUDE.md` >
+Environnement.
 
 ## Licence
 
-Code sous licence **MIT** (voir `LICENSE`). Ressources tierces et licences des
-données : voir `NOTICE`. Les données IGN Géoplateforme sont diffusées sous
-**Licence Ouverte / Etalab 2.0**.
+Code sous licence **MIT** (voir `LICENSE`). Ressources tierces et licences
+des données : voir `NOTICE`. Les données IGN Géoplateforme sont diffusées
+sous **Licence Ouverte / Etalab 2.0**.
