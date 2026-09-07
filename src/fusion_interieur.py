@@ -192,6 +192,13 @@ def _merge_one(path: Path, ext_root: ET.Element, next_index: int,
     (niveaux ajoutes, elements ajoutes, next_index mis a jour)."""
     fid = path.stem
     transform = _read_transform(fid)
+    angle, x0, y0 = transform
+    if angle == 0.0 and x0 == 0.0 and y0 == 0.0:
+        print(f"  {path.name} : repere ABSOLU (pas de {fid}.transform.json -- "
+              "fichier cree avant le repere local, ou fichier annexe manquant/deplace)")
+    else:
+        print(f"  {path.name} : repere local -> absolu applique "
+              f"(angle_rad={angle:.4f}, x0_cm={x0:.1f}, y0_cm={y0:.1f})")
     with zipfile.ZipFile(path) as zf:
         root = _home_xml(zf, path.name)
         known_content = _content_entries(zf)
