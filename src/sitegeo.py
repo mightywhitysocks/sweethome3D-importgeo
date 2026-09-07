@@ -324,7 +324,7 @@ def parcels_l93(numeros=NUMEROS):
     for num in numeros:
         u = (f"{APICARTO}?code_insee={INSEE}&section={SECTION}"
              f"&numero={num}&source_ign=PCI")
-        g = gpd.read_file(u)
+        g = _net_retry(lambda u=u: gpd.read_file(u), what=f"APICARTO parcelle {num}")
         if len(g) != 1:
             raise SystemExit(f"{SECTION} {num}: {len(g)} feature(s) (attendu 1)")
         g = g.to_crs(2154)
@@ -349,6 +349,34 @@ def property_polygon_l93():
 
 
 NET_CACHE = DATA / "net_cache"
+
+
+def _net_retry(fetch, *, attempts=4, base_delay=2.0, what="requete IGN"):
+    """Retry avec backoff exponentiel (2s/4s/8s/16s) sur un appel reseau
+    Geoplateforme IGN : le service limite le nombre d'acces consecutifs et
+    renvoie parfois une erreur transitoire cote serveur plutot qu'un 429/503
+    propre (constate : ConnectionResetError repetees en usage normal ; une
+    fois aussi une ServiceException WMS "LayerNotDefined" sur une couche
+    pourtant valide en GetCapabilities, reproduite hors CI -- rate-limit
+    cote Geoplateforme, pas un probleme de couche). N'enveloppe QUE l'appel
+    reseau lui-meme (jamais la validation autour, ex. un SystemExit
+    volontaire de l'appelant) pour ne jamais retenter/masquer une erreur de
+    configuration du site."""
+    import time
+
+    last = None
+    for i in range(attempts):
+        try:
+            return fetch()
+        except Exception as e:                                   # noqa: BLE001
+            last = e
+            if i == attempts - 1:
+                break
+            delay = base_delay * (2 ** i)
+            print(f"  {what} : echec ({type(e).__name__}: {e}) -- "
+                  f"retente dans {delay:.0f}s ({i + 1}/{attempts})")
+            time.sleep(delay)
+    raise last
 
 
 def _cached(key: str, compute):
@@ -379,7 +407,8 @@ def wfs_l93(typename: str, count: int = 500):
          f"&BBOX={lat0},{lon0},{lat1},{lon1},urn:ogc:def:crs:EPSG::4326"
          f"&OUTPUTFORMAT=application/json&COUNT={count}")
     key = f"wfs_{typename.replace(':', '_')}_{count}_{lat0:.6f}_{lon0:.6f}_{lat1:.6f}_{lon1:.6f}"
-    return _cached(key, lambda: gpd.read_file(u).to_crs(2154))
+    return _cached(key, lambda: _net_retry(
+        lambda: gpd.read_file(u).to_crs(2154), what=f"WFS {typename}"))
 
 
 # --------------------------------------------------------------------------- #
@@ -425,7 +454,7 @@ def wms_getmap(layers, bbox_l93, res_m: float = 0.5,
         return r.read()
 
     key = f"wms_{'_'.join(layer_names)}_{e0:.2f}_{n0:.2f}_{e1:.2f}_{n1:.2f}_{w}x{h}_{fmt.replace('/', '_')}"
-    return _cached(key, _fetch)
+    return _cached(key, lambda: _net_retry(_fetch, what=f"WMS {','.join(layer_names)}"))
 
 
 def wms_raster(layer_key: str, margin_m: float = 25.0, res_m: float = 0.5):
@@ -476,7 +505,7 @@ def lidar_tile_index(bbox_l93, margin_m: float = 3.0):
          f"&BBOX={pe0},{pn0},{pe1},{pn1},urn:ogc:def:crs:EPSG::2154"
          f"&OUTPUTFORMAT=application/json")
     key = f"lidartiles_{pe0:.2f}_{pn0:.2f}_{pe1:.2f}_{pn1:.2f}"
-    return _cached(key, lambda: gpd.read_file(u))
+    return _cached(key, lambda: _net_retry(lambda: gpd.read_file(u), what="WFS dalles LiDAR"))
 
 
 def lidar_points_l93(bbox_l93, margin_m: float = 3.0, classification: int = 6):
@@ -507,13 +536,16 @@ def lidar_points_l93(bbox_l93, margin_m: float = 3.0, classification: int = 6):
             continue
         dest = LIDAR_CACHE / Path(url).name
         if not dest.exists():
-            r = requests.get(url, stream=True, timeout=180)
-            r.raise_for_status()
-            tmp = dest.with_suffix(".part")
-            with open(tmp, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1 << 20):
-                    f.write(chunk)
-            tmp.rename(dest)
+            def _download(url=url, dest=dest):
+                r = requests.get(url, stream=True, timeout=180)
+                r.raise_for_status()
+                tmp = dest.with_suffix(".part")
+                with open(tmp, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        f.write(chunk)
+                tmp.rename(dest)
+
+            _net_retry(_download, what=f"telechargement dalle LiDAR {Path(url).name}")
         las = laspy.read(dest)
         x = np.asarray(las.x, dtype=np.float64)
         y = np.asarray(las.y, dtype=np.float64)
