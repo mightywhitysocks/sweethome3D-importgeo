@@ -387,9 +387,40 @@ son propre rôle d'assembleur hors-ligne depuis `data/`) et crée un niveau
 dédié par bâtiment ("Emprise `<id>`", id privé -- jamais dans `LEVELS`, le
 registre stable du gabarit, passé explicitement à `_room` via son paramètre
 `levels`), élévation = `sol_max_cm` + `FOOTPRINT_CLEARANCE_CM` (3 cm) --
-jamais clippée, quitte à légèrement flotter au-dessus du terrain sur les
-coins bas d'une emprise en pente (compromis assumé : une pièce reste un
-plan plat, pas un maillage suivant le relief).
+jamais clippée. La pièce elle-même reste un plan plat (SH3D ne fait pas
+suivre le relief à un `<room>`), mais le vide qu'elle laissait au-dessus du
+terrain sur les coins bas d'une emprise en pente (jusqu'à ~2,5 m constatés)
+est désormais comblé par une **dalle indépendante** par bâtiment
+(`sitegeo.py::footprint_slab`, appelée depuis `bati.py::_propriete_ref`,
+fichier `dalle_<id>.obj` par bâtiment (+ `dalle.mtl` commun, même couleur pour
+toutes), packé sous son propre dossier `dalle_<id>/` dans le `.sh3d` --
+même contrainte que les modèles d'arbres,
+cf. section arbaro ci-dessous). Dessus plat à `sol_max_cm +
+FOOTPRINT_CLEARANCE_CM` (même plan que la pièce), dessous suivant
+`cg.terrain_z_at` le long du contour densifié (`shapely.segmentize`, pas
+tous les 2 m, résolution du maillage terrain), jamais à l'intérieur de
+l'emprise -- même niveau de confiance dans le MNT que `sol_max_cm`/`base`
+(cf. note ci-dessous sur le MNT sous un bâti). Volontairement **indépendante**
+du bloc bâti 3D (`bati_propriete.obj`, mur+toit `roofer`, ancré sur
+`base_cm` = le point le PLUS BAS du contour) : ce sont deux mécanismes
+différents (ancrages et sources de sol différents, `roofer` vs `cg.terrain_z_at`),
+jamais fusionnés, jamais l'un supposé occulter l'autre.
+
+> [!NOTE]
+> **Terrain sous un bâti = toujours une interpolation, jamais une mesure.**
+> Documentation officielle IGN du MNT LiDAR HD : *"For buildings, which are
+> closed geometric volumes, the underlying terrain is replaced by
+> interpolation using discrete points outside these volumes."* Sous un
+> bâtiment, le MNT ne peut donc pas connaître un terrassement réel fait lors
+> de la construction. `footprint_slab` (comme `base`/`sol_max_cm` déjà en
+> production) n'échantillonne `cg.terrain_z_at` que sur le **contour** BD
+> TOPO du bâtiment, jamais à l'intérieur de l'emprise -- aucune nouvelle
+> dépendance à cette zone d'interpolation au-delà de ce que le pipeline
+> fait déjà. Reste un point de vigilance résiduel, non résolu par ce choix :
+> le contour lui-même peut être légèrement affecté par le débord de toit ou
+> la résolution du MNT -- à vérifier au cas par cas sur site réel
+> (comparaison `cg.terrain_z_at` vs `data/mnt.tif` juste à l'extérieur de
+> l'emprise), pas un contrôle automatisé à ce jour.
 
 ### `.mtl` 100 % mat
 

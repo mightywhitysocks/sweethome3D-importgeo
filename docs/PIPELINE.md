@@ -56,12 +56,13 @@ Assemble un ZIP intermédiaire `data/_home_raw.zip` :
      bâtiments propriété du même site). Élévation du niveau = point de
      terrain le plus haut sous l'emprise du bâtiment
      (`bati_propriete_ref.json[footprints[].sol_max_cm]`, calculé par
-     `bati.py`) + `FOOTPRINT_CLEARANCE_CM` (3 cm), jamais clippée, quitte à
-     légèrement flotter au-dessus du terrain sur les coins bas d'une emprise
-     en pente.
+     `bati.py`) + `FOOTPRINT_CLEARANCE_CM` (3 cm), jamais clippée. Une dalle
+     indépendante (`dalle_<id>.obj`, cf. `bati.py`/`sitegeo.py::footprint_slab`,
+     CLAUDE.md) comble le vide entre le terrain réel et ce plan sur les coins
+     bas d'une emprise en pente, sur le même niveau que la pièce.
 7. Écrit le ZIP : `Home.xml` + `bg` + dossiers modèles (`t/ b/ p/ h/ tree/`,
-   chaque OBJ avec son `.mtl` et sa texture) + une icône. Écrit aussi
-   `data/home_source.xml` pour debug/diff.
+   `dalle_<id>/` par bâtiment propriété, chaque OBJ avec son `.mtl` et sa
+   texture) + une icône. Écrit aussi `data/home_source.xml` pour debug/diff.
 
 ## Étape 2 : Java (`java/Conv.java`)
 
