@@ -275,6 +275,21 @@ def _complete_altitudes(alt_sol, alt_toit, haut):
     return alt_sol, alt_toit
 
 
+# Marge de retrait appliquee a chaque empreinte avant de la donner a roofer
+# (jamais a bati.json/la piece "Emprise"/la dalle, qui gardent le contour
+# BD TOPO exact) : deux empreintes qui se TOUCHENT (sommets partages) dans le
+# meme GeoPackage -- constate sur un site reel entre un batiment reinjecte
+# (bati.py::_add_fragment, cf. CLAUDE.md) et un batiment tiers deja adjacent
+# au meme point -- peuvent faire deriver la partition interne de roofer : le
+# mur reconstruit d'un des deux batiments deborde alors le long de la limite
+# partagee au lieu de s'arreter a son propre contour (constate : un pan de
+# mur etire sur plusieurs metres hors de l'emprise declaree). 10 cm de
+# retrait suffit a garantir un vrai vide entre deux empreintes distinctes
+# sans etre perceptible sur un batiment reel (a comparer aux 3 cm de
+# FOOTPRINT_CLEARANCE_CM, un axe different -- vertical, pas horizontal).
+FOOTPRINT_GAP_M = 0.10
+
+
 def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     """GeoPackage EPSG:2154 des empreintes des batiments (colonne 'cleabs'),
     format d'entree attendu par roofer. `prop_bldgs` = la liste deja
@@ -284,6 +299,13 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     polygone mais tous portant le meme cleabs, et `_find_roof_geometry` ne
     peut renvoyer que le premier trouve pour les parties suivantes (toit
     disjoint) -- cf. `build_roof`, appele avec le meme identifiant.
+
+    Chaque empreinte est retrecie de `FOOTPRINT_GAP_M` (cf. commentaire) avant
+    d'etre ecrite -- jamais deux empreintes ne se touchent plus dans le
+    GeoPackage donne a roofer, meme si leurs contours BD TOPO d'origine
+    partagent une arete exacte. Repli sur le contour non retreci si le buffer
+    negatif vide/degenere le polygone (batiment trop etroit pour la marge) :
+    mieux qu'un trou dans l'empreinte donnee a roofer.
 
     Ecrit aussi `H_TERRAIN_FIELD` (altitude absolue) / `H_ROOF_FIELD` (hauteur,
     PAS une altitude -- cf. commentaire sur `H_ROOF_FIELD`), completees
@@ -300,7 +322,10 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
         hauteur_toit = (alt_toit_c - alt_sol_c
                         if alt_sol_c is not None and alt_toit_c is not None else None)
         for i, poly in enumerate(polys):
-            rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly,
+            gap = poly.buffer(-FOOTPRINT_GAP_M)
+            if gap.is_empty or gap.geom_type != "Polygon":
+                gap = poly
+            rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": gap,
                          H_TERRAIN_FIELD: alt_sol_c, H_ROOF_FIELD: hauteur_toit})
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
     gdf.to_file(path, driver="GPKG")
