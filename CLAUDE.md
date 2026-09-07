@@ -392,8 +392,9 @@ suivre le relief à un `<room>`), mais le vide qu'elle laissait au-dessus du
 terrain sur les coins bas d'une emprise en pente (jusqu'à ~2,5 m constatés)
 est désormais comblé par une **dalle indépendante** par bâtiment
 (`sitegeo.py::footprint_slab`, appelée depuis `bati.py::_propriete_ref`,
-fichier `dalle_<id>.obj/.mtl` par bâtiment, packé sous son propre dossier
-`dalle_<id>/` dans le `.sh3d` -- même contrainte que les modèles d'arbres,
+fichier `dalle_<id>.obj` par bâtiment (+ `dalle.mtl` commun, même couleur pour
+toutes), packé sous son propre dossier `dalle_<id>/` dans le `.sh3d` --
+même contrainte que les modèles d'arbres,
 cf. section arbaro ci-dessous). Dessus plat à `sol_max_cm +
 FOOTPRINT_CLEARANCE_CM` (même plan que la pièce), dessous suivant
 `cg.terrain_z_at` le long du contour densifié (`shapely.segmentize`, pas

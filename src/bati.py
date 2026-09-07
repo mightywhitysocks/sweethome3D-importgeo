@@ -22,9 +22,10 @@ Sorties dans data/ :
                                sol le plus haut sous chaque emprise (footprints[].sol_max_cm,
                                meme ordre que les commandes create_room_polygon) pour le niveau
                                SH3D dedie de l'emprise visible correspondante (cf. build_home.py)
-  dalle_<id>.obj / .mtl        par batiment propriete, dalle independante du bloc bati 3D
-                               ci-dessus : comble le vide entre le terrain reel et le plan de
-                               la piece "Emprise <id>" (cf. CLAUDE.md, footprints[].dalle)
+  dalle_<id>.obj               par batiment propriete (+ dalle.mtl commun, meme couleur pour
+                               tous), dalle independante du bloc bati 3D ci-dessus : comble
+                               le vide entre le terrain reel et le plan de la piece "Emprise
+                               <id>" (footprints[].elevation_cm, cf. CLAUDE.md)
 """
 from __future__ import annotations
 
@@ -40,6 +41,7 @@ GEO = cg.GEO
 ROOF_RISE_MAX = 350.0        # cm : hauteur de comble max
 COL_MUR = (0.79, 0.74, 0.65)
 COL_DALLE = (0.62, 0.62, 0.60)   # beton, dalle sous la piece "Emprise <id>"
+DALLE_EMBED_CM = 3.0             # enfoncement du dessous de la dalle sous le terrain reel
 ROOF_MTL = {"tuile": (0.545, 0.227, 0.169), "ardoise": (0.243, 0.259, 0.282),
             "fibro": (0.471, 0.486, 0.510)}
 
@@ -248,6 +250,10 @@ def _propriete_ref(props) -> None:
     # site en pente (constate : jusqu'a ~2,5 m d'ecart de sol entre deux batiments
     # propriete du meme site).
     footprints = []
+    # .mtl de dalle : un seul contenu (couleur beton unique) pour tous les batiments --
+    # ecrit une fois, duplique par build_home.py dans le dossier zip de chaque batiment
+    # (meme raison que le mur/toit : mtllib est resolu relatif au .obj qui le reference).
+    cg.write_mtl(GEO / "dalle.mtl", {"dalle": {"Kd": COL_DALLE}})
     for b in props:
         n_rings = len(b["rings_cm"])
         for i, ring in enumerate(b["rings_cm"]):
@@ -265,17 +271,21 @@ def _propriete_ref(props) -> None:
             sol_max_cm = max(cg.terrain_z_at(x, y) for x, y in ring)
             # dalle independante du bloc bati 3D (mur/toit roofer, ancre sur base_cm =
             # min du contour) : comble le vide entre le terrain reel et le plan de la
-            # piece "Emprise <fid>" (sol_max_cm + FOOTPRINT_CLEARANCE_CM), cf. CLAUDE.md
-            # section "Emprises <room> visibles des batiments propriete". Un fichier par
+            # piece "Emprise <fid>" (elevation_cm ci-dessous), cf. CLAUDE.md section
+            # "Emprises <room> visibles des batiments propriete". Un fichier par
             # batiment (pas fusionne dans bati_propriete.obj) : niveau SH3D different de
             # celui du mur, et deux sources de sol volontairement decouplees (roofer vs
-            # cg.terrain_z_at, cf. plan de cette session).
-            top_z_cm = sol_max_cm + sh3d_xml.FOOTPRINT_CLEARANCE_CM
-            slab = cg.footprint_slab(ring, top_z_cm, sh3d_xml.FOOTPRINT_CLEARANCE_CM)
-            cg.write_mtl(GEO / f"dalle_{fid}.mtl", {"dalle": {"Kd": COL_DALLE}})
+            # cg.terrain_z_at, cf. plan de cette session). DALLE_EMBED_CM (pas
+            # FOOTPRINT_CLEARANCE_CM, meme valeur mais concept different : enfoncement
+            # du dessous sous le terrain, pas marge du dessus au-dessus).
+            elevation_cm = sol_max_cm + sh3d_xml.FOOTPRINT_CLEARANCE_CM
+            slab = cg.footprint_slab(ring, elevation_cm, DALLE_EMBED_CM)
             cg.write_obj(GEO / f"dalle_{fid}.obj", slab, mtl_name="dalle",
-                         mtl_file=f"dalle_{fid}.mtl", group=f"dalle_{fid}")
+                         mtl_file="dalle.mtl", group=f"dalle_{fid}")
+            # elevation_cm calcule une seule fois ici (pas re-derive de sol_max_cm dans
+            # build_home.py) : meme discipline que sol_max_cm lui-meme, lu tel quel.
             footprints.append({"id": fid, "sol_max_cm": round(sol_max_cm, 1),
+                                "elevation_cm": round(elevation_cm, 1),
                                 "dalle": cg.bbox_cm(slab)})
         pts = [p for r in b["rings_cm"] for p in r]
         cx = sum(p[0] for p in pts) / len(pts)

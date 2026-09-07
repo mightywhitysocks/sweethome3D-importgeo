@@ -777,6 +777,16 @@ def pyramid_roof(ring_cm, eave_z: float, apex_z: float):
                                 non_manifold_traversal=False)
 
 
+def _terrain_z_many(xs, ys):
+    """Variante vectorisee de `terrain_z_at` (le RegularGridInterpolator sous-jacent
+    accepte nativement un tableau de points) -- usage interne uniquement
+    (`footprint_slab`), pour eviter un appel Python+scipy par sommet densifie."""
+    global _TERRAIN
+    if _TERRAIN is None:
+        _TERRAIN = _TerrainSurface()
+    return _TERRAIN._f(np.column_stack([ys, xs]))
+
+
 def footprint_slab(ring_cm, top_z_cm: float, embed_cm: float, *,
                     seg_len_cm: float = 200.0, min_thickness_cm: float = 1.0):
     """
@@ -790,8 +800,16 @@ def footprint_slab(ring_cm, top_z_cm: float, embed_cm: float, *,
     `ring_cm` : anneau (liste de (x, y) plan cm, sans point de fermeture),
     densifie a `seg_len_cm` (shapely.segmentize) pour suivre le relief entre
     deux sommets BD TOPO eloignes, a la resolution du maillage terrain (2 m).
-    `min_thickness_cm` : garde-fou anti-inversion si un point ajoute par la
-    densification s'averait, meme improbablement, plus haut que prevu.
+    Cap du dessus triangule comme `polygon_prism` (valide sur un contour
+    concave, ex. batiment en L -- un eventail-centroide supposerait le
+    contour etoile depuis son centroide, pas garanti sur un L). Cap du
+    dessous en eventail-centroide comme `roofer_roof.py` (seule methode
+    valide ici : une surface qui suit le relief n'est pas plane).
+    `min_thickness_cm` : garde-fou si un point ajoute par la densification
+    (milieu d'un long cote vallonne) s'averait plus haut que le `top_z_cm`
+    fourni par l'appelant (calcule sur les seuls sommets d'origine) --
+    attendu occasionnellement sur un cote long, pas seulement en theorie ;
+    aplatit localement la dalle a cet endroit plutot qu'un solide invalide.
     """
     import pyvista as pv
     import shapely.geometry
@@ -801,29 +819,26 @@ def footprint_slab(ring_cm, top_z_cm: float, embed_cm: float, *,
     ring_dense = list(poly_dense.exterior.coords)[:-1]        # dernier point duplique du 1er
     n = len(ring_dense)
 
+    xs = np.array([p[0] for p in ring_dense])
+    ys = np.array([p[1] for p in ring_dense])
+    bz = np.minimum(_terrain_z_many(xs, ys) - embed_cm, top_z_cm - min_thickness_cm)
+
     top_pts = [(x, y, top_z_cm) for x, y in ring_dense]
-    bot_pts = []
-    for x, y in ring_dense:
-        bz = terrain_z_at(x, y) - embed_cm
-        bz = min(bz, top_z_cm - min_thickness_cm)
-        bot_pts.append((x, y, bz))
+    bot_pts = list(zip(xs.tolist(), ys.tolist(), bz.tolist()))
 
-    top_centroid = (sum(p[0] for p in top_pts) / n, sum(p[1] for p in top_pts) / n, top_z_cm)
-    bottom_centroid = (sum(p[0] for p in bot_pts) / n, sum(p[1] for p in bot_pts) / n,
-                        sum(p[2] for p in bot_pts) / n)
+    # cap du dessus : meme technique que polygon_prism (polygone plein triangule),
+    # deja les indices 0..n-1 puisque top_pts est le premier bloc de `pts` plus bas.
+    top_cap = pv.PolyData(np.array(top_pts), faces=np.hstack([[n], range(n)])).triangulate()
+    top_faces = top_cap.faces.reshape(-1, 4)[:, 1:]
 
-    top_i = list(range(n))
-    bot_i = list(range(n, 2 * n))
-    top_c, bot_c = 2 * n, 2 * n + 1
-
-    faces = []
+    bottom_c = 2 * n     # centroide du dessous, seul point ajoute apres top_pts+bot_pts
+    faces = [[3, *f] for f in top_faces]
     for i in range(n):
         j = (i + 1) % n
-        faces += [[3, top_i[i], top_i[j], bot_i[j]], [3, top_i[i], bot_i[j], bot_i[i]]]
-        faces += [[3, top_i[i], top_i[j], top_c]]              # cap dessus, eventail-centroide
-        faces += [[3, bot_i[i], bot_i[j], bot_c]]               # cap dessous, eventail-centroide
+        faces += [[3, i, j, n + j], [3, i, n + j, n + i],      # cotes (2 triangles/arete)
+                  [3, n + i, n + j, bottom_c]]                  # cap dessous, eventail-centroide
 
-    pts = np.array(top_pts + bot_pts + [top_centroid, bottom_centroid], float)
+    pts = np.array(top_pts + bot_pts + [tuple(np.mean(bot_pts, axis=0))], float)
     mesh = pv.PolyData(pts, faces=np.hstack(faces)).clean()
     return mesh.compute_normals(auto_orient_normals=True, consistent_normals=True,
                                 non_manifold_traversal=False)
