@@ -572,23 +572,49 @@ dans `data/lidar_cache/roofer_remap67to6/` (jamais le fichier source). Une
 dalle dont le remap échoue est fournie à `roofer` sans remap plutôt
 qu'écartée -- dégrade la couverture, ne bloque jamais l'appel.
 
-`bati.py` clippe chaque bâtiment à son camp après classification
-(`geom.intersection(prop_zone)` pour `"propriete"`,
-`geom.difference(prop_zone)` pour `"voisinage"`) : un polygone BD TOPO peut
-englober une structure du camp opposé (constaté sur le site réel, jusqu'à
-33,7 %/26 % d'aire débordante selon le sens -- fusion du polygone source par
-la vectorisation IGN à grande échelle, pas un défaut de la règle de
-classification). `_propriete_ref` suffixe l'id/nom par index de ring quand
-un bâtiment en a plusieurs, pour ne jamais faire collisionner deux niveaux
-SH3D "Emprise `<id>`" si ce clip produit un `MultiPolygon`. `verif.py`
-contrôle désormais, dans les deux sens, que l'empiétement d'un bâtiment sur
-le camp opposé reste quasi nul (<2 m², pas 26-33 %).
+`bati.py` clippe chaque bâtiment BD TOPO à la limite cadastrale
+(`geom.intersection(prop_zone)`/`geom.difference(prop_zone)`) : un polygone
+source peut englober une structure du camp opposé (constaté sur le site
+réel, jusqu'à 33,7 %/26 % d'aire débordante selon le sens -- fusion du
+polygone source par la vectorisation IGN à grande échelle, pas un défaut de
+la règle de classification par aire majoritaire). Cette coupe GEOS est
+exacte (les deux morceaux reconstituent le bâtiment source sans
+recouvrement ni trou entre eux) : **les deux sont conservés**, comme deux
+bâtiments indépendants (`_add_fragment`, appelée deux fois par bâtiment
+source) -- jamais de vide visuel à la limite cadastrale côté camp
+minoritaire (33,7 %/26 % n'est pas un résidu négligeable à jeter). Le
+morceau réinjecté reprend les mêmes `hauteur`/`altitude_minimale_sol`/
+`altitude_maximale_toit` BD TOPO que le morceau principal (seule source
+disponible au niveau du bâtiment entier) ; `roofer` reconstruit de toute
+façon le vrai relief du toit depuis le LiDAR pour chaque morceau
+indépendamment. Son id est **préfixé** (`opp-<cleabs>`, jamais suffixé) :
+`_propriete_ref`/`interieur_init.py`/`build_home.py` dérivent tous leurs
+id de fichier/niveau SH3D des 4 derniers caractères de l'id (`id[-4:]`,
+cf. ci-dessous) -- un suffixe fixe aurait donné la même valeur tronquée à
+tous les bâtiments réinjectés du site (collision de niveau SH3D,
+écrasement de `dalle_*.obj`, plan intérieur sauté), un préfixe préserve la
+queue d'origine sans y toucher. `_propriete_ref` suffixe en plus l'id/nom
+par index de ring quand un bâtiment (principal ou réinjecté) a plusieurs
+rings, pour ne jamais faire collisionner deux niveaux SH3D "Emprise `<id>`"
+si le clip produit un `MultiPolygon`. `verif.py` contrôle, dans les deux
+sens, que l'empiétement d'un bâtiment sur le camp opposé reste quasi nul
+(<2 m², pas 26-33 %) -- ce contrôle valide la précision du clip lui-même,
+inchangé par la réinjection.
 
 > [!NOTE]
 > Réserve honnête sur ce dernier fix : corrige à coup sûr l'emprise/l'aire
 > (calcul Python déterministe), mais rien ne garantit à 100 % le
 > comportement interne de `roofer` (boîte noire externe, GPLv3) pour
-> l'ajustement des pans de toit tout près de la nouvelle limite.
+> l'ajustement des pans de toit tout près de la nouvelle limite -- d'autant
+> plus depuis la réinjection que les deux morceaux d'un même bâtiment
+> source sont désormais des empreintes **adjacentes** (partageant
+> exactement la ligne cadastrale) soumises ensemble à `roofer` dans le même
+> appel CLI, un cas jamais exercé jusqu'ici (les bâtiments déjà validés sur
+> ce mécanisme étaient tous disjoints). Repli déjà granulaire par fragment
+> (`build_roof` renvoie `None` -> pyramidal pour ce fragment seul) si
+> `roofer` gère mal cette adjacence sur l'un des deux -- pas de risque de
+> régression globale, mais à surveiller visuellement à la couture sur un
+> site réel (pas encore fait).
 
 > [!IMPORTANT]
 > Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent

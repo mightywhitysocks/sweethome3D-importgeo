@@ -81,6 +81,47 @@ def _pyramidal_mesh(poly, ring, haut, alt_toit, z_min):
     return base, eave, cg.polygon_prism(ring, base, eave), cg.pyramid_roof(ring, eave, ridge)
 
 
+def _add_fragment(rid, classe, geom, row, bat, all_bldgs) -> None:
+    """Construit et ajoute (si non vide apres filtre) l'entree bat/all_bldgs
+    pour un polygone de batiment deja clippe a son camp -- factorise car
+    appele deux fois par batiment WFS (morceau principal + morceau oppose
+    reinjecte, cf. main()), sur EXACTEMENT le meme pipeline."""
+    # un clip pres d'une limite cadastrale peut laisser, en plus du vrai
+    # batiment, un fragment residuel de quelques cm2 (imprecision GEOS) --
+    # meme seuil que le filtre de maillage plus bas, applique ici pour ne
+    # pas polluer bati.json / l'empreinte roofer / la piece "Emprise" avec
+    # un polygone qui n'est pas un batiment.
+    polys = [p for p in _flatten_polys(geom) if p.area >= 4]
+    if not polys:
+        return
+    for p in polys:
+        if p.interiors:
+            print(f"  bati {rid} : trou dans le contour ignore apres clip "
+                  f"(cas rare, cf. CLAUDE.md)")
+    haut = _fnum(row.get("hauteur"))
+    alt_sol = _fnum(row.get("altitude_minimale_sol"))
+    alt_toit = _fnum(row.get("altitude_maximale_toit"))
+
+    rings_cm = []
+    for poly in polys:
+        xs, ys = poly.exterior.coords.xy
+        xc, yc = cg.to_plan_cm(np.array(xs[:-1]), np.array(ys[:-1]))
+        rings_cm.append([[round(float(a), 1), round(float(b), 1)]
+                         for a, b in zip(xc, yc)])
+    cx, cy = cg.to_plan_cm(geom.centroid.x, geom.centroid.y)
+    bat.append({
+        "id": rid, "classe": classe, "hauteur": haut,
+        "alt_sol": alt_sol, "alt_toit": alt_toit,
+        "etages": _fnum(row.get("nombre_d_etages")),
+        "mur": row.get("materiaux_des_murs"),
+        "toit": row.get("materiaux_de_la_toiture"),
+        "nature": row.get("nature"),
+        "rings_cm": rings_cm,
+        "centroid_cm": [round(float(cx), 1), round(float(cy), 1)],
+    })
+    all_bldgs.append((classe, polys, rings_cm, haut, alt_sol, alt_toit, rid))
+
+
 def main() -> None:
     g = cg.wfs_l93("BDTOPO_V3:batiment", count=300)
     prop_zone = cg.property_polygon_l93()               # PROPRIETE = parcelle property_parcel
@@ -91,58 +132,50 @@ def main() -> None:
     n_vois_roofer, n_vois_pyr, n_prop_roofer, n_prop_pyr = 0, 0, 0, 0
     all_bldgs = []
     for _, row in g.iterrows():
-        geom = row.geometry
+        raw_geom = row.geometry
         rid = row.get("cleabs") or f"b{len(bat)}"
         # PROPRIETE seulement si la MAJORITE de l'emprise est sur la parcelle propriete
         # (sinon un batiment d'une parcelle voisine qui longe la limite serait mal classe).
-        on_prop = geom.intersection(prop_zone)
-        classe = "propriete" if on_prop.area > 0.5 * geom.area else "voisinage"
+        on_prop = raw_geom.intersection(prop_zone)
+        classe = "propriete" if on_prop.area > 0.5 * raw_geom.area else "voisinage"
         # le polygone BD TOPO d'un batiment peut englober une structure reelle de
         # la parcelle du camp oppose (vectorisation automatique a grande echelle,
         # pas une classification erronee : la regle d'aire majoritaire ci-dessus
         # reste correcte) -- constate sur ce site jusqu'a 33,7 % de l'aire d'un
         # batiment propriete deborde sur une parcelle voisine, et jusqu'a 26 %
-        # dans l'autre sens (batiment voisinage debordant sur la propriete).
-        # Coupe a la limite cadastrale, cote par cote, pour que roofer/l'emprise/
-        # le mesh de chaque camp ne modelisent plus jamais la structure de l'autre.
-        # Le seuil > 50 % ci-dessus garantit que ce clip ne peut jamais etre vide.
-        # Reutilise on_prop (deja calcule ci-dessus) plutot que de relancer une
-        # 2e intersection GEOS identique pour les batiments propriete.
-        geom = on_prop if classe == "propriete" else geom.difference(prop_zone)
-        # un clip pres d'une limite cadastrale peut laisser, en plus du vrai
-        # batiment, un fragment residuel de quelques cm2 (imprecision GEOS) --
-        # meme seuil que le filtre de maillage plus bas, applique ici pour ne
-        # pas polluer bati.json / l'empreinte roofer / la piece "Emprise" avec
-        # un polygone qui n'est pas un batiment.
-        polys = [p for p in _flatten_polys(geom) if p.area >= 4]
-        if not polys:
-            continue
-        for p in polys:
-            if p.interiors:
-                print(f"  bati {rid} : trou dans le contour ignore apres clip "
-                      f"(cas rare, cf. CLAUDE.md)")
-        haut = _fnum(row.get("hauteur"))
-        alt_sol = _fnum(row.get("altitude_minimale_sol"))
-        alt_toit = _fnum(row.get("altitude_maximale_toit"))
-
-        rings_cm = []
-        for poly in polys:
-            xs, ys = poly.exterior.coords.xy
-            xc, yc = cg.to_plan_cm(np.array(xs[:-1]), np.array(ys[:-1]))
-            rings_cm.append([[round(float(a), 1), round(float(b), 1)]
-                             for a, b in zip(xc, yc)])
-        cx, cy = cg.to_plan_cm(geom.centroid.x, geom.centroid.y)
-        bat.append({
-            "id": rid, "classe": classe, "hauteur": haut,
-            "alt_sol": alt_sol, "alt_toit": alt_toit,
-            "etages": _fnum(row.get("nombre_d_etages")),
-            "mur": row.get("materiaux_des_murs"),
-            "toit": row.get("materiaux_de_la_toiture"),
-            "nature": row.get("nature"),
-            "rings_cm": rings_cm,
-            "centroid_cm": [round(float(cx), 1), round(float(cy), 1)],
-        })
-        all_bldgs.append((classe, polys, rings_cm, haut, alt_sol, alt_toit, rid))
+        # dans l'autre sens (batiment voisinage debordant sur la propriete) : pas
+        # un residu negligeable. La coupe GEOS (intersection/difference) est
+        # exacte -- les deux morceaux reconstituent le batiment source sans
+        # recouvrement ni trou entre eux -- donc les DEUX sont conserves comme
+        # batiments independants (_add_fragment appelee deux fois ci-dessous) :
+        # jamais de vide visuel a la limite cadastrale cote camp minoritaire.
+        # Le seuil > 50 % ci-dessus ne sert plus qu'a decider le camp PRINCIPAL
+        # (id/nom d'origine), plus a choisir ce qui est modelise ou non.
+        # Reutilise on_prop (deja calcule ci-dessus) dans les deux branches
+        # plutot que de relancer une 2e intersection GEOS identique.
+        if classe == "propriete":
+            geom, opp_geom, opp_classe = on_prop, raw_geom.difference(prop_zone), "voisinage"
+        else:
+            geom, opp_geom, opp_classe = raw_geom.difference(prop_zone), on_prop, "propriete"
+        _add_fragment(rid, classe, geom, row, bat, all_bldgs)
+        # morceau minoritaire reinjecte comme batiment independant du camp
+        # oppose (jamais jete) -- meme haut/alt_sol/alt_toit BD TOPO que le
+        # morceau principal (seule source disponible au niveau du batiment
+        # source ; roofer reconstruit de toute facon le vrai relief du toit
+        # depuis le LiDAR pour chaque morceau independamment). Id PREFIXE
+        # (jamais suffixe) : _propriete_ref/interieur_init.py/build_home.py
+        # derivent tous leurs id/noms de fichier/niveau SH3D des 4 DERNIERS
+        # caracteres de l'id (b["id"][-4:]) -- un suffixe fixe donnerait la
+        # meme valeur tronquee a tous les batiments reinjectes du site
+        # (collision de niveau SH3D, ecrasement de dalle_*.obj, plan
+        # interieur saute), un prefixe preserve la queue d'origine. Aucun
+        # vrai cleabs BD TOPO ne commence par "opp-" (toujours "BATIMENT...").
+        # Reserve : deux empreintes desormais adjacentes (issues du meme
+        # batiment source) sont soumises a roofer dans le meme appel CLI --
+        # cas jamais exerce jusqu'ici (les batiments deja valides etaient
+        # disjoints). Repli deja granulaire par fragment (build_roof -> None
+        # -> pyramidal) si roofer gere mal cette adjacence sur l'un des deux.
+        _add_fragment(f"opp-{rid}", opp_classe, opp_geom, row, bat, all_bldgs)
 
     # --- toit multi-pans reconstruit par roofer (LiDAR HD IGN) pour TOUS les
     # batiments (propriete et voisinage, un seul appel CLI sur l'emprise du
