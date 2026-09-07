@@ -112,6 +112,7 @@ def main() -> None:
     footprint_levels_xml = []
     footprint_levels = {}               # nom de niveau prive -> id
     footprint_rooms = []                # (level_name, ring_cm), consommes plus bas
+    dalle_pieces = []                   # dalle independante par batiment, meme niveau que la room
     for i, (cmd, fp) in enumerate(zip(footprint_cmds, ref["footprints"])):
         ring = [(pt["x"], pt["y"]) for pt in cmd["params"]["points"]]
         elevation = fp["sol_max_cm"] + sh3d_xml.FOOTPRINT_CLEARANCE_CM
@@ -120,10 +121,16 @@ def main() -> None:
         footprint_levels[level_name] = level_id
         footprint_levels_xml.append(sh3d_xml.level(level_id, level_name, elevation, base_level_count + i))
         footprint_rooms.append((level_name, ring))
+        db = fp["dalle"]
+        dalle_pieces.append(sh3d_xml.piece(
+            footprint_levels, level_name, f"Dalle {fp['id']}",
+            f"dalle_{fp['id']}/dalle_{fp['id']}.obj", (GEO / f"dalle_{fp['id']}.obj").stat().st_size,
+            db["x"], db["y"], db["elevation"], db["width"], db["depth"], db["height"],
+            creator="IGN LIDAR HD (MNT)", extra=" deformable='false'"))
     head += "\n" + "\n".join(footprint_levels_xml) + "\n"
 
     # ---- pieces ----
-    pieces = []
+    pieces = list(dalle_pieces)
     tp = json.loads((GEO / "terrain_place.json").read_text(encoding="utf-8"))
     pieces.append(sh3d_xml.piece(LEVELS, "Terrain", "Terrain (LIDAR HD + ortho)", "t/terrain.obj",
                          (GEO / "terrain.obj").stat().st_size,
@@ -217,6 +224,13 @@ def main() -> None:
         if has_bati_propriete:
             z.write(GEO / "bati_propriete.obj", "p/bati_propriete.obj")
             z.write(GEO / "bati_propriete.mtl", "p/bati_propriete.mtl")
+        for fp in ref["footprints"]:
+            # dossier de premier niveau PROPRE A CHAQUE batiment (pas un "dalle/"
+            # partage) : meme bug HomeContentContext que les arbres ci-dessous --
+            # un dossier commun ferait heriter toutes les dalles de la 1ere resolue.
+            fid = fp["id"]
+            z.write(GEO / f"dalle_{fid}.obj", f"dalle_{fid}/dalle_{fid}.obj")
+            z.write(GEO / f"dalle_{fid}.mtl", f"dalle_{fid}/dalle_{fid}.mtl")
         if (GEO / "haies.obj").exists():
             z.write(GEO / "haies.obj", "h/haies.obj")
             z.write(GEO / "haies.mtl", "h/haies.mtl")

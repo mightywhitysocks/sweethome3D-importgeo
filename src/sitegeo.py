@@ -777,6 +777,58 @@ def pyramid_roof(ring_cm, eave_z: float, apex_z: float):
                                 non_manifold_traversal=False)
 
 
+def footprint_slab(ring_cm, top_z_cm: float, embed_cm: float, *,
+                    seg_len_cm: float = 200.0, min_thickness_cm: float = 1.0):
+    """
+    Dalle (podium) qui comble l'ecart entre le terrain reel et un plan
+    horizontal `top_z_cm` (le sol_max_cm + marge d'une piece SH3D "Emprise",
+    par exemple) : le dessus est un plan plat a `top_z_cm`, le dessous suit
+    `terrain_z_at` le long du contour (jamais a l'interieur de l'emprise,
+    memes points de confiance que `sol_max_cm`/`base` ailleurs dans le
+    pipeline), enfonce de `embed_cm` sous le terrain.
+
+    `ring_cm` : anneau (liste de (x, y) plan cm, sans point de fermeture),
+    densifie a `seg_len_cm` (shapely.segmentize) pour suivre le relief entre
+    deux sommets BD TOPO eloignes, a la resolution du maillage terrain (2 m).
+    `min_thickness_cm` : garde-fou anti-inversion si un point ajoute par la
+    densification s'averait, meme improbablement, plus haut que prevu.
+    """
+    import pyvista as pv
+    import shapely.geometry
+
+    poly = shapely.geometry.Polygon(ring_cm)
+    poly_dense = shapely.segmentize(poly, max_segment_length=seg_len_cm)
+    ring_dense = list(poly_dense.exterior.coords)[:-1]        # dernier point duplique du 1er
+    n = len(ring_dense)
+
+    top_pts = [(x, y, top_z_cm) for x, y in ring_dense]
+    bot_pts = []
+    for x, y in ring_dense:
+        bz = terrain_z_at(x, y) - embed_cm
+        bz = min(bz, top_z_cm - min_thickness_cm)
+        bot_pts.append((x, y, bz))
+
+    top_centroid = (sum(p[0] for p in top_pts) / n, sum(p[1] for p in top_pts) / n, top_z_cm)
+    bottom_centroid = (sum(p[0] for p in bot_pts) / n, sum(p[1] for p in bot_pts) / n,
+                        sum(p[2] for p in bot_pts) / n)
+
+    top_i = list(range(n))
+    bot_i = list(range(n, 2 * n))
+    top_c, bot_c = 2 * n, 2 * n + 1
+
+    faces = []
+    for i in range(n):
+        j = (i + 1) % n
+        faces += [[3, top_i[i], top_i[j], bot_i[j]], [3, top_i[i], bot_i[j], bot_i[i]]]
+        faces += [[3, top_i[i], top_i[j], top_c]]              # cap dessus, eventail-centroide
+        faces += [[3, bot_i[i], bot_i[j], bot_c]]               # cap dessous, eventail-centroide
+
+    pts = np.array(top_pts + bot_pts + [top_centroid, bottom_centroid], float)
+    mesh = pv.PolyData(pts, faces=np.hstack(faces)).clean()
+    return mesh.compute_normals(auto_orient_normals=True, consistent_normals=True,
+                                non_manifold_traversal=False)
+
+
 def bbox_cm(mesh) -> dict:
     """
     Bounds d'un mesh (repere plan : x_est, y_sud, z_haut) -> parametres de recalage
