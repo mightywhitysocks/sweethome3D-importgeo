@@ -608,13 +608,27 @@ inchangé par la réinjection.
 > bâtiment source (le cas anticipé), mais aussi avec un bâtiment TIERS déjà
 > adjacent au même point (constaté : un mur reconstruit débordant sur
 > plusieurs mètres hors de son emprise déclarée, vers le bâtiment voisin
-> touché). Corrigé par `roofer_roof.write_footprint_gpkg` : chaque empreinte
-> est retreinte de `FOOTPRINT_GAP_M` (10 cm) avant d'être donnée à `roofer`
-> -- jamais `bati.json`/la pièce "Emprise"/la dalle, qui gardent le contour
-> BD TOPO exact -- pour qu'aucune paire d'empreintes ne se touche plus dans
-> son entrée, qu'elles proviennent d'une réinjection ou de deux bâtiments
-> BD TOPO réellement mitoyens (parti wall). Repli sur le contour non
-> retreint si le buffer négatif vide/dégénère un polygone trop étroit.
+> touché). Corrigé par `roofer_roof.write_footprint_gpkg`, mais **seulement
+> côté bâtiment réinjecté** (`rid.startswith("opp-")`) : cette empreinte est
+> retreinte de `FOOTPRINT_GAP_M` (10 cm) avant d'être donnée à `roofer` --
+> jamais `bati.json`/la pièce "Emprise"/la dalle (contour BD TOPO exact),
+> jamais un bâtiment qui n'est pas issu de la réinjection. Un premier essai
+> retreignant TOUTES les empreintes (revue de code) a été abandonné : il
+> écartait aussi deux bâtiments BD TOPO réellement mitoyens (mur mitoyen ->
+> fausse ruelle de 20 cm dans le modèle, jamais constatée avant la
+> réinjection) et décalait la dalle/pièce "Emprise" de 10 cm par rapport au
+> mur `roofer` sur **chaque** bâtiment du site, pas seulement les bâtiments
+> réinjectés. Restreindre au seul côté "opp-" suffit à rouvrir un vrai vide
+> (le bâtiment tiers/le jumeau non réinjecté n'a jamais besoin d'être
+> touché) sans ce double effet de bord. Compromis résiduel assumé, propre
+> aux bâtiments réinjectés : leur dalle/pièce "Emprise" garde le contour BD
+> TOPO exact, donc déborde de ~10 cm par rapport à leur mur `roofer` --
+> cohérent avec les autres approximations déjà acceptées sur ces fragments
+> (hauteur/altitudes dupliquées, aucun seuil de taille, cf. ci-dessus).
+> Buffer négatif protégé (exception GEOS ou résultat vide/dégénéré -> repli
+> sur le contour non retreint avec avertissement, jamais une exception qui
+> remonte et fait échouer `roofer` pour tout le site à cause d'un seul
+> polygone).
 >
 > Réserve restante, plus étroite qu'avant ce fix : rien ne garantit à 100 %
 > le comportement interne de `roofer` (boîte noire externe, GPLv3) pour
