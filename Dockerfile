@@ -177,29 +177,43 @@ RUN git clone --quiet https://github.com/wdiestel/arbaro.git /tmp/arbaro-src \
 # les bibliotheques systeme que Chromium headless requiert sur une base
 # Debian minimale (absentes de python:3.14.7-slim-trixie de base).
 #
-# RISQUE CONNU, NON VERIFIE LOCALEMENT : le daemon Docker n'est pas
-# disponible dans la session qui a ecrit ce bloc (sandbox sans acces aux
-# capabilities requises -- `docker build` y echoue avant meme de
-# demarrer), donc cette etape n'a pu etre validee que par lecture, pas par
-# un vrai build. Playwright liste Debian 13 (trixie) comme supporte, mais
-# plusieurs rapports amont documentent des bibliotheques manquantes malgre
-# `--with-deps` sur cette version precise (libicu*/libvpx*/libavif*, cf.
-# github.com/microsoft/playwright issues #38689 et #36916) -- detection de
-# distribution potentiellement encore imparfaite pour trixie selon la
-# version de Playwright. Si le premier vrai run de build-image.yml echoue
-# ici (ou si Chromium plante au lancement avec une erreur de bibliotheque
-# partagee cote verif.py --mobile-compat), le repli est le meme principe
-# que roofer/Sweet Home 3D ci-dessus : diagnostiquer sur un run CI reel et
-# completer manuellement les paquets manquants plutot que de deviner.
+# RISQUE CONNU, PARTIELLEMENT VERIFIE EN CI REELLE (generation #32) :
+# `docker build` lui-meme (etape ci-dessous, `--with-deps`) est passe --
+# aucune bibliotheque systeme manquante constatee -- mais le premier run
+# reel de generation.yml a echoue au LANCEMENT de Chromium
+# (`chromium_headless_shell` introuvable), cause racine identifiee et
+# corrigee ci-dessous (PLAYWRIGHT_BROWSERS_PATH). Le risque anticipe a
+# l'ecriture initiale de ce bloc -- bibliotheques Debian trixie
+# potentiellement manquantes malgre `--with-deps` (libicu*/libvpx*/
+# libavif*, cf. github.com/microsoft/playwright issues #38689 et #36916) --
+# reste lui non tranche : Chromium n'a pas encore reussi a demarrer sur un
+# run reel pour le confirmer ou l'ecarter. Si un futur run echoue ici avec
+# une erreur de bibliotheque partagee (pas "executable introuvable", deja
+# corrige), le repli est le meme principe que roofer/Sweet Home 3D
+# ci-dessus : diagnostiquer sur ce run et completer manuellement les
+# paquets manquants plutot que de deviner.
 # Filet de securite deja en place independamment de ce risque : `verif.py
 # --mobile-compat` (_mobile_compat(), src/verif.py) se contente d'ignorer
 # le controle si node_modules/ est absent -- seul un echec de CHARGEMENT
 # reel (Node/Chromium presents mais .sh3d rejete) fait echouer le controle,
 # jamais un simple outil absent/casse en amont de l'appel.
+#
+# PLAYWRIGHT_BROWSERS_PATH fixe (hors de $HOME) : un job `container:`
+# GitHub Actions (generation.yml) force HOME=/github/home au RUNTIME du
+# conteneur, independamment du HOME (/root ici, aucun USER dans ce
+# Dockerfile) utilise pendant `docker build` -- sans ce chemin fixe,
+# `npx playwright install` bake les navigateurs sous /root/.cache/
+# ms-playwright/ et check.mjs les cherche ensuite sous /github/home/.cache/
+# ms-playwright/ au runtime (constate en CI reelle : chromium_headless_shell
+# introuvable malgre une image correctement construite). Variable ENV
+# Docker (pas juste exportee dans ce RUN) : elle persiste dans l'image et
+# reste donc appliquee au conteneur peu importe que le runner reecrive HOME.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 COPY tools/mobile_compat_check/package.json tools/mobile_compat_check/package-lock.json /opt/mobile_compat_check/
 RUN cd /opt/mobile_compat_check \
     && npm ci \
     && npx playwright install --with-deps chromium \
-    && test -d node_modules/playwright
+    && test -d node_modules/playwright \
+    && test -d "${PLAYWRIGHT_BROWSERS_PATH}"
 
 WORKDIR /workspace
