@@ -161,20 +161,31 @@ def main() -> None:
         # morceau minoritaire reinjecte comme batiment independant du camp
         # oppose (jamais jete) -- meme haut/alt_sol/alt_toit BD TOPO que le
         # morceau principal (seule source disponible au niveau du batiment
-        # source ; roofer reconstruit de toute facon le vrai relief du toit
-        # depuis le LiDAR pour chaque morceau independamment). Id PREFIXE
-        # (jamais suffixe) : _propriete_ref/interieur_init.py/build_home.py
-        # derivent tous leurs id/noms de fichier/niveau SH3D des 4 DERNIERS
-        # caracteres de l'id (b["id"][-4:]) -- un suffixe fixe donnerait la
-        # meme valeur tronquee a tous les batiments reinjectes du site
-        # (collision de niveau SH3D, ecrasement de dalle_*.obj, plan
-        # interieur saute), un prefixe preserve la queue d'origine. Aucun
-        # vrai cleabs BD TOPO ne commence par "opp-" (toujours "BATIMENT...").
-        # Reserve : deux empreintes desormais adjacentes (issues du meme
-        # batiment source) sont soumises a roofer dans le meme appel CLI --
-        # cas jamais exerce jusqu'ici (les batiments deja valides etaient
-        # disjoints). Repli deja granulaire par fragment (build_roof -> None
-        # -> pyramidal) si roofer gere mal cette adjacence sur l'un des deux.
+        # source). Id PREFIXE (jamais suffixe) : _propriete_ref/
+        # interieur_init.py/build_home.py derivent tous leurs id/noms de
+        # fichier/niveau SH3D des 4 DERNIERS caracteres de l'id
+        # (b["id"][-4:]) -- un suffixe fixe donnerait la meme valeur tronquee
+        # a tous les batiments reinjectes du site (collision de niveau SH3D,
+        # ecrasement de dalle_*.obj, plan interieur saute), un prefixe
+        # preserve la queue d'origine. Aucun vrai cleabs BD TOPO ne commence
+        # par "opp-" (toujours "BATIMENT...").
+        #
+        # JAMAIS soumis a roofer (cf. filtre rid.startswith("opp-") plus bas,
+        # write_footprint_gpkg) : deux empreintes adjacentes (le morceau
+        # reinjecte touche TOUJOURS son propre jumeau, et parfois aussi un
+        # batiment tiers deja adjacent au meme point) faisaient deriver la
+        # partition/reconstruction interne de roofer -- constate sur un site
+        # reel, un mur reconstruit debordant sur plusieurs metres hors de son
+        # emprise declaree, vers le batiment touche. Un retrait de 10 cm sur
+        # la seule empreinte reinjectee (essaye en premier) n'a pas suffi a
+        # eliminer le probleme -- la tolerance interne de roofer pour ce
+        # genre de proximite depasse visiblement 10 cm, ou le phenomene ne
+        # tient pas qu'a l'empreinte (nuage LiDAR potentiellement ambigu pres
+        # de la limite, independamment du polygone fourni). Exclure ces
+        # batiments de roofer les fait retomber sur le toit pyramidal
+        # (build_roof -> None, aucun cleabs correspondant dans sa sortie) --
+        # deja un repli qui fonctionne, deja coherent avec l'imprecision
+        # acceptee de ces fragments (aucun seuil de taille/forme).
         _add_fragment(f"opp-{rid}", opp_classe, opp_geom, row, bat, all_bldgs)
 
     # --- toit multi-pans reconstruit par roofer (LiDAR HD IGN) pour TOUS les
@@ -190,7 +201,8 @@ def main() -> None:
         try:
             roofer_roof.write_footprint_gpkg(
                 [(polys, rings_cm, haut, alt_sol, alt_toit, rid)
-                 for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs],
+                 for _classe, polys, rings_cm, haut, alt_sol, alt_toit, rid in all_bldgs
+                 if not rid.startswith("opp-")],
                 footprint_gpkg)
         except Exception as e:                                          # noqa: BLE001
             print(f"  toit roofer : ecriture du GeoPackage d'empreintes echouee "
