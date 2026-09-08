@@ -601,20 +601,30 @@ sens, que l'empiétement d'un bâtiment sur le camp opposé reste quasi nul
 (<2 m², pas 26-33 %) -- ce contrôle valide la précision du clip lui-même,
 inchangé par la réinjection.
 
-> [!NOTE]
-> Réserve honnête sur ce dernier fix : corrige à coup sûr l'emprise/l'aire
-> (calcul Python déterministe), mais rien ne garantit à 100 % le
-> comportement interne de `roofer` (boîte noire externe, GPLv3) pour
-> l'ajustement des pans de toit tout près de la nouvelle limite -- d'autant
-> plus depuis la réinjection que les deux morceaux d'un même bâtiment
-> source sont désormais des empreintes **adjacentes** (partageant
-> exactement la ligne cadastrale) soumises ensemble à `roofer` dans le même
-> appel CLI, un cas jamais exercé jusqu'ici (les bâtiments déjà validés sur
-> ce mécanisme étaient tous disjoints). Repli déjà granulaire par fragment
-> (`build_roof` renvoie `None` -> pyramidal pour ce fragment seul) si
-> `roofer` gère mal cette adjacence sur l'un des deux -- pas de risque de
-> régression globale, mais à surveiller visuellement à la couture sur un
-> site réel (pas encore fait).
+> [!WARNING]
+> Confirmé sur un site réel : deux empreintes qui se touchent (sommets
+> partagés) dans le GeoPackage donné à `roofer` peuvent faire dériver sa
+> partition interne -- pas seulement entre les deux morceaux d'un même
+> bâtiment source (le cas anticipé), mais aussi avec un bâtiment TIERS déjà
+> adjacent au même point (constaté : un mur reconstruit débordant sur
+> plusieurs mètres hors de son emprise déclarée, vers le bâtiment voisin
+> touché). Corrigé par `roofer_roof.write_footprint_gpkg` : chaque empreinte
+> est retreinte de `FOOTPRINT_GAP_M` (10 cm) avant d'être donnée à `roofer`
+> -- jamais `bati.json`/la pièce "Emprise"/la dalle, qui gardent le contour
+> BD TOPO exact -- pour qu'aucune paire d'empreintes ne se touche plus dans
+> son entrée, qu'elles proviennent d'une réinjection ou de deux bâtiments
+> BD TOPO réellement mitoyens (parti wall). Repli sur le contour non
+> retreint si le buffer négatif vide/dégénère un polygone trop étroit.
+>
+> Réserve restante, plus étroite qu'avant ce fix : rien ne garantit à 100 %
+> le comportement interne de `roofer` (boîte noire externe, GPLv3) pour
+> l'ajustement des pans de toit tout près de la limite cadastrale elle-même
+> (l'emprise/l'aire y reste exacte, calcul Python déterministe) -- distinct
+> du bug d'adjacence ci-dessus, désormais corrigé. Repli déjà granulaire par
+> fragment (`build_roof` renvoie `None` -> pyramidal) si `roofer` échoue
+> malgré tout sur l'un des deux. Correctif pas encore revalidé de bout en
+> bout sur le site qui a révélé le bug (pas de run complet possible depuis
+> cette session, cf. Environnement).
 
 > [!IMPORTANT]
 > Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
