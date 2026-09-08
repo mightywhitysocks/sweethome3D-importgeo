@@ -275,50 +275,24 @@ def _complete_altitudes(alt_sol, alt_toit, haut):
     return alt_sol, alt_toit
 
 
-# Marge de retrait appliquee, avant de la donner a roofer, UNIQUEMENT a
-# l'empreinte d'un batiment reinjecte (id prefixe "opp-", cf.
-# bati.py::_add_fragment) -- jamais aux autres batiments, jamais a
-# bati.json/la piece "Emprise"/la dalle, qui gardent tous le contour BD TOPO
-# exact. Un batiment reinjecte touche TOUJOURS son propre jumeau (l'autre
-# moitie du meme batiment source) a la ligne de coupe, et peut aussi toucher
-# un batiment tiers deja adjacent a ce meme point (constate sur un site
-# reel : le mur reconstruit d'un batiment tiers debordait alors sur
-# plusieurs metres le long de la limite partagee au lieu de s'arreter a son
-# propre contour -- la partition interne de roofer confondait les deux
-# empreintes touchantes). Retreindre seulement le cote "opp-" suffit a
-# rouvrir un vrai vide sans jamais toucher au batiment tiers ni a un
-# batiment BD TOPO d'origine : un premier essai retreignant TOUTES les
-# empreintes a ete abandonne (revue de code) car il ecartait aussi deux
-# batiments BD TOPO reellement mitoyens (mur mitoyen -> fausse ruelle de
-# 20 cm dans le modele) et decalait la dalle/piece "Emprise" de 10 cm par
-# rapport au mur roofer sur CHAQUE batiment du site, pas seulement les
-# batiments reinjectes. Cote "opp-", ce decalage dalle/mur subsiste --
-# compromis assume, deja coherent avec les autres approximations acceptees
-# sur ces fragments (cf. bati.py::_add_fragment : hauteur/altitudes
-# dupliquees, aucun seuil de taille). 10 cm de retrait suffit a garantir un
-# vrai vide sans etre perceptible sur un batiment reel (a comparer aux 3 cm
-# de FOOTPRINT_CLEARANCE_CM, un axe different -- vertical, pas horizontal).
-FOOTPRINT_GAP_M = 0.10
-
-
 def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
     """GeoPackage EPSG:2154 des empreintes des batiments (colonne 'cleabs'),
     format d'entree attendu par roofer. `prop_bldgs` = la liste deja
-    construite par bati.py : (polys, rings_cm, haut, alt_sol, alt_toit, rid).
+    construite par bati.py : (polys, rings_cm, haut, alt_sol, alt_toit, rid)
+    -- l'appelant exclut deja les batiments reinjectes (`rid` prefixe
+    "opp-", cf. bati.py::main) : deux empreintes adjacentes dans ce
+    GeoPackage faisaient deriver la partition/reconstruction interne de
+    roofer (constate sur un site reel, mur reconstruit debordant sur
+    plusieurs metres hors de son emprise declaree -- cf. CLAUDE.md), et un
+    retrait de marge sur la seule empreinte reinjectee n'a pas suffi a
+    l'eliminer. Un batiment reinjecte tombe donc systematiquement en repli
+    pyramidal (aucun cleabs correspondant dans la sortie roofer).
+
     Un batiment MultiPolygon (parties disjointes) recoit un cleabs suffixe
     par polygone (cf. `cleabs_for`) -- sinon roofer produit un CityObject par
     polygone mais tous portant le meme cleabs, et `_find_roof_geometry` ne
     peut renvoyer que le premier trouve pour les parties suivantes (toit
     disjoint) -- cf. `build_roof`, appele avec le meme identifiant.
-
-    L'empreinte d'un batiment reinjecte (`rid.startswith("opp-")`) est
-    retrecie de `FOOTPRINT_GAP_M` (cf. commentaire) avant d'etre ecrite --
-    jamais les autres batiments. Le buffer negatif est protege : une
-    exception GEOS (polygone invalide) ou un resultat vide/degenere
-    (batiment trop etroit pour la marge) replient sur le contour non
-    retreci avec un avertissement, plutot que de laisser une exception
-    remonter jusqu'a `bati.py` et faire echouer roofer pour TOUT le site a
-    cause d'un seul polygone.
 
     Ecrit aussi `H_TERRAIN_FIELD` (altitude absolue) / `H_ROOF_FIELD` (hauteur,
     PAS une altitude -- cf. commentaire sur `H_ROOF_FIELD`), completees
@@ -335,21 +309,7 @@ def write_footprint_gpkg(prop_bldgs, path: Path) -> None:
         hauteur_toit = (alt_toit_c - alt_sol_c
                         if alt_sol_c is not None and alt_toit_c is not None else None)
         for i, poly in enumerate(polys):
-            geom = poly
-            if rid.startswith("opp-"):
-                try:
-                    gap = poly.buffer(-FOOTPRINT_GAP_M)
-                except Exception as e:                                # noqa: BLE001
-                    print(f"  empreinte {rid} : retrait de {FOOTPRINT_GAP_M * 100:.0f} cm "
-                          f"echoue ({type(e).__name__}: {e}) -> contour BD TOPO non retreci")
-                else:
-                    if gap.is_empty or gap.geom_type != "Polygon":
-                        print(f"  empreinte {rid} : trop etroite pour un retrait de "
-                              f"{FOOTPRINT_GAP_M * 100:.0f} cm -> contour BD TOPO non "
-                              f"retreci (risque de collision roofer avec un batiment adjacent)")
-                    else:
-                        geom = gap
-            rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": geom,
+            rows.append({"cleabs": cleabs_for(rid, i, len(polys)), "geometry": poly,
                          H_TERRAIN_FIELD: alt_sol_c, H_ROOF_FIELD: hauteur_toit})
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:2154")
     gdf.to_file(path, driver="GPKG")

@@ -585,9 +585,9 @@ source) -- jamais de vide visuel à la limite cadastrale côté camp
 minoritaire (33,7 %/26 % n'est pas un résidu négligeable à jeter). Le
 morceau réinjecté reprend les mêmes `hauteur`/`altitude_minimale_sol`/
 `altitude_maximale_toit` BD TOPO que le morceau principal (seule source
-disponible au niveau du bâtiment entier) ; `roofer` reconstruit de toute
-façon le vrai relief du toit depuis le LiDAR pour chaque morceau
-indépendamment. Son id est **préfixé** (`opp-<cleabs>`, jamais suffixé) :
+disponible au niveau du bâtiment entier) ; **jamais soumis à `roofer`**
+(cf. `[!WARNING]` ci-dessous) -- retombe systématiquement sur le toit
+pyramidal. Son id est **préfixé** (`opp-<cleabs>`, jamais suffixé) :
 `_propriete_ref`/`interieur_init.py`/`build_home.py` dérivent tous leurs
 id de fichier/niveau SH3D des 4 derniers caractères de l'id (`id[-4:]`,
 cf. ci-dessous) -- un suffixe fixe aurait donné la même valeur tronquée à
@@ -603,42 +603,40 @@ inchangé par la réinjection.
 
 > [!WARNING]
 > Confirmé sur un site réel : deux empreintes qui se touchent (sommets
-> partagés) dans le GeoPackage donné à `roofer` peuvent faire dériver sa
-> partition interne -- pas seulement entre les deux morceaux d'un même
-> bâtiment source (le cas anticipé), mais aussi avec un bâtiment TIERS déjà
-> adjacent au même point (constaté : un mur reconstruit débordant sur
-> plusieurs mètres hors de son emprise déclarée, vers le bâtiment voisin
-> touché). Corrigé par `roofer_roof.write_footprint_gpkg`, mais **seulement
-> côté bâtiment réinjecté** (`rid.startswith("opp-")`) : cette empreinte est
-> retreinte de `FOOTPRINT_GAP_M` (10 cm) avant d'être donnée à `roofer` --
-> jamais `bati.json`/la pièce "Emprise"/la dalle (contour BD TOPO exact),
-> jamais un bâtiment qui n'est pas issu de la réinjection. Un premier essai
-> retreignant TOUTES les empreintes (revue de code) a été abandonné : il
-> écartait aussi deux bâtiments BD TOPO réellement mitoyens (mur mitoyen ->
-> fausse ruelle de 20 cm dans le modèle, jamais constatée avant la
-> réinjection) et décalait la dalle/pièce "Emprise" de 10 cm par rapport au
-> mur `roofer` sur **chaque** bâtiment du site, pas seulement les bâtiments
-> réinjectés. Restreindre au seul côté "opp-" suffit à rouvrir un vrai vide
-> (le bâtiment tiers/le jumeau non réinjecté n'a jamais besoin d'être
-> touché) sans ce double effet de bord. Compromis résiduel assumé, propre
-> aux bâtiments réinjectés : leur dalle/pièce "Emprise" garde le contour BD
-> TOPO exact, donc déborde de ~10 cm par rapport à leur mur `roofer` --
-> cohérent avec les autres approximations déjà acceptées sur ces fragments
-> (hauteur/altitudes dupliquées, aucun seuil de taille, cf. ci-dessus).
-> Buffer négatif protégé (exception GEOS ou résultat vide/dégénéré -> repli
-> sur le contour non retreint avec avertissement, jamais une exception qui
-> remonte et fait échouer `roofer` pour tout le site à cause d'un seul
-> polygone).
+> partagés) dans le GeoPackage donné à `roofer` font dériver sa
+> partition/reconstruction interne -- pas seulement entre les deux morceaux
+> d'un même bâtiment source (le cas anticipé), mais aussi avec un bâtiment
+> TIERS déjà adjacent au même point (constaté : un mur reconstruit
+> débordant sur plusieurs mètres hors de son emprise déclarée, vers le
+> bâtiment voisin touché). **Deux corrections successives** :
+> 1. Retreindre de 10 cm la seule empreinte réinjectée avant de la donner à
+>    `roofer` -- **insuffisant** : le mur du bâtiment tiers débordait
+>    toujours après ce fix, alors que `roofer` avait bien reconstruit les
+>    26 bâtiments du site (aucun repli pyramidal, donc pas une confusion de
+>    `cleabs`). La tolérance interne de `roofer` pour ce genre de proximité
+>    dépasse visiblement 10 cm, ou le phénomène ne tient pas qu'à
+>    l'empreinte (nuage LiDAR potentiellement ambigu près de la limite,
+>    indépendamment du polygone fourni).
+> 2. **Correctif retenu** : ne plus jamais soumettre un bâtiment réinjecté
+>    (`rid.startswith("opp-")`) à `roofer` du tout (`bati.py::main`, filtre
+>    avant l'appel à `write_footprint_gpkg`) -- il ne peut alors plus jamais
+>    interférer avec la reconstruction d'aucun bâtiment (le sien ou un
+>    tiers), et retombe systématiquement sur le toit pyramidal
+>    (`build_roof` -> `None`, aucun `cleabs` correspondant dans la sortie
+>    roofer). Plus robuste que la marge : n'exige de deviner ni la bonne
+>    distance ni la cause exacte côté `roofer` (boîte noire externe,
+>    GPLv3). Coût assumé : ces fragments (déjà approximatifs -- hauteur/
+>    altitudes dupliquées, aucun seuil de taille/forme) perdent le toit
+>    multi-pans issu du LiDAR au profit d'un simple pyramidal ; leur dalle/
+>    pièce "Emprise" garde le contour BD TOPO exact (jamais concerné).
 >
-> Réserve restante, plus étroite qu'avant ce fix : rien ne garantit à 100 %
-> le comportement interne de `roofer` (boîte noire externe, GPLv3) pour
-> l'ajustement des pans de toit tout près de la limite cadastrale elle-même
-> (l'emprise/l'aire y reste exacte, calcul Python déterministe) -- distinct
-> du bug d'adjacence ci-dessus, désormais corrigé. Repli déjà granulaire par
-> fragment (`build_roof` renvoie `None` -> pyramidal) si `roofer` échoue
-> malgré tout sur l'un des deux. Correctif pas encore revalidé de bout en
-> bout sur le site qui a révélé le bug (pas de run complet possible depuis
-> cette session, cf. Environnement).
+> Réserve résiduelle, sans rapport avec ce bug : rien ne garantit à 100 %
+> le comportement interne de `roofer` pour l'ajustement des pans de toit
+> d'un bâtiment NON réinjecté tout près de la limite cadastrale elle-même
+> (l'emprise/l'aire y reste exacte, calcul Python déterministe). Correctif
+> d'exclusion pas encore revalidé de bout en bout sur le site qui a révélé
+> le bug (pas de run complet possible depuis cette session, cf.
+> Environnement).
 
 > [!IMPORTANT]
 > Décision actée (issue #25) : `roof_lidar.py`/`roofer_compare.py` restent
