@@ -762,11 +762,18 @@ désormais Node.js + `node_modules`/Chromium (cf. `Dockerfile`), et
 
 > [!WARNING]
 > Validé de bout en bout sur une fixture synthétique (chargement propre,
-> rendu cohérent) et le build/l'installation Playwright en CI réels ont
-> réussi, mais **pas encore confirmé sur un `Plan 3D.sh3d` de site réel**
-> au poids géométrique complet (terrain ~43k faces, toits `roofer`
-> multi-bâtiments, jusqu'à ~76 arbres `arbaro`) -- performance/fluidité sur
-> mobile restent à observer sur un run complet. Détail :
+> rendu cohérent) et `docker build` (installation Playwright) réussit en
+> CI, mais le premier vrai run de `generation.yml` a échoué au LANCEMENT de
+> Chromium (`Executable doesn't exist at /github/home/.cache/ms-playwright/
+> chromium_headless_shell-*`) : un job `container:` GitHub Actions force
+> `HOME=/github/home` au runtime, indépendamment du `HOME` (`/root`) utilisé
+> pendant `docker build` où les navigateurs avaient été installés. Corrigé
+> en fixant `PLAYWRIGHT_BROWSERS_PATH` à un chemin hors de `$HOME` dans le
+> `Dockerfile` -- pas encore reconfirmé par un run CI après ce fix, ni
+> **sur un `Plan 3D.sh3d` de site réel** au poids géométrique complet
+> (terrain ~43k faces, toits `roofer` multi-bâtiments, jusqu'à ~76 arbres
+> `arbaro`) -- performance/fluidité sur mobile restent à observer sur un
+> run complet. Détail :
 > `docs/journal-technique.md`.
 
 ### Visibilité niveau/groupe sur l'appli mobile réelle

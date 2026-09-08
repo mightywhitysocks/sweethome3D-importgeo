@@ -446,7 +446,18 @@ complet (`node tools/mobile_compat_check/check.mjs "Plan 3D.sh3d"`, ou
 
 Mise à jour ultérieure : l'image CI embarque désormais Node.js +
 `node_modules`/Chromium (cf. `Dockerfile`), et `generation.yml` appelle
-`verif.py --mobile-compat` sur chaque run -- premier vrai test en CI validé
-(build + installation Playwright réussis), mais toujours pas confirmé sur
-un `Plan 3D.sh3d` de site réel au poids géométrique complet (cf.
-`CLAUDE.md` §Environnement pour l'état du run CI le plus récent).
+`verif.py --mobile-compat` sur chaque run -- `docker build` (`npx
+playwright install --with-deps chromium`) réussit bien, mais le premier
+vrai run de `generation.yml` (génération #32) a échoué au LANCEMENT de
+Chromium, pas à l'installation : `browserType.launch: Executable doesn't
+exist at /github/home/.cache/ms-playwright/chromium_headless_shell-*`.
+Cause : `generation.yml` utilise un job `container:` -- le runner force
+`HOME=/github/home` au RUNTIME du conteneur, indépendamment du `HOME`
+(`/root`, aucun `USER` dans le `Dockerfile`) utilisé pendant `docker
+build`, où les navigateurs avaient été installés sous `/root/.cache/
+ms-playwright/`. Corrigé en fixant `PLAYWRIGHT_BROWSERS_PATH` à un chemin
+absolu hors de `$HOME` (`ENV` Docker, donc appliqué au conteneur peu
+importe que le runner réécrive `HOME`) -- pas encore reconfirmé par un run
+CI après ce fix, ni sur un `Plan 3D.sh3d` de site réel au poids
+géométrique complet (cf. `CLAUDE.md` §Environnement pour l'état du run CI
+le plus récent).
