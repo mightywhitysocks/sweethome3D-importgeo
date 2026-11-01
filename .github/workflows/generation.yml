@@ -147,7 +147,7 @@ jobs:
       # (mêmes données géométriques du site).
       - name: Publier data/ pour diagnostic (seulement si le job a échoué)
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: "data (diagnostic, run en échec)"
           path: |
@@ -157,7 +157,7 @@ jobs:
           retention-days: 7
 
       - name: Publier Plan 3D.sh3d
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: "Plan 3D"
           # data/bati.json, sh3d_payload.json, terrain_grid.npz : pas necessaires
